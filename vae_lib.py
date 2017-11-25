@@ -58,7 +58,7 @@ def loss_function(x, obs_mu, obs_logprec, z_mu, z_logvar, log_sigma=0.0):
 
 
 import torch
-from torch import nn, optim
+from torch import nn
 from torch.nn import functional as F
 from torch.autograd import Variable
 
@@ -103,7 +103,7 @@ class VAE(nn.Module):
         return obs_mu, obs_logprec, mu, logvar
 
 
-def run_training(training_data, model, optimizer, nb_epochs, elbos, klds, batch_size, log_interval=10):
+def run_training(training_data, model, optimizer, nb_epochs, history, batch_size, log_interval=10):
     model.train()
     for epoch_no in range(1, nb_epochs+1):
         epoch_data = np.copy(training_data)
@@ -124,11 +124,44 @@ def run_training(training_data, model, optimizer, nb_epochs, elbos, klds, batch_
             epoch_elbo += -loss.data[0]
             epoch_kld += kld.data[0]
             epoch_llh += llh.data[0]
-            
-        elbos.append(epoch_elbo)
-        klds.append(epoch_kld)    
+
+        history.log(epoch_elbo, epoch_kld)
 
         if epoch_no % log_interval == 0:
             print('Train Epoch: {} \telbo: {:.6f} \tllh: {:.6f}\tkld: {:.6f}'.format(
                 epoch_no, epoch_elbo, epoch_llh, epoch_kld)
             )
+
+
+from bokeh.plotting import figure, gridplot
+from bokeh.io import show
+class History:
+    def __init__(self):
+        self._elbos = []
+        self._klds = []
+
+    def log(self, elbo, kld):
+        self._elbos.append(elbo)
+        self._klds.append(kld)
+
+    def plot(self, subsampling=1):
+        subsampling=1
+
+        fig_elbo = figure(
+            title='ELBO Progress',
+            width=400,
+            height=400,
+        )
+        elbos_subsampled = self._elbos[::subsampling]
+        fig_elbo.line(range(len(elbos_subsampled)), elbos_subsampled, color='blue')
+
+        fig_kld = figure(
+            title='KLD Progress',
+            width=400,
+            height=400,
+        )
+        klds_subsampled = self._klds[::subsampling]
+        fig_kld.line(range(len(klds_subsampled)), klds_subsampled, color='red')
+
+        gp = gridplot([[fig_elbo, fig_kld]])
+        show(gp) 
