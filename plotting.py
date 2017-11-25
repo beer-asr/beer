@@ -44,21 +44,28 @@ def plot_loss(model, fig,  orig_data, nb_samples=5, box=((-5, -5), (10.1, 10.1))
     fig.cross(orig_data[:, 0], orig_data[:, 1], line_color='red')
 
 
+def box_for_data(data, spacing=0.1):
+    mins = data.min(axis=0) - spacing
+    maxs = data.max(axis=0) + spacing
+    
+    return tuple(mins), tuple(maxs)
+
+
 def plot_encodings(model, data):
     model.eval()
     X = Variable(torch.from_numpy(data).contiguous().float())
     _, _, z_mu, _ = model(X)
 
     z_mu = z_mu.data.numpy()
-    mins = z_mu.min(axis=0)
-    maxs = z_mu.max(axis=0)
+
+    box = box_for_data(z_mu)
 
     fig = figure(
         title='p(x)',
         width=400,
         height=400,
-        x_range=(mins[0]-0.1, maxs[0]+0.1),
-        y_range=(mins[1]-0.1, maxs[1]+0.1),
+        x_range=(box[0][0], box[1][0]),
+        y_range=(box[0][1], box[1][1]),
     )
 
     fig.cross(z_mu[:, 0], z_mu[:, 1], line_color='red')
