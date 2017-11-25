@@ -6,7 +6,7 @@ from torch.autograd import Variable
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from bokeh.plotting import figure
+from bokeh.plotting import figure, gridplot
 from bokeh.io import show
 
 from vae import NB_SAMPLES  # TODO completely encapsulate this in model
@@ -44,13 +44,38 @@ def plot_loss(model, fig,  orig_data, nb_samples=5, box=((-5, -5), (10.1, 10.1))
     fig.cross(orig_data[:, 0], orig_data[:, 1], line_color='red')
 
 
-def plot_model_outputs(model, data, box, nb_samples=NB_SAMPLES, resolution=150):
+def plot_encodings(model, data):
+    model.eval()
+    X = Variable(torch.from_numpy(data).contiguous().float())
+    _, _, z_mu, _ = model(X)
+
+    z_mu = z_mu.data.numpy()
+    mins = z_mu.min(axis=0)
+    maxs = z_mu.max(axis=0)
+
     fig = figure(
+        title='p(x)',
+        width=400,
+        height=400,
+        x_range=(mins[0]-0.1, maxs[0]+0.1),
+        y_range=(mins[1]-0.1, maxs[1]+0.1),
+    )
+
+    fig.cross(z_mu[:, 0], z_mu[:, 1], line_color='red')
+    
+    return fig
+
+
+def plot_model_outputs(model, data, box, nb_samples=NB_SAMPLES, resolution=150):
+    fig_px = figure(
         title='p(x)',
         width=400,
         height=400,
         x_range=(box[0][0], box[1][0]),
         y_range=(box[0][1], box[1][1]),
     )
-    plot_loss(model, fig, data, nb_samples=nb_samples, box=box, resolution=resolution)
-    show(fig)
+    plot_loss(model, fig_px, data, nb_samples=nb_samples, box=box, resolution=resolution)
+    fig_encs = plot_encodings(model, data)
+
+    gp = gridplot([[fig_px, fig_encs]])
+    show(gp)
