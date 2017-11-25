@@ -3,7 +3,9 @@ from torch import nn
 from torch.nn import functional as F
 from torch.autograd import Variable
 
+
 NB_SAMPLES = 10
+
 
 class VAE(nn.Module):
     def __init__(self, latent_dim, nb_hidden):
@@ -13,7 +15,7 @@ class VAE(nn.Module):
         self.enc_hid2hid = nn.Linear(nb_hidden, nb_hidden)
         self.enc_hid2mu = nn.Linear(nb_hidden, latent_dim)
         self.enc_hid2var = nn.Linear(nb_hidden, latent_dim)
-        
+
         self.dec_lat2hid = nn.Linear(latent_dim, nb_hidden)
         self.dec_hid2hid = nn.Linear(nb_hidden, nb_hidden)
         self.dec_hid2mu = nn.Linear(nb_hidden, 2)
@@ -28,11 +30,11 @@ class VAE(nn.Module):
 
     def reparameterize(self, mu, logvar):
         if self.training:
-          std = logvar.mul(0.5).exp_()
-          eps = Variable(std.data.new(std.size()).normal_())
-          return eps.mul(std).add_(mu)
+            std = logvar.mul(0.5).exp_()
+            eps = Variable(std.data.new(std.size()).normal_())
+            return eps.mul(std).add_(mu)
         else:
-          return mu
+            return mu
 
     def decode(self, z):
         h1 = self.nonlin(self.dec_lat2hid(z))
@@ -46,15 +48,25 @@ class VAE(nn.Module):
         return obs_mu, obs_logprec, mu, logvar
 
     def loss(self, x, obs_mu, obs_logprec, z_mu, z_logvar, log_sigma=0.0):
-        LLH = gauss_LLH(x, obs_mu, obs_logprec)  
+        LLH = gauss_LLH(x, obs_mu, obs_logprec)
         KLD = st_norm_KLD(z_mu, z_logvar, log_sigma)
         return -(LLH - KLD), LLH, KLD
 
+
 def gauss_LLH(x, obs_mu, obs_logprec):
-    LLH = (0.5*obs_logprec - 0.5*((x-obs_mu) * obs_logprec.exp() * (x-obs_mu))).sum()
+    LLH = 0.5 * (
+        obs_logprec +
+        (- (x-obs_mu) * obs_logprec.exp() * (x-obs_mu))
+    ).sum()
     return LLH / NB_SAMPLES
+
 
 def st_norm_KLD(z_mu, z_logvar, log_sigma=0.0):
     log_sigma = Variable(torch.FloatTensor([log_sigma]))
-    KLD = 0.5 * torch.sum(log_sigma - 1 - z_logvar + z_logvar.exp()/log_sigma.exp() + z_mu.pow(2)/log_sigma.exp() )
+    KLD = 0.5 * torch.sum(
+        (log_sigma - 1) +
+        (- z_logvar) +
+        z_logvar.exp()/log_sigma.exp() +
+        z_mu.pow(2)/log_sigma.exp()
+    )
     return KLD / NB_SAMPLES
