@@ -165,3 +165,15 @@ class History:
 
         gp = gridplot([[fig_elbo, fig_kld]])
         show(gp) 
+
+
+def plot_model_outputs(model, data, box, nb_samples=NB_SAMPLES, resolution=150):
+    fig = figure(
+	title='p(x)',
+	width=400,
+	height=400,
+	x_range=(box[0][0], box[1][0]),
+	y_range=(box[0][1], box[1][1]),
+    )
+    plot_loss(model, fig, data, nb_samples=nb_samples, box=box, resolution=resolution)
+    show(fig)
