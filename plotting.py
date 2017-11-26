@@ -50,15 +50,23 @@ def box_for_data(data, spacing=0.1):
     
     return tuple(mins), tuple(maxs)
 
+def plot_gaussians(fig, mus, variances):
+    fig.ellipse(
+        mus[:, 0], mus[:, 1], 
+        width=variances[:, 0], height=variances[:, 1],
+        fill_alpha=0.3, fill_color='black',
+        line_color=None,
+    )
 
 def plot_encodings(model, data):
     model.eval()
     X = Variable(torch.from_numpy(data).contiguous().float())
-    _, _, z_mu, _ = model(X)
+    _, _, z_mu, z_logvar = model(X)
 
     z_mu = z_mu.data.numpy()
+    z_var = z_logvar.exp().data.numpy()
 
-    box = box_for_data(z_mu)
+    box = box_for_data(z_mu, spacing=1)
 
     fig = figure(
         title='p(x)',
@@ -68,6 +76,7 @@ def plot_encodings(model, data):
         y_range=(box[0][1], box[1][1]),
     )
 
+    plot_gaussians(fig, z_mu, z_var)
     fig.cross(z_mu[:, 0], z_mu[:, 1], line_color='red')
     
     return fig
