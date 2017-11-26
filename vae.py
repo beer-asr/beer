@@ -44,19 +44,19 @@ class VAE(nn.Module):
     def forward(self, x):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
-        obs_mu, obs_logprec = self.decode(z)
-        return obs_mu, obs_logprec, mu, logvar
+        obs_mu, obs_logvar = self.decode(z)
+        return obs_mu, obs_logvar, mu, logvar
 
-    def loss(self, x, obs_mu, obs_logprec, z_mu, z_logvar, log_sigma=0.0):
-        LLH = gauss_LLH(x, obs_mu, obs_logprec)
+    def loss(self, x, obs_mu, obs_logvar, z_mu, z_logvar, log_sigma=0.0):
+        LLH = gauss_LLH(x, obs_mu, obs_logvar)
         KLD = st_norm_KLD(z_mu, z_logvar, log_sigma)
         return -(LLH - KLD), LLH, KLD
 
 
-def gauss_LLH(x, obs_mu, obs_logprec):
+def gauss_LLH(x, obs_mu, obs_logvar):
     LLH = 0.5 * (
-        obs_logprec +
-        (- (x-obs_mu) * obs_logprec.exp() * (x-obs_mu))
+        (-obs_logvar) +
+        (- (x-obs_mu) * (-obs_logvar).exp() * (x-obs_mu))
     ).sum()
     return LLH / NB_SAMPLES
 
