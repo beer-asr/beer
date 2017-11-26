@@ -88,7 +88,7 @@ def plot_encodings(model, data):
     )
 
     plot_gaussians(fig, z_mu, z_var)
-    plot_gaussians(fig, z_mu, 2.0*z_var, alpha=0.15)
+    plot_gaussians(fig, z_mu, 2.0*z_var, alpha=0.09)
     plot_datapoints(fig, z_mu)
 
     return fig
