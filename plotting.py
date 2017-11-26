@@ -27,12 +27,10 @@ def grid_from_box(box, resolution):
     return grid, circle_radius
 
 
-def plot_loss(model, fig, box, nb_samples, resolution):
-    xy, radius = grid_from_box(box, resolution)
-
+def plot_loss(fig, model, grid, radius, nb_samples):
     losses = []
     model.eval()
-    for X in xy:
+    for X in grid:
         X = Variable(torch.from_numpy(X).contiguous().float())
         X = torch.stack([X]*nb_samples)
         obs_mu, obs_logvar,  mu, logvar = model(X)
@@ -47,7 +45,7 @@ def plot_loss(model, fig, box, nb_samples, resolution):
         for r, g, b, _ in 255*plt.cm.Greys(losses_norm)
     ]
 
-    fig.circle(xy[:, 0], xy[:, 1], fill_color=colors, line_color=colors, radius=radius)
+    fig.circle(grid[:, 0], grid[:, 1], fill_color=colors, line_color=colors, radius=radius)
 
 
 def plot_datapoints(fig, data, color='red'):
@@ -90,15 +88,22 @@ def plot_encodings(model, data):
 
     return fig
 
-
-def plot_model_outputs(model, data, nb_samples=NB_SAMPLES, resolution=150):
-    box = box_for_data(data)
-    fig_px = figure(
+def plot_elbo(model, grid, radius, nb_samples):
+    fig = figure(
         title='Lower bound of p(x)',
         width=400,
         height=400,
     )
-    plot_loss(model, fig_px, box=box, nb_samples=nb_samples, resolution=resolution)
+    plot_loss(fig, model, grid=grid, radius=radius, nb_samples=nb_samples)
+
+    return fig
+
+
+def plot_model_outputs(model, data, nb_samples=NB_SAMPLES, resolution=150):
+    box = box_for_data(data)
+    xy, radius = grid_from_box(box, resolution)
+
+    fig_px = plot_elbo(model, xy, radius, nb_samples)
     plot_datapoints(fig_px, data)
 
     fig_encs = plot_encodings(model, data)
