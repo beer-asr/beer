@@ -22,7 +22,7 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
             X = torch.cat([X] * NB_SAMPLES)
             optimizer.zero_grad()
             obs_mu, obs_logvar, z_mu, z_logvar = model(X)
-            loss, llh, kld = model.loss(X, obs_mu, obs_logvar, z_mu, z_logvar, log_sigma=0.0)
+            loss, llh, kld = model.loss(X, obs_mu, obs_logvar, z_mu, z_logvar)
             loss.backward()
             optimizer.step()
 
