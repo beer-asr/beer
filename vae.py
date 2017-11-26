@@ -4,9 +4,6 @@ from torch.nn import functional as F
 from torch.autograd import Variable
 
 
-NB_SAMPLES = 10
-
-
 class VAE(nn.Module):
     def __init__(self, latent_dim, nb_hidden):
         super(VAE, self).__init__()
@@ -15,32 +12,41 @@ class VAE(nn.Module):
         self.decoder = GaussianMLP(latent_dim, 2, nb_hidden)
         self.latent_model = IsotropicGaussian(latent_dim)
 
+        self.nb_samples = 10
+
     def reparameterize(self, mu, logvar):
         if self.training:
-            std = logvar.mul(0.5).exp_()
-            eps = Variable(std.data.new(std.size()).normal_())
-            return eps.mul(std).add_(mu)
+            z_samples = []
+            for i in range(self.nb_samples):
+                std = logvar.mul(0.5).exp_()
+                eps = Variable(std.data.new(std.size()).normal_())
+                z_samples.append(eps.mul(std).add_(mu))
+
+            return torch.stack(z_samples)
         else:
-            return mu
+            return mu.unsqueeze(0)
 
     def forward(self, x):
         mu, logvar = self.encoder(x)
         z = self.reparameterize(mu, logvar)
-        obs_mu, obs_logvar = self.decoder(z)
+
+        obs_mu, obs_logvar = self.decoder(z.view(-1, 2))
+
+        obs_mu = obs_mu.view(-1, x.size(0), 2)
+        obs_logvar = obs_logvar.view(-1, x.size(0), 2)
         return obs_mu, obs_logvar, mu, logvar
 
     def loss(self, x, obs_mu, obs_logvar, z_mu, z_logvar):
-        LLH = gauss_LLH(x, obs_mu, obs_logvar)
+        LLH = self.gauss_LLH(x, obs_mu, obs_logvar)
         KLD = self.latent_model.kld(z_mu, z_logvar)
         return -(LLH - KLD), LLH, KLD
 
-
-def gauss_LLH(x, obs_mu, obs_logvar):
-    LLH = 0.5 * (
-        (-obs_logvar) +
-        (- (x-obs_mu) * (-obs_logvar).exp() * (x-obs_mu))
-    ).sum()
-    return LLH / NB_SAMPLES
+    def gauss_LLH(self, x, obs_mu, obs_logvar):
+        LLH = 0.5 * (
+            (-obs_logvar) +
+            (- (x-obs_mu).pow(2) * (-obs_logvar).exp())
+        ).sum()
+        return LLH / obs_mu.size(0)
 
 
 class GaussianMLP(nn.Module):
@@ -74,4 +80,4 @@ class IsotropicGaussian:
             logvar.exp()/self._log_var.exp() +
             mu.pow(2)/self._log_var.exp()
         )
-        return KLD / NB_SAMPLES
+        return KLD
