@@ -5,8 +5,6 @@ from torch.autograd import Variable
 from bokeh.plotting import figure, gridplot
 from bokeh.io import show
 
-from vae import NB_SAMPLES
-
 
 def run_training(training_data, model, optimizer, nb_epochs, history, batch_size, log_interval=10):
     model.train()
@@ -19,10 +17,9 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
         epoch_llh = 0
         for X in epoch_data_batched:
             X = Variable(torch.from_numpy(X).float())
-            X = torch.cat([X] * NB_SAMPLES)
             optimizer.zero_grad()
-            obs_mu, obs_logprec, z_mu, z_logvar = model(X)
-            loss, llh, kld = model.loss(X, obs_mu, obs_logprec, z_mu, z_logvar, log_sigma=0.0)
+            obs_mu, obs_logvar, z_mu, z_logvar = model(X)
+            loss, llh, kld = model.loss(X, obs_mu, obs_logvar, z_mu, z_logvar)
             loss.backward()
             optimizer.step()
 

@@ -9,15 +9,13 @@ import matplotlib as mpl
 from bokeh.plotting import figure, gridplot
 from bokeh.io import show
 
-from vae import NB_SAMPLES  # TODO completely encapsulate this in model
 
-
-def plot_model_outputs(model, data, nb_samples=NB_SAMPLES, resolution=70):
+def plot_model_outputs(model, data, resolution=70):
     box = box_for_data(data)
     grid = grid_from_box(box, resolution)
     radius = suggested_radius(box, resolution)
 
-    losses = get_losses(model, grid, nb_samples)
+    losses = get_losses(model, grid)
 
     probs = [math.exp(-loss) for loss, llh, kld in losses]
     fig_px = plot_elbo(grid, probs, radius)
@@ -94,13 +92,12 @@ def plot_encodings(model, data):
     return fig
 
 
-def get_losses(model, grid, nb_samples):
+def get_losses(model, grid):
     losses = []
     model.eval()
     for X in grid:
         X = Variable(torch.from_numpy(X).contiguous().float())
-        X = torch.stack([X]*nb_samples)
-        obs_mu, obs_logvar,  mu, logvar = model(X)
+        obs_mu, obs_logvar,  mu, logvar = model(X.view(1, -1))
         loss = model.loss(X, obs_mu, obs_logvar, mu, logvar)
         loss = tuple(l.data.numpy()[0] for l in loss)
         losses.append(loss)
