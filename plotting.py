@@ -27,8 +27,7 @@ def grid_from_box(box, resolution):
     return grid, circle_radius
 
 
-def plot_loss(model, fig,  orig_data, box, nb_samples, resolution):
-    box = box_for_data(orig_data)
+def plot_loss(model, fig, box, nb_samples, resolution):
     xy, radius = grid_from_box(box, resolution)
 
     losses = []
@@ -49,7 +48,10 @@ def plot_loss(model, fig,  orig_data, box, nb_samples, resolution):
     ]
 
     fig.circle(xy[:, 0], xy[:, 1], fill_color=colors, line_color=colors, radius=radius)
-    fig.cross(orig_data[:, 0], orig_data[:, 1], line_color='red')
+
+
+def plot_datapoints(fig, data, color='red'):
+    fig.cross(data[:, 0], data[:, 1], line_color=color)
 
 
 def box_for_data(data, spacing=0.1):
@@ -84,7 +86,7 @@ def plot_encodings(model, data):
 
     plot_gaussians(fig, z_mu, z_var)
     plot_gaussians(fig, z_mu, 2.0*z_var, alpha=0.15)
-    fig.cross(z_mu[:, 0], z_mu[:, 1], line_color='red')
+    plot_datapoints(fig, z_mu)
 
     return fig
 
@@ -98,7 +100,9 @@ def plot_model_outputs(model, data, nb_samples=NB_SAMPLES, resolution=150):
         x_range=(box[0][0], box[1][0]),
         y_range=(box[0][1], box[1][1]),
     )
-    plot_loss(model, fig_px, data, nb_samples=nb_samples, box=box, resolution=resolution)
+    plot_loss(model, fig_px, box=box, nb_samples=nb_samples, resolution=resolution)
+    plot_datapoints(fig_px, data)
+
     fig_encs = plot_encodings(model, data)
 
     gp = gridplot([[fig_px, fig_encs]])
