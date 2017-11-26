@@ -14,10 +14,12 @@ from vae import NB_SAMPLES  # TODO completely encapsulate this in model
 
 def plot_model_outputs(model, data, nb_samples=NB_SAMPLES, resolution=150):
     box = box_for_data(data)
-    xy = grid_from_box(box, resolution)
+    grid = grid_from_box(box, resolution)
     radius = suggested_radius(box, resolution)
 
-    fig_px = plot_elbo(model, xy, radius, nb_samples)
+    losses = get_losses(model, grid, nb_samples)
+    elbos = probs_from_losses(losses)
+    fig_px = plot_elbo(grid, elbos, radius)
     plot_datapoints(fig_px, data)
 
     fig_encs = plot_encodings(model, data)
@@ -26,13 +28,13 @@ def plot_model_outputs(model, data, nb_samples=NB_SAMPLES, resolution=150):
     show(gp)
 
 
-def plot_elbo(model, grid, radius, nb_samples):
+def plot_elbo(grid, values, radius):
     fig = figure(
         title='Lower bound of p(x)',
         width=400,
         height=400,
     )
-    plot_loss(fig, model, grid=grid, radius=radius, nb_samples=nb_samples)
+    plot_loss(fig, grid=grid, values=values, radius=radius)
 
     return fig
 
@@ -58,22 +60,28 @@ def plot_encodings(model, data):
     return fig
 
 
-def plot_loss(fig, model, grid, radius, nb_samples):
+def probs_from_losses(losses):
+    return [math.exp(-elbo.data.numpy()[0]) for elbo, llh, kld in losses]
+
+
+def get_losses(model, grid, nb_samples):
     losses = []
     model.eval()
     for X in grid:
         X = Variable(torch.from_numpy(X).contiguous().float())
         X = torch.stack([X]*nb_samples)
         obs_mu, obs_logvar,  mu, logvar = model(X)
-        loss, _, _ = model.loss(X, obs_mu, obs_logvar, mu, logvar)
-        losses.append(math.exp(-loss.data.numpy()[0]))
+        loss = model.loss(X, obs_mu, obs_logvar, mu, logvar)
+        losses.append(loss)
 
-    print(len(losses), type(losses[0]))
+    return losses
 
-    losses_norm = mpl.colors.Normalize()(losses)
+
+def plot_loss(fig, grid, values, radius):
+    values_norm = mpl.colors.Normalize()(values)
     colors = [
         "#%02x%02x%02x" % (int(r), int(g), int(b))
-        for r, g, b, _ in 255*plt.cm.Greys(losses_norm)
+        for r, g, b, _ in 255*plt.cm.Greys(values_norm)
     ]
 
     fig.circle(grid[:, 0], grid[:, 1], fill_color=colors, line_color=colors, radius=radius)
