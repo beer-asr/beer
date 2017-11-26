@@ -47,16 +47,18 @@ def plot_loss(model, fig,  orig_data, nb_samples=5, box=((-5, -5), (10.1, 10.1))
 def box_for_data(data, spacing=0.1):
     mins = data.min(axis=0) - spacing
     maxs = data.max(axis=0) + spacing
-    
+
     return tuple(mins), tuple(maxs)
 
-def plot_gaussians(fig, mus, variances):
+
+def plot_gaussians(fig, mus, variances, color='black', alpha=0.3):
     fig.ellipse(
-        mus[:, 0], mus[:, 1], 
+        mus[:, 0], mus[:, 1],
         width=variances[:, 0], height=variances[:, 1],
-        fill_alpha=0.3, fill_color='black',
+        fill_alpha=alpha, fill_color=color,
         line_color=None,
     )
+
 
 def plot_encodings(model, data):
     model.eval()
@@ -66,25 +68,22 @@ def plot_encodings(model, data):
     z_mu = z_mu.data.numpy()
     z_var = z_logvar.exp().data.numpy()
 
-    box = box_for_data(z_mu, spacing=1)
-
     fig = figure(
-        title='p(x)',
+        title='Encodings in latent space',
         width=400,
         height=400,
-        x_range=(box[0][0], box[1][0]),
-        y_range=(box[0][1], box[1][1]),
     )
 
     plot_gaussians(fig, z_mu, z_var)
+    plot_gaussians(fig, z_mu, 2.0*z_var, alpha=0.15)
     fig.cross(z_mu[:, 0], z_mu[:, 1], line_color='red')
-    
+
     return fig
 
 
 def plot_model_outputs(model, data, box, nb_samples=NB_SAMPLES, resolution=150):
     fig_px = figure(
-        title='p(x)',
+        title='Lower bound of p(x)',
         width=400,
         height=400,
         x_range=(box[0][0], box[1][0]),
