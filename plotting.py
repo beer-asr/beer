@@ -12,19 +12,31 @@ from bokeh.io import show
 from vae import NB_SAMPLES  # TODO completely encapsulate this in model
 
 
-def plot_model_outputs(model, data, nb_samples=NB_SAMPLES, resolution=150):
+def plot_model_outputs(model, data, nb_samples=NB_SAMPLES, resolution=70):
     box = box_for_data(data)
     grid = grid_from_box(box, resolution)
     radius = suggested_radius(box, resolution)
 
     losses = get_losses(model, grid, nb_samples)
-    elbos = probs_from_losses(losses)
-    fig_px = plot_elbo(grid, elbos, radius)
+
+    probs = [math.exp(-loss) for loss, llh, kld in losses]
+    fig_px = plot_elbo(grid, probs, radius)
     plot_datapoints(fig_px, data)
+
+    klds = [kld for loss, llh, kld in losses]
+    fig_klds = plot_klds(grid, klds, radius)
+    plot_datapoints(fig_klds, data)
+
+    llhs = [math.exp(llh) for loss, llh, kld in losses]
+    fig_llhs = plot_llhs(grid, llhs, radius)
+    plot_datapoints(fig_llhs, data)
 
     fig_encs = plot_encodings(model, data)
 
-    gp = gridplot([[fig_px, fig_encs]])
+    gp = gridplot([
+        [fig_px, fig_encs],
+        [fig_llhs, fig_klds],
+    ])
     show(gp)
 
 
@@ -34,7 +46,29 @@ def plot_elbo(grid, values, radius):
         width=400,
         height=400,
     )
-    plot_loss(fig, grid=grid, values=values, radius=radius)
+    plot_grid_values(fig, grid=grid, values=values, radius=radius)
+
+    return fig
+
+
+def plot_klds(grid, values, radius):
+    fig = figure(
+        title='KLD( q(z|x) || p(z) )',
+        width=400,
+        height=400,
+    )
+    plot_grid_values(fig, grid=grid, values=values, radius=radius)
+
+    return fig
+
+
+def plot_llhs(grid, values, radius):
+    fig = figure(
+        title='Estimated p(x|z)',
+        width=400,
+        height=400,
+    )
+    plot_grid_values(fig, grid=grid, values=values, radius=radius)
 
     return fig
 
@@ -60,10 +94,6 @@ def plot_encodings(model, data):
     return fig
 
 
-def probs_from_losses(losses):
-    return [math.exp(-elbo.data.numpy()[0]) for elbo, llh, kld in losses]
-
-
 def get_losses(model, grid, nb_samples):
     losses = []
     model.eval()
@@ -72,12 +102,13 @@ def get_losses(model, grid, nb_samples):
         X = torch.stack([X]*nb_samples)
         obs_mu, obs_logvar,  mu, logvar = model(X)
         loss = model.loss(X, obs_mu, obs_logvar, mu, logvar)
+        loss = tuple(l.data.numpy()[0] for l in loss)
         losses.append(loss)
 
     return losses
 
 
-def plot_loss(fig, grid, values, radius):
+def plot_grid_values(fig, grid, values, radius):
     values_norm = mpl.colors.Normalize()(values)
     colors = [
         "#%02x%02x%02x" % (int(r), int(g), int(b))
