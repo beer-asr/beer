@@ -6,7 +6,7 @@ from torch.autograd import Variable
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from bokeh.plotting import figure
+from bokeh.plotting import figure, gridplot
 from bokeh.io import show
 
 from vae import NB_SAMPLES  # TODO completely encapsulate this in model
@@ -44,13 +44,53 @@ def plot_loss(model, fig,  orig_data, nb_samples=5, box=((-5, -5), (10.1, 10.1))
     fig.cross(orig_data[:, 0], orig_data[:, 1], line_color='red')
 
 
-def plot_model_outputs(model, data, box, nb_samples=NB_SAMPLES, resolution=150):
+def box_for_data(data, spacing=0.1):
+    mins = data.min(axis=0) - spacing
+    maxs = data.max(axis=0) + spacing
+
+    return tuple(mins), tuple(maxs)
+
+
+def plot_gaussians(fig, mus, variances, color='black', alpha=0.3):
+    fig.ellipse(
+        mus[:, 0], mus[:, 1],
+        width=variances[:, 0], height=variances[:, 1],
+        fill_alpha=alpha, fill_color=color,
+        line_color=None,
+    )
+
+
+def plot_encodings(model, data):
+    model.eval()
+    X = Variable(torch.from_numpy(data).contiguous().float())
+    _, _, z_mu, z_logvar = model(X)
+
+    z_mu = z_mu.data.numpy()
+    z_var = z_logvar.exp().data.numpy()
+
     fig = figure(
-        title='p(x)',
+        title='Encodings in latent space',
+        width=400,
+        height=400,
+    )
+
+    plot_gaussians(fig, z_mu, z_var)
+    plot_gaussians(fig, z_mu, 2.0*z_var, alpha=0.15)
+    fig.cross(z_mu[:, 0], z_mu[:, 1], line_color='red')
+
+    return fig
+
+
+def plot_model_outputs(model, data, box, nb_samples=NB_SAMPLES, resolution=150):
+    fig_px = figure(
+        title='Lower bound of p(x)',
         width=400,
         height=400,
         x_range=(box[0][0], box[1][0]),
         y_range=(box[0][1], box[1][1]),
     )
-    plot_loss(model, fig, data, nb_samples=nb_samples, box=box, resolution=resolution)
-    show(fig)
+    plot_loss(model, fig_px, data, nb_samples=nb_samples, box=box, resolution=resolution)
+    fig_encs = plot_encodings(model, data)
+
+    gp = gridplot([[fig_px, fig_encs]])
+    show(gp)
