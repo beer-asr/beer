@@ -97,8 +97,6 @@ def plot_model_outputs(model, data, nb_samples=NB_SAMPLES, resolution=150):
         title='Lower bound of p(x)',
         width=400,
         height=400,
-        x_range=(box[0][0], box[1][0]),
-        y_range=(box[0][1], box[1][1]),
     )
     plot_loss(model, fig_px, box=box, nb_samples=nb_samples, resolution=resolution)
     plot_datapoints(fig_px, data)
