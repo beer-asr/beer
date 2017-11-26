@@ -12,7 +12,8 @@ from bokeh.io import show
 from vae import NB_SAMPLES  # TODO completely encapsulate this in model
 
 
-def plot_loss(model, fig,  orig_data, nb_samples=5, box=((-5, -5), (10.1, 10.1)), resolution=100):
+def plot_loss(model, fig,  orig_data, box, nb_samples=5, resolution=100):
+    box = box_for_data(orig_data)
     x_min = box[0][0]
     x_max = box[1][0]
     x_range = (x_max - x_min)
@@ -40,7 +41,7 @@ def plot_loss(model, fig,  orig_data, nb_samples=5, box=((-5, -5), (10.1, 10.1))
         for r, g, b, _ in 255*plt.cm.Greys(losses_norm)
     ]
 
-    fig.circle(xy[:, 0], xy[:, 1], fill_color=colors, line_color=colors, radius=min(x_range, y_range)/resolution/1.7)
+    fig.circle(xy[:, 0], xy[:, 1], fill_color=colors, line_color=colors, radius=min(x_range, y_range)/resolution/1.3)
     fig.cross(orig_data[:, 0], orig_data[:, 1], line_color='red')
 
 
@@ -81,7 +82,8 @@ def plot_encodings(model, data):
     return fig
 
 
-def plot_model_outputs(model, data, box, nb_samples=NB_SAMPLES, resolution=150):
+def plot_model_outputs(model, data, nb_samples=NB_SAMPLES, resolution=150):
+    box = box_for_data(data)
     fig_px = figure(
         title='Lower bound of p(x)',
         width=400,
