@@ -4,6 +4,7 @@ prior over the latent space.
 
 """
 
+import numpy as np
 import math
 
 import torch
@@ -44,8 +45,18 @@ class VAE(nn.Module):
 
     def loss(self, x, obs_mu, obs_logvar, z_mu, z_logvar):
         LLH = self.gauss_LLH(x, obs_mu, obs_logvar)
-        p_np_params = self.latent_model.expected_natural_params()
-        KLD = kld(*naturals_from_mu_logvar(z_mu, z_logvar), *p_np_params)
+
+        p_np_linear, p_np_quadr, exp_log_norm = \
+            self.latent_model.expected_natural_params()
+
+        # Make sure there are torch Variable.
+        p_np_linear = to_torch_variable(p_np_linear)
+        p_np_quadr = to_torch_variable(p_np_quadr)
+        exp_log_norm = to_torch_variable(exp_log_norm)
+
+        KLD = kld(*naturals_from_mu_logvar(z_mu, z_logvar), p_np_linear,
+                  p_np_quadr, exp_log_norm)
+
         return -(LLH - KLD), LLH, KLD
 
     def gauss_LLH(self, x, obs_mu, obs_logvar):
@@ -101,25 +112,28 @@ class NaturalIsotropicGaussian:
         self._np_quadr = Variable(torch.FloatTensor([-0.5*var]*dim))
 
     def expected_natural_params(self):
-        return self._np_linear.view(1, -1), self._np_quadr.view(1, -1)
-
-    #def kld(self, q_np_linear, q_np_quadr, stats_linear, stats_quadr):
-    #    KLD = ((q_np_linear - self._np_linear) * stats_linear).sum(dim=1)
-    #    KLD += ((q_np_quadr - self._np_quadr) * stats_quadr).sum(dim=1)
-    #    KLD += log_norm(self._np_linear.view(1, -1), self._np_quadr.view(1,-1))
-    #    KLD += -log_norm(q_np_linear, q_np_quadr)
-    #    KLD = KLD.sum()
-
-    #    return KLD
+        np_linear, np_quadr = self._np_linear.view(1, -1), \
+            self._np_quadr.view(1, -1)
+        exp_log_norm = log_norm(np_linear, np_quadr)
+        return np_linear, np_quadr, exp_log_norm
 
     def update(self, mu, logvar):
         pass
 
+def to_torch_variable(variable):
+    """If the given variable is a numpy.ndarray convert it to a torch
+    Variable convert it.
+
+    """
+    if type(variable) == np.ndarray:
+        return torch.FloatTensor(variable)
+    return variable
+
 def kld(q_np_linear, q_np_quadr, stats_linear, stats_quadr, p_np_linear,
-        p_np_quadr):
+        p_np_quadr, exp_log_norm):
     KLD = ((q_np_linear - p_np_linear) * stats_linear).sum(dim=1)
     KLD += ((q_np_quadr - p_np_quadr) * stats_quadr).sum(dim=1)
-    KLD += log_norm(p_np_linear, p_np_quadr)
+    KLD += exp_log_norm
     KLD += -log_norm(q_np_linear, q_np_quadr)
     KLD = KLD.sum()
 
@@ -136,3 +150,4 @@ def naturals_from_mu_logvar(mu, logvar):
     np_linear = mu / var
     np_quadr = -0.5 / var
     return np_linear, np_quadr, stats_linear, stats_quadr
+
