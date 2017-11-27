@@ -81,3 +81,6 @@ class IsotropicGaussian:
             mu.pow(2)/self._log_var.exp()
         )
         return KLD
+
+    def update(self, mu, logvar):
+        pass

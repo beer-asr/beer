@@ -22,6 +22,7 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
             loss, llh, kld = model.loss(X, obs_mu, obs_logvar, z_mu, z_logvar)
             loss.backward()
             optimizer.step()
+            model.latent_model.update(z_mu, z_logvar)
 
             el.accumulate(
                 -loss.data[0], kld.data[0], llh.data[0],
