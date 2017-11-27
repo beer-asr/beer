@@ -106,6 +106,7 @@ def get_losses(model, grid):
 
 
 def plot_grid_values(fig, grid, values, radius):
+    # TODO use image instead of fig.circle()
     values_norm = mpl.colors.Normalize()(values)
     colors = [
         "#%02x%02x%02x" % (int(r), int(g), int(b))
