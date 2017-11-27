@@ -176,7 +176,7 @@ class PPCA:
         """
         return -.5 * (X.shape[0] * X.shape[1]) * np.log(2 * np.pi)
 
-    def kernel(self, X, latent_posteriors, return_exp_latent=False):
+    def kernel(self, X, X2, latent_posteriors, return_exp_latent=False):
         """The "kernel" of the Gaussian. By "kernel" we mean the
         expected value of the quadratic function of the Gaussian
         density (not including the precision) i.e.:
@@ -188,7 +188,7 @@ class PPCA:
         ...     [1., 2., 3., 4.],
         ...     [1., 2., 3., 4.]])
         >>> posteriors = model.latent_posteriors(X)
-        >>> model.kernel(X, posteriors)
+        >>> model.kernel(X, X**2, posteriors)
         array([ -3.56,  -7.34, -13.64, -22.46])
 
         """
@@ -203,7 +203,7 @@ class PPCA:
         kernel = -.5 * self.exp_mean_quad.sum()
 
         # -.5 * x_n^T x_n
-        kernel += -.5 * (X**2).sum(axis=0)
+        kernel += -.5 * X2.sum(axis=0)
 
         #  E[ ( W * z_n + m )^T x_n ]
         kernel += (((self.exp_bases @ exp_latent) + self.exp_mean[:, None]) \
@@ -222,14 +222,14 @@ class PPCA:
             return kernel, exp_latent, exp_latent_quad
         return kernel
 
-    def exp_llh(self, X, accumulate_stats=False):
+    def exp_llh(self, X, X2, accumulate_stats=False):
         """Expected value of the log-likelihood.
 
         >>> model = PPCA.create(3, 2)
         >>> X = np.array([[1., 2., 3., 4.],
         ...     [1., 2., 3., 4.],
         ...     [1., 2., 3., 4.]])
-        >>> llh, acc_stats = model.exp_llh(X, accumulate_stats=True)
+        >>> llh, acc_stats = model.exp_llh(X, X**2, accumulate_stats=True)
         >>> print(round(llh, 6))
         -61.490556
         >>> acc_stats['mean_s1']
@@ -258,7 +258,7 @@ class PPCA:
         posteriors = self.latent_posteriors(X)
 
         # Estimate the kernel for each data point.
-        kernels, exp_latent, exp_latent_quad = self.kernel(X, posteriors,
+        kernels, exp_latent, exp_latent_quad = self.kernel(X, X2, posteriors,
             return_exp_latent=True)
 
         # Compute the total lower bound.
@@ -309,7 +309,7 @@ class PPCA:
         ...     [1., 2., 3., 4.],
         ...     [1., 2., 3., 4.]])
         >>> X = np.ones((3, 1000))
-        >>> llh, acc_stats = model.exp_llh(X, accumulate_stats=True)
+        >>> llh, acc_stats = model.exp_llh(X, X**2, accumulate_stats=True)
         >>> model.natural_gradient_update(acc_stats, 1.)
         >>> model.posterior_precision.np1
         array([-3561.])
