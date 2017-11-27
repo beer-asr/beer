@@ -44,7 +44,8 @@ class VAE(nn.Module):
 
     def loss(self, x, obs_mu, obs_logvar, z_mu, z_logvar):
         LLH = self.gauss_LLH(x, obs_mu, obs_logvar)
-        KLD = self.latent_model.kld(*naturals_from_mu_logvar(z_mu, z_logvar))
+        p_np_params = self.latent_model.expected_natural_params()
+        KLD = kld(*naturals_from_mu_logvar(z_mu, z_logvar), *p_np_params)
         return -(LLH - KLD), LLH, KLD
 
     def gauss_LLH(self, x, obs_mu, obs_logvar):
@@ -56,12 +57,12 @@ class VAE(nn.Module):
 
 
 class GaussianMLP(nn.Module):
-    """ Neural-Network ending with a double linear projectiong 
-    providing the mean and the (log-)variance a of a Normal 
+    """ Neural-Network ending with a double linear projectiong
+    providing the mean and the (log-)variance a of a Normal
     distribution given the input.
 
     """
-    
+
     def __init__(self, structure, hidden_dim, target_dim):
         super().__init__()
         self.structure = structure
@@ -71,7 +72,7 @@ class GaussianMLP(nn.Module):
     def forward(self, x):
         h = self.structure(x)
         return self.hid_to_mu(h), self.hid_to_logvar(h)
-        
+
 
 class IsotropicGaussian:
     def __init__(self, dim, log_var=0.0):
@@ -99,24 +100,33 @@ class NaturalIsotropicGaussian:
         self._np_linear = Variable(torch.FloatTensor([0]*dim))
         self._np_quadr = Variable(torch.FloatTensor([-0.5*var]*dim))
 
-    def kld(self, q_np_linear, q_np_quadr, stats_linear, stats_quadr):
-        KLD = ((q_np_linear - self._np_linear) * stats_linear).sum(dim=1)
-        KLD += ((q_np_quadr - self._np_quadr) * stats_quadr).sum(dim=1)
-        KLD += log_norm(self._np_linear.view(1, -1), self._np_quadr.view(1,-1))
-        KLD += -log_norm(q_np_linear, q_np_quadr)
-        KLD = KLD.sum()
+    def expected_natural_params(self):
+        return self._np_linear.view(1, -1), self._np_quadr.view(1, -1)
 
-        return KLD
+    #def kld(self, q_np_linear, q_np_quadr, stats_linear, stats_quadr):
+    #    KLD = ((q_np_linear - self._np_linear) * stats_linear).sum(dim=1)
+    #    KLD += ((q_np_quadr - self._np_quadr) * stats_quadr).sum(dim=1)
+    #    KLD += log_norm(self._np_linear.view(1, -1), self._np_quadr.view(1,-1))
+    #    KLD += -log_norm(q_np_linear, q_np_quadr)
+    #    KLD = KLD.sum()
+
+    #    return KLD
 
     def update(self, mu, logvar):
         pass
 
+def kld(q_np_linear, q_np_quadr, stats_linear, stats_quadr, p_np_linear,
+        p_np_quadr):
+    KLD = ((q_np_linear - p_np_linear) * stats_linear).sum(dim=1)
+    KLD += ((q_np_quadr - p_np_quadr) * stats_quadr).sum(dim=1)
+    KLD += log_norm(p_np_linear, p_np_quadr)
+    KLD += -log_norm(q_np_linear, q_np_quadr)
+    KLD = KLD.sum()
+
+    return KLD
 
 def log_norm(np_linear, np_quadr):
-    # print(np_linear)
-    # print(np_quadr)
     return - 0.5 * torch.log((-2*np_quadr)).sum(dim=1) - 0.25 * (np_linear.pow(2) * (1.0/np_quadr)).sum(dim=1)
-
 
 def naturals_from_mu_logvar(mu, logvar):
     var = logvar.exp()
