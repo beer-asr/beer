@@ -8,7 +8,7 @@ from bokeh.io import show
 import math
 
 
-def run_training(training_data, model, optimizer, nb_epochs, history, batch_size, log_interval=10):
+def run_training(training_data, model, optimizer, nb_epochs, history, batch_size):
     model.train()
     for epoch_no in range(1, nb_epochs+1):
         epoch_data = np.copy(training_data)
@@ -31,9 +31,6 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
             )
 
         history.log(el)
-
-        if epoch_no % log_interval == 0:
-            print('Train Epoch: {} \t{}'.format(epoch_no, el))
 
 
 def gaussian_entropy(logvars):
@@ -62,11 +59,15 @@ class EpochLog:
 
 
 class History:
-    def __init__(self):
+    def __init__(self, report_interval):
         self._epoch_logs = []
+        self._report_interval = report_interval
 
     def log(self, epoch_log):
         self._epoch_logs.append(epoch_log)
+
+        if len(self._epoch_logs) % self._report_interval == 0:
+            print('Epoch: {} \t{}'.format(len(self._epoch_logs), epoch_log))
 
     def plot(self, subsampling=1):
         epoch_logs = self._epoch_logs[::subsampling]
@@ -105,5 +106,5 @@ class History:
         ])
         show(gp)
 
-    def expected_epoch(self):
+    def current_epoch(self):
         return len(self._epoch_logs)
