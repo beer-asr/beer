@@ -1,3 +1,9 @@
+
+"""Implementation of the Variational Auto-Encoder with arbitrary
+prior over the latent space.
+
+"""
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -5,14 +11,12 @@ from torch.autograd import Variable
 
 
 class VAE(nn.Module):
-    def __init__(self, latent_dim, nb_hidden):
-        super(VAE, self).__init__()
-
-        self.encoder = GaussianMLP(2, latent_dim, nb_hidden)
-        self.decoder = GaussianMLP(latent_dim, 2, nb_hidden)
-        self.latent_model = IsotropicGaussian(latent_dim)
-
-        self.nb_samples = 10
+    def __init__(self, encoder, decoder, latent_model, nb_samples):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.latent_model = latent_model
+        self.nb_samples = nb_samples
 
     def reparameterize(self, mu, logvar):
         if self.training:
@@ -50,21 +54,22 @@ class VAE(nn.Module):
 
 
 class GaussianMLP(nn.Module):
-    def __init__(self, input_dim, output_dim, nb_hidden):
-        super(GaussianMLP, self).__init__()
+    """ Neural-Network ending with a double linear projectiong 
+    providing the mean and the (log-)variance a of a Normal 
+    distribution given the input.
 
-        self.in2hid = nn.Linear(input_dim, nb_hidden)
-        self.hid2hid = nn.Linear(nb_hidden, nb_hidden)
-        self.hid2mu = nn.Linear(nb_hidden, output_dim)
-        self.hid2logvar = nn.Linear(nb_hidden, output_dim)
-
-        self.nonlin = F.relu
+    """
+    
+    def __init__(self, structure, hidden_dim, target_dim):
+        super().__init__()
+        self.structure = structure
+        self.hid_to_mu = nn.Linear(hidden_dim, target_dim)
+        self.hid_to_logvar = nn.Linear(hidden_dim, target_dim)
 
     def forward(self, x):
-        h1 = self.nonlin(self.in2hid(x))
-        h2 = self.nonlin(self.hid2hid(h1))
-        return self.hid2mu(h2), self.hid2logvar(h2)
-
+        h = self.structure(x)
+        return self.hid_to_mu(h), self.hid_to_logvar(h)
+        
 
 class IsotropicGaussian:
     def __init__(self, dim, log_var=0.0):
@@ -84,3 +89,4 @@ class IsotropicGaussian:
 
     def update(self, mu, logvar):
         pass
+
