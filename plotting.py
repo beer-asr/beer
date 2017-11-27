@@ -77,7 +77,7 @@ def plot_encodings(model, data):
     _, _, z_mu, z_logvar = model(X)
 
     z_mu = z_mu.data.numpy()
-    z_var = z_logvar.exp().data.numpy()
+    z_stddev = (z_logvar * 0.5).exp().data.numpy()
 
     fig = figure(
         title='Encodings in latent space',
@@ -85,8 +85,8 @@ def plot_encodings(model, data):
         height=400,
     )
 
-    plot_gaussians(fig, z_mu, z_var)
-    plot_gaussians(fig, z_mu, 2.0*z_var, alpha=0.09)
+    plot_gaussians(fig, z_mu, z_stddev)
+    plot_gaussians(fig, z_mu, 2.0*z_stddev, alpha=0.09)
     plot_datapoints(fig, z_mu)
 
     return fig
@@ -116,10 +116,10 @@ def plot_grid_values(fig, grid, values, radius):
     fig.circle(grid[:, 0], grid[:, 1], fill_color=colors, line_color=colors, radius=radius)
 
 
-def plot_gaussians(fig, mus, variances, color='black', alpha=0.3):
+def plot_gaussians(fig, mus, stddevs, color='black', alpha=0.3):
     fig.ellipse(
         mus[:, 0], mus[:, 1],
-        width=variances[:, 0], height=variances[:, 1],
+        width=stddevs[:, 0], height=stddevs[:, 1],
         fill_alpha=alpha, fill_color=color,
         line_color=None,
     )
