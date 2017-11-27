@@ -5,6 +5,8 @@ from torch.autograd import Variable
 from bokeh.plotting import figure, gridplot
 from bokeh.io import show
 
+import math
+
 
 def run_training(training_data, model, optimizer, nb_epochs, history, batch_size, log_interval=10):
     model.train()
@@ -21,26 +23,36 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
             loss.backward()
             optimizer.step()
 
-            el.accumulate(-loss.data[0], kld.data[0], llh.data[0])
+            el.accumulate(-loss.data[0], kld.data[0], llh.data[0],
+                gaussian_entropy(z_logvar).data[0])
 
         history.log(el)
 
         if epoch_no % log_interval == 0:
             print('Train Epoch: {} \t{}'.format(epoch_no, el))
 
+
+def gaussian_entropy(logvars):
+    D = logvars.size(1)
+    return 0.5 * (D + math.log(2*math.pi) + logvars.exp().sum()) / logvars.size(0)
+
 class EpochLog:
     def __init__(self):
         self.elbo = 0
         self.kld = 0
         self.llh = 0
+        self.h_z = 0
 
-    def accumulate(self, elbo, kld, llh):
+    def accumulate(self, elbo, kld, llh, h_z):
         self.elbo += elbo
         self.kld += kld
         self.llh += llh
+        self.h_z += h_z
 
     def __str__(self):
-        return "elbo: {} llh: {} kld: {}".format(self.elbo, self.llh, self.kld)
+        return "elbo: {:3.6f} llh: {:3.6f} kld: {:3.6f} H_q(z): {:3.6f}".format(
+                    self.elbo, self.llh, self.kld, self.h_z
+        )
 
 
 class History:
@@ -67,7 +79,17 @@ class History:
         )
         fig_kld.line(range(len(epoch_logs)), [l.kld for l in epoch_logs], color='red')
 
-        gp = gridplot([[fig_elbo, fig_kld]])
+        fig_h_z = figure(
+            title='H_q(z) Progress',
+            width=400,
+            height=400,
+        )
+        fig_h_z.line(range(len(epoch_logs)), [l.h_z for l in epoch_logs], color='red')
+
+        gp = gridplot([
+            [fig_elbo, fig_kld],
+            [fig_h_z],
+        ])
         show(gp)
 
     def expected_epoch(self):
