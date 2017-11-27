@@ -4,6 +4,8 @@ prior over the latent space.
 
 """
 
+import math
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -42,7 +44,7 @@ class VAE(nn.Module):
 
     def loss(self, x, obs_mu, obs_logvar, z_mu, z_logvar):
         LLH = self.gauss_LLH(x, obs_mu, obs_logvar)
-        KLD = self.latent_model.kld(z_mu, z_logvar)
+        KLD = self.latent_model.kld(*naturals_from_mu_logvar(z_mu, z_logvar))
         return -(LLH - KLD), LLH, KLD
 
     def gauss_LLH(self, x, obs_mu, obs_logvar):
@@ -90,3 +92,37 @@ class IsotropicGaussian:
     def update(self, mu, logvar):
         pass
 
+
+class NaturalIsotropicGaussian:
+    def __init__(self, dim, log_var=0.0):
+        var = math.exp(log_var)
+        self._np_linear = Variable(torch.FloatTensor([0]*dim))
+        self._np_quadr = Variable(torch.FloatTensor([-0.5*var]*dim))
+
+    def kld(self, q_np_linear, q_np_quadr, stats_linear, stats_quadr):
+        KLD = ((q_np_linear - self._np_linear) * stats_linear).sum(dim=1)
+        KLD += ((q_np_quadr - self._np_quadr) * stats_quadr).sum(dim=1)
+        KLD += log_norm(self._np_linear.view(1, -1), self._np_quadr.view(1,-1))
+        KLD += -log_norm(q_np_linear, q_np_quadr)
+        KLD = KLD.sum()
+
+        return KLD
+
+    def update(self, mu, logvar):
+        pass
+
+
+def log_norm(np_linear, np_quadr):
+    # print(np_linear)
+    # print(np_quadr)
+    return - 0.5 * torch.log((-2*np_quadr)).sum(dim=1) - 0.25 * (np_linear.pow(2) * (1.0/np_quadr)).sum(dim=1)
+
+
+def naturals_from_mu_logvar(mu, logvar):
+    var = logvar.exp()
+    stats_linear = mu
+    stats_quadr = mu.pow(2) + var
+
+    np_linear = mu / var
+    np_quadr = -0.5 / var
+    return np_linear, np_quadr, stats_linear, stats_quadr
