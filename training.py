@@ -23,8 +23,11 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
             loss.backward()
             optimizer.step()
 
-            el.accumulate(-loss.data[0], kld.data[0], llh.data[0],
-                gaussian_entropy(z_logvar).data[0])
+            el.accumulate(
+                -loss.data[0], kld.data[0], llh.data[0],
+                gaussian_entropy(z_logvar).data[0],
+                gaussian_entropy(obs_logvar.view(-1, X.size(1))).data[0]
+            )
 
         history.log(el)
 
@@ -42,16 +45,18 @@ class EpochLog:
         self.kld = 0
         self.llh = 0
         self.h_z = 0
+        self.h_x = 0
 
-    def accumulate(self, elbo, kld, llh, h_z):
+    def accumulate(self, elbo, kld, llh, h_z, h_x):
         self.elbo += elbo
         self.kld += kld
         self.llh += llh
         self.h_z += h_z
+        self.h_x += h_x
 
     def __str__(self):
-        return "elbo: {:3.6f} llh: {:3.6f} kld: {:3.6f} H_q(z): {:3.6f}".format(
-                    self.elbo, self.llh, self.kld, self.h_z
+        return "elbo: {:3.6f} llh: {:3.6f} kld: {:3.6f} H_q(z): {:3.6f} H_p(x|z): {:3.6f}".format(
+                    self.elbo, self.llh, self.kld, self.h_z, self.h_x
         )
 
 
@@ -66,29 +71,36 @@ class History:
         epoch_logs = self._epoch_logs[::subsampling]
 
         fig_elbo = figure(
-            title='ELBO Progress',
+            title='ELBO progress',
             width=400,
             height=400,
         )
         fig_elbo.line(range(len(epoch_logs)), [l.elbo for l in epoch_logs], color='blue')
 
         fig_kld = figure(
-            title='KLD Progress',
+            title='KLD progress',
             width=400,
             height=400,
         )
         fig_kld.line(range(len(epoch_logs)), [l.kld for l in epoch_logs], color='red')
 
         fig_h_z = figure(
-            title='H_q(z) Progress',
+            title='H_q(z) progress',
             width=400,
             height=400,
         )
         fig_h_z.line(range(len(epoch_logs)), [l.h_z for l in epoch_logs], color='red')
 
+        fig_h_x = figure(
+            title='H_p(x|z) progress',
+            width=400,
+            height=400,
+        )
+        fig_h_x.line(range(len(epoch_logs)), [l.h_x for l in epoch_logs], color='red')
+
         gp = gridplot([
             [fig_elbo, fig_kld],
-            [fig_h_z],
+            [fig_h_z, fig_h_x],
         ])
         show(gp)
 
