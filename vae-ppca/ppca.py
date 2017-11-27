@@ -290,6 +290,92 @@ class PPCA:
 
         return exp_llh[0]
 
+    def exp_natural_params(self, X, X2):
+        """Expected value of the natural parameters and of
+        the log-normalizer and accumulated statistics.
+
+        WARNING:
+            This function is not optimized at all as the computation of
+            some terms is repeated.
+
+        >>> model = PPCA.create(3, 2)
+        >>> X = np.array([[1., 2., 3., 4.],
+        ...     [1., 2., 3., 4.],
+        ...     [1., 2., 3., 4.]])
+        >>> _, _, _, acc_stats = model.exp_natural_params(X, X**2)
+        >>> acc_stats['mean_s1']
+        array([  8.,   8.,  10.])
+        >>> acc_stats['mean_s2']
+        array([[ 4.,  0.,  0.],
+               [ 0.,  4.,  0.],
+               [ 0.,  0.,  4.]])
+        >>> acc_stats['precision_s1']
+        -47.0
+        >>> acc_stats['precision_s2']
+        6.0
+        >>> acc_stats['bases_s1']
+        array([[ 6.,  6.],
+               [ 6.,  6.],
+               [ 6.,  6.]])
+        >>> acc_stats['bases_s2']
+        array([[ 2. ,  1.2],
+               [ 1.2,  2. ]])
+
+        """
+        N = X.shape[1]
+        dim = X.shape[0]
+        latent_dim = self.exp_bases.shape[1]
+
+        # Estimate the posterior distribution for each latent variable.
+        posteriors = self.latent_posteriors(X)
+
+        # Estimate the kernel for each data point.
+        kernels, exp_latent, exp_latent_quad = self.kernel(X, X2, posteriors,
+            return_exp_latent=True)
+
+        # Expected value of the natural parameters
+        np_linear = self.exp_precision \
+            * ((self.exp_bases @ exp_latent) + self.exp_mean[:, None])
+        np_quadr = -.5 * self.exp_precision
+
+        exp_log_norm = np.zeros(N)
+
+        # Expected value of the log-normalizer.
+        # -.5 * E[ Trace( m * m^T ) ]
+        exp_log_norm += -.5 * self.exp_precision * self.exp_mean_quad.sum()
+
+        #  E[ m^T W z_n  ]
+        exp_log_norm += - self.exp_precision * ((self.exp_bases @ exp_latent) \
+            * self.exp_mean[:, None]).sum(axis=0)
+
+        # E[ Trace(W^T * W * z_n * z_n^T) ]
+        matrices = (self.exp_bases_quad @ exp_latent_quad)
+        exp_log_norm += -.5 * self.exp_precision * matrices[np.arange(latent_dim),
+            np.arange(latent_dim), :].sum(axis=0)
+
+        # Accumulate the sufficient statistics.
+        acc_mean = X.sum(axis=-1)
+        acc_mean -= self.exp_bases @ exp_latent.sum(axis=-1)
+        acc_mean *= self.exp_precision
+
+        acc_precision = kernels.sum()
+        acc_precision = min(acc_precision, -.5 * N * dim * 1e-2)
+
+        X_mean = X - self.exp_mean[:, None]
+        acc_bases = (X_mean[:, :] @ exp_latent.T[:, :])
+        acc_bases *= self.exp_precision
+
+        stats = {
+            'mean_s1': acc_mean,
+            'mean_s2': self.exp_precision * N * np.identity(dim),
+            'precision_s1': acc_precision,
+            'precision_s2': .5 * N * dim,
+            'bases_s1': acc_bases,
+            'bases_s2': self.exp_precision * exp_latent_quad.sum(axis=-1)
+        }
+
+        return np_linear, np_quadr, exp_log_norm, stats
+
     def kl_div(self, X):
         posteriors = self.latent_posteriors(X)
         KL_latent = posteriors.kl_div(self.prior_latent).sum()
