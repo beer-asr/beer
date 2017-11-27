@@ -46,18 +46,26 @@ class VAE(nn.Module):
     def loss(self, x, obs_mu, obs_logvar, z_mu, z_logvar):
         LLH = self.gauss_LLH(x, obs_mu, obs_logvar)
 
-        p_np_linear, p_np_quadr, exp_log_norm = \
-            self.latent_model.expected_natural_params()
+        # Natural parameters and expected sufficient statistics of the
+        # posteriors.
+        q_np_linear, q_np_quadr, stats_linear, stats_quadr = \
+            naturals_from_mu_logvar(z_mu, z_logvar)
 
-        # Make sure there are torch Variable.
+        # Expected value of the natural parameters of the Gaussian and
+        # the log-normalizer.
+        p_np_linear, p_np_quadr, exp_log_norm = \
+            self.latent_model.expected_natural_params(stats_linear,
+                                                      stats_quadr)
+
+        # Make sure they are torch Variable.
         p_np_linear = to_torch_variable(p_np_linear)
         p_np_quadr = to_torch_variable(p_np_quadr)
         exp_log_norm = to_torch_variable(exp_log_norm)
 
-        KLD = kld(*naturals_from_mu_logvar(z_mu, z_logvar), p_np_linear,
-                  p_np_quadr, exp_log_norm)
+        KLD = kld(q_np_linear, q_np_quadr, stats_linear, stats_quadr,
+                  p_np_linear, p_np_quadr, exp_log_norm)
 
-        return -(LLH - KLD), LLH, KLD
+        return -(LLH - KLD), LLH, KLD, None
 
     def gauss_LLH(self, x, obs_mu, obs_logvar):
         LLH = 0.5 * (
@@ -111,7 +119,9 @@ class NaturalIsotropicGaussian:
         self._np_linear = Variable(torch.FloatTensor([0]*dim))
         self._np_quadr = Variable(torch.FloatTensor([-0.5*var]*dim))
 
-    def expected_natural_params(self):
+    def expected_natural_params(self, stats_linear, stats_quadr):
+        # stats_linear and stats_quadr are ignored as the parameters
+        # of the Gaussian are fixed.
         np_linear, np_quadr = self._np_linear.view(1, -1), \
             self._np_quadr.view(1, -1)
         exp_log_norm = log_norm(np_linear, np_quadr)
