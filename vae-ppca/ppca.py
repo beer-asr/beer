@@ -176,7 +176,7 @@ class PPCA:
         """
         return -.5 * (X.shape[0] * X.shape[1]) * np.log(2 * np.pi)
 
-    def kernel(self, X, latent_posteriors, return_exp_latent=False):
+    def kernel(self, X, X2, latent_posteriors, return_exp_latent=False):
         """The "kernel" of the Gaussian. By "kernel" we mean the
         expected value of the quadratic function of the Gaussian
         density (not including the precision) i.e.:
@@ -188,7 +188,7 @@ class PPCA:
         ...     [1., 2., 3., 4.],
         ...     [1., 2., 3., 4.]])
         >>> posteriors = model.latent_posteriors(X)
-        >>> model.kernel(X, posteriors)
+        >>> model.kernel(X, X**2, posteriors)
         array([ -3.56,  -7.34, -13.64, -22.46])
 
         """
@@ -203,7 +203,7 @@ class PPCA:
         kernel = -.5 * self.exp_mean_quad.sum()
 
         # -.5 * x_n^T x_n
-        kernel += -.5 * (X**2).sum(axis=0)
+        kernel += -.5 * X2.sum(axis=0)
 
         #  E[ ( W * z_n + m )^T x_n ]
         kernel += (((self.exp_bases @ exp_latent) + self.exp_mean[:, None]) \
@@ -222,14 +222,14 @@ class PPCA:
             return kernel, exp_latent, exp_latent_quad
         return kernel
 
-    def exp_llh(self, X, accumulate_stats=False):
+    def exp_llh(self, X, X2, accumulate_stats=False):
         """Expected value of the log-likelihood.
 
         >>> model = PPCA.create(3, 2)
         >>> X = np.array([[1., 2., 3., 4.],
         ...     [1., 2., 3., 4.],
         ...     [1., 2., 3., 4.]])
-        >>> llh, acc_stats = model.exp_llh(X, accumulate_stats=True)
+        >>> llh, acc_stats = model.exp_llh(X, X**2, accumulate_stats=True)
         >>> print(round(llh, 6))
         -61.490556
         >>> acc_stats['mean_s1']
@@ -258,7 +258,7 @@ class PPCA:
         posteriors = self.latent_posteriors(X)
 
         # Estimate the kernel for each data point.
-        kernels, exp_latent, exp_latent_quad = self.kernel(X, posteriors,
+        kernels, exp_latent, exp_latent_quad = self.kernel(X, X2, posteriors,
             return_exp_latent=True)
 
         # Compute the total lower bound.
@@ -290,6 +290,92 @@ class PPCA:
 
         return exp_llh[0]
 
+    def exp_natural_params(self, X, X2):
+        """Expected value of the natural parameters and of
+        the log-normalizer and accumulated statistics.
+
+        WARNING:
+            This function is not optimized at all as the computation of
+            some terms is repeated.
+
+        >>> model = PPCA.create(3, 2)
+        >>> X = np.array([[1., 2., 3., 4.],
+        ...     [1., 2., 3., 4.],
+        ...     [1., 2., 3., 4.]])
+        >>> _, _, _, acc_stats = model.exp_natural_params(X, X**2)
+        >>> acc_stats['mean_s1']
+        array([  8.,   8.,  10.])
+        >>> acc_stats['mean_s2']
+        array([[ 4.,  0.,  0.],
+               [ 0.,  4.,  0.],
+               [ 0.,  0.,  4.]])
+        >>> acc_stats['precision_s1']
+        -47.0
+        >>> acc_stats['precision_s2']
+        6.0
+        >>> acc_stats['bases_s1']
+        array([[ 6.,  6.],
+               [ 6.,  6.],
+               [ 6.,  6.]])
+        >>> acc_stats['bases_s2']
+        array([[ 2. ,  1.2],
+               [ 1.2,  2. ]])
+
+        """
+        N = X.shape[1]
+        dim = X.shape[0]
+        latent_dim = self.exp_bases.shape[1]
+
+        # Estimate the posterior distribution for each latent variable.
+        posteriors = self.latent_posteriors(X)
+
+        # Estimate the kernel for each data point.
+        kernels, exp_latent, exp_latent_quad = self.kernel(X, X2, posteriors,
+            return_exp_latent=True)
+
+        # Expected value of the natural parameters
+        np_linear = self.exp_precision \
+            * ((self.exp_bases @ exp_latent) + self.exp_mean[:, None])
+        np_quadr = -.5 * self.exp_precision
+
+        exp_log_norm = np.zeros(N)
+
+        # Expected value of the log-normalizer.
+        # -.5 * E[ Trace( m * m^T ) ]
+        exp_log_norm += -.5 * self.exp_precision * self.exp_mean_quad.sum()
+
+        #  E[ m^T W z_n  ]
+        exp_log_norm += - self.exp_precision * ((self.exp_bases @ exp_latent) \
+            * self.exp_mean[:, None]).sum(axis=0)
+
+        # E[ Trace(W^T * W * z_n * z_n^T) ]
+        matrices = (self.exp_bases_quad @ exp_latent_quad)
+        exp_log_norm += -.5 * self.exp_precision * matrices[np.arange(latent_dim),
+            np.arange(latent_dim), :].sum(axis=0)
+
+        # Accumulate the sufficient statistics.
+        acc_mean = X.sum(axis=-1)
+        acc_mean -= self.exp_bases @ exp_latent.sum(axis=-1)
+        acc_mean *= self.exp_precision
+
+        acc_precision = kernels.sum()
+        acc_precision = min(acc_precision, -.5 * N * dim * 1e-2)
+
+        X_mean = X - self.exp_mean[:, None]
+        acc_bases = (X_mean[:, :] @ exp_latent.T[:, :])
+        acc_bases *= self.exp_precision
+
+        stats = {
+            'mean_s1': acc_mean,
+            'mean_s2': self.exp_precision * N * np.identity(dim),
+            'precision_s1': acc_precision,
+            'precision_s2': .5 * N * dim,
+            'bases_s1': acc_bases,
+            'bases_s2': self.exp_precision * exp_latent_quad.sum(axis=-1)
+        }
+
+        return np_linear, np_quadr, exp_log_norm, stats
+
     def kl_div(self, X):
         posteriors = self.latent_posteriors(X)
         KL_latent = posteriors.kl_div(self.prior_latent).sum()
@@ -309,7 +395,7 @@ class PPCA:
         ...     [1., 2., 3., 4.],
         ...     [1., 2., 3., 4.]])
         >>> X = np.ones((3, 1000))
-        >>> llh, acc_stats = model.exp_llh(X, accumulate_stats=True)
+        >>> llh, acc_stats = model.exp_llh(X, X**2, accumulate_stats=True)
         >>> model.natural_gradient_update(acc_stats, 1.)
         >>> model.posterior_precision.np1
         array([-3561.])

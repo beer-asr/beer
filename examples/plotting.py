@@ -99,7 +99,7 @@ def get_losses(model, grid):
         X = Variable(torch.from_numpy(X).contiguous().float())
         obs_mu, obs_logvar,  mu, logvar = model(X.view(1, -1))
         loss = model.loss(X, obs_mu, obs_logvar, mu, logvar)
-        loss = tuple(l.data.numpy()[0] for l in loss)
+        loss = tuple(l.data.numpy()[0] for l in loss[:-1])
         losses.append(loss)
 
     return losses
