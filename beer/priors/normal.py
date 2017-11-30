@@ -100,8 +100,8 @@ class NormalDiagonalCovariance:
 
         """
         exp_t1, exp_t2 = self.grad_lognorm()
-        KL = (self.np1 - other.np1) @ exp_t1
-        KL += (self. np2 - other.np2) @ exp_t2
-        KL += other.lognorm() - self.lognorm()
-        return KL
+        kl = (self.np1 - other.np1) @ exp_t1
+        kl += (self. np2 - other.np2) @ exp_t2
+        kl += other.lognorm() - self.lognorm()
+        return kl
 

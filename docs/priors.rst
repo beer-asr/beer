@@ -64,3 +64,20 @@ Expectation of the sufficient statistics
     >>> exp_t2
     array([-4.75, -4.75])
 
+
+KL divergence
+^^^^^^^^^^^^^
+
+    >>> mean = np.ones(2) * 4
+    >>> precision = np.ones(2)
+    >>> prior2 = priors.NormalDiagonalCovariance.from_mean_precision(mean,
+    ...     precision)
+    >>> prior.kl_div(prior)
+    0.0
+    >>> prior2.kl_div(prior2)
+    0.0
+    >>> print(round(prior.kl_div(prior2), 6))
+    1.193147
+    >>> print(round(prior2.kl_div(prior), 6))
+    2.306853
+
