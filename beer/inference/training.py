@@ -19,7 +19,8 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
             X = Variable(torch.from_numpy(X).float())
             optimizer.zero_grad()
             obs_mu, obs_logvar, z_mu, z_logvar = model(X)
-            loss, llh, kld = model.loss(X, obs_mu, obs_logvar, z_mu, z_logvar)
+            loss, llh, kld, acc_stats = \
+                model.loss(X, obs_mu, obs_logvar, z_mu, z_logvar)
             loss.backward()
             optimizer.step()
             model.latent_model.update(z_mu, z_logvar)
