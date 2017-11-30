@@ -1,2 +1,2 @@
 
-from .normal import NormalIsotropicCovariance
+from .normal import NormalDiagonalCovariance

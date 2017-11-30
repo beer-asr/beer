@@ -4,8 +4,8 @@
 import numpy as np
 
 
-class NormalIsotropicCovariance:
-    """Normal conjugate prior with isotropic covariance matrix.
+class NormalDiagonalCovariance:
+    """Normal conjugate prior with a diagonal covariance matrix.
 
     Standard Parameters:
         - mean: m
@@ -23,14 +23,14 @@ class NormalIsotropicCovariance:
 
     @classmethod
     def from_mean_variance(cls, mean, variance):
-        """Create a ``NormalPrior`` from mean and variance parameters.
+        """Create a Normal density from mean and variance parameters.
 
         Args:
             mean (numpy.ndarray): Mean of the Normal density.
             variance (float): Variance of the Normal density.
 
         Returns
-            ``NormalIsotropicCovariance``: An initialized Normal
+            ``NormalDiagonalCovariance``: An initialized Normal
                 density.
 
         """
@@ -39,14 +39,14 @@ class NormalIsotropicCovariance:
 
     @classmethod
     def from_mean_precision(cls, mean, precision):
-        """Create a ``NormalPrior`` from mean and precision parameters.
+        """Create a Normal density from mean and precision parameters.
 
         Args:
             mean (numpy.ndarray): mean of the Normal density.
-            precision (float): precision of the Normal density.
+            nit__(self, np1, np2):precision (flo): precision of the Normal density.
 
         Returns
-            ``NormalIsotropicCovariance``: An initialized Normal
+            ``NormalDiagonalCovariance``: An initialized Normal
                 density.
 
         """
@@ -63,3 +63,13 @@ class NormalIsotropicCovariance:
         self.np1 = np1
         self.np2 = np2
 
+    def grad_lognorm(self):
+        """Gradient of the log-normalizer. This correspond to the
+        expected vlue of the sufficient statistics.
+
+        Returns
+            ``numpy.ndarray``: E [ T_1(x) ] = .
+            ``numpy.ndarray``: Expected value of T_2(x) =
+
+        """
+        pass
