@@ -14,7 +14,21 @@ from torch.autograd import Variable
 
 
 class VAE(nn.Module):
+    """Variational Auto-Encoder (VAE)."""
+
+
     def __init__(self, encoder, decoder, latent_model, nb_samples):
+        """Initialize the VAE.
+
+        Args:
+            encoder (``VAEComponent``): Encoder of the VAE.
+            decoder (``VAEComponent``): Decoder of the VAE.
+            latent_model(``Model``): Bayesian Model for the prior over
+                the latent space.
+            nb_samples (int): Number of samples to approximate the
+                expectation of the log-likelihood.
+
+        """
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
@@ -22,6 +36,28 @@ class VAE(nn.Module):
         self.nb_samples = nb_samples
 
     def reparameterize(self, mu, logvar):
+        """Re-parameterization "trick" to allow the derivation of the
+        objective function w.r.t. to the encoder's parameters.
+
+        Args:
+            mu (torch.Variable): Per-frame mean of the Normal
+                distribution over the latent variable.
+            logvar (torch.Variable): Per-framce logarithm of the
+                variance of the Normal distribution over the latent
+                variable.
+
+        Note:
+            If the model is not in training model i.e.:
+
+                 >>> model.training
+                 False
+
+            this function is effectless.
+
+        Returns:
+            torch.Variable: Samples from the posetrior distributions.
+
+        """
         if self.training:
             z_samples = []
             for i in range(self.nb_samples):
@@ -34,16 +70,63 @@ class VAE(nn.Module):
             return mu.unsqueeze(0)
 
     def forward(self, x):
+        """Forward data through the VAE model.
+
+        Args:
+            x (torch.Variable): Data to process. The first dimension is
+                the number of samples and the second dimension is the
+                dimension of the latent space.
+
+        Returns:
+            torch.Variable: Per-frame and per-sample mean of the
+                likelihood function.
+            torch.Variable: Per-frame and per-sample logarithm of the
+                variable of the likelihood function.
+            torch.Variable: Per-frame mean of the posterior
+                distribution.
+            torch.Variable: Per-frame logarithm of the variance of the
+                posterior distribution.
+
+        """
+        # Mean and (log-)variance of the posterior distribution over
+        # the latent space.
         mu, logvar = self.encoder(x)
+
+        # Samples of the latent variable using the reparameterization
+        # "trick". "z" is a L x N x K tensor where L is the number of
+        # samples for the reparameterization "trick", N is the number
+        # of frames and K is the dimension of the latent space.
         z = self.reparameterize(mu, logvar)
 
+        # Forward the samples through the decoder.
         obs_mu, obs_logvar = self.decoder(z.view(-1, 2))
 
+        # Re-organize the parameters of the likelihood as a L x N x K
+        # tensor
         obs_mu = obs_mu.view(-1, x.size(0), 2)
         obs_logvar = obs_logvar.view(-1, x.size(0), 2)
+
         return obs_mu, obs_logvar, mu, logvar
 
     def loss(self, x, obs_mu, obs_logvar, z_mu, z_logvar):
+        """Loss function of the VAE. This is the negative of the
+        variational objective function i.e.:
+
+            loss = - ( E_q [ ln p(X|Z) ] - KL( q(z) || p(z) ) )
+
+        Args:
+            x (torch.Variable): Data on which to estimate the loss.
+            obs_mu (torch.Variable): Mean of the likelihood function.
+            obs_logvar (torch.Variable): (Log-)variance of the
+                likelihood function.
+            z_mu (torch.Variable): Mean of the posterior distributions.
+            z_logvar (torch.Variable): (Log-)variance of the posterior
+                distributions.
+
+        Returns:
+            torch.Variable: Symbolic computation of the loss function.
+
+        """
         LLH = self.gauss_LLH(x, obs_mu, obs_logvar)
 
         # Natural parameters and expected sufficient statistics of the
