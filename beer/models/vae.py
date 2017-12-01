@@ -51,11 +51,15 @@ class VAE(nn.Module):
         q_np_linear, q_np_quadr, stats_linear, stats_quadr = \
             naturals_from_mu_logvar(z_mu, z_logvar)
 
+        # Accumulate statistics.
+        acc_stats = self.latent_model.accumulate_stats(
+            stats_linear.data.numpy().T, stats_quadr.data.numpy().T)
+
         # Expected value of the natural parameters of the Gaussian and
         # the log-normalizer.
         p_np_linear, p_np_quadr, exp_log_norm = \
-            self.latent_model.expected_natural_params(stats_linear,
-                                                      stats_quadr)
+            self.latent_model.expected_natural_params(
+                stats_linear.data.numpy().T, stats_quadr.data.numpy().T)
 
         # Make sure they are torch Variable.
         p_np_linear = to_torch_variable(p_np_linear)
@@ -65,7 +69,7 @@ class VAE(nn.Module):
         KLD = kld(q_np_linear, q_np_quadr, stats_linear, stats_quadr,
                   p_np_linear, p_np_quadr, exp_log_norm)
 
-        return -(LLH - KLD), LLH, KLD, None
+        return -(LLH - KLD), LLH, KLD, acc_stats
 
     def gauss_LLH(self, x, obs_mu, obs_logvar):
         LLH = 0.5 * (
@@ -119,6 +123,9 @@ class NaturalIsotropicGaussian:
         self._np_linear = Variable(torch.FloatTensor([0]*dim))
         self._np_quadr = Variable(torch.FloatTensor([-0.5*var]*dim))
 
+    def accumulate_stats(self, X1, X2):
+        return None
+
     def expected_natural_params(self, stats_linear, stats_quadr):
         # stats_linear and stats_quadr are ignored as the parameters
         # of the Gaussian are fixed.
@@ -127,7 +134,7 @@ class NaturalIsotropicGaussian:
         exp_log_norm = log_norm(np_linear, np_quadr)
         return np_linear, np_quadr, exp_log_norm
 
-    def update(self, mu, logvar):
+    def natural_grad_update(self, acc_stats, scale, lrate):
         pass
 
 def to_torch_variable(variable):
@@ -136,7 +143,7 @@ def to_torch_variable(variable):
 
     """
     if type(variable) == np.ndarray:
-        return torch.FloatTensor(variable)
+        return Variable(torch.FloatTensor(variable))
     return variable
 
 def kld(q_np_linear, q_np_quadr, stats_linear, stats_quadr, p_np_linear,

@@ -8,7 +8,8 @@ from bokeh.io import show
 import math
 
 
-def run_training(training_data, model, optimizer, nb_epochs, history, batch_size):
+def run_training(training_data, model, optimizer, nb_epochs, history, batch_size,
+                 lrate_latent_model):
     model.train()
     for epoch_no in range(1, nb_epochs+1):
         epoch_data = np.copy(training_data)
@@ -16,6 +17,7 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
         epoch_data_batched = epoch_data.reshape(-1, batch_size, 2)
         el = EpochLog()
         for X in epoch_data_batched:
+            scale = float(epoch_data.shape[0]) / X.shape[0]
             X = Variable(torch.from_numpy(X).float())
             optimizer.zero_grad()
             obs_mu, obs_logvar, z_mu, z_logvar = model(X)
@@ -23,7 +25,8 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
                 model.loss(X, obs_mu, obs_logvar, z_mu, z_logvar)
             loss.backward()
             optimizer.step()
-            model.latent_model.update(z_mu, z_logvar)
+            model.latent_model.natural_grad_update(acc_stats,
+                scale=scale, lrate=lrate_latent_model)
 
             el.accumulate(
                 -loss.data[0], kld.data[0], llh.data[0],
