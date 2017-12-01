@@ -12,14 +12,14 @@ class NormalDiagonalCovariance:
     """Bayesian Normal distribution with diagonal covariance matrix."""
 
     @staticmethod
-    def create(dim):
+    def create(dim, mean_prec=1e-3, prec_shape=1e-3, prec_rate=1e-3):
         mean_prior = priors.NormalDiagonalCovariance.from_mean_precision(
             np.zeros(dim),
-            np.ones(dim) * 1e-3
+            np.ones(dim) * mean_prec
         )
         prec_prior = priors.JointGamma.from_shapes_rates(
-            np.ones(dim) * 1e-3,
-            np.ones(dim) * 1e-3
+            np.ones(dim) * prec_shape,
+            np.ones(dim) * prec_rate
         )
         return NormalDiagonalCovariance(mean_prior, prec_prior)
 
@@ -53,7 +53,7 @@ class NormalDiagonalCovariance:
         self.exp_mean, self.exp_mean_quad = self.mean_posterior.grad_lognorm()
         self.exp_precision, self.exp_log_precision = \
             self.precision_posterior.grad_lognorm()
-        self._np1 = self.exp_mean
+        self._np1 = self.exp_precision * self.exp_mean
         self._np2 = -.5 * self.exp_precision
 
     def lognorm(self):
@@ -64,7 +64,27 @@ class NormalDiagonalCovariance:
             float: expected log-normalizer.
 
         """
-        return .5 * (self.exp_mean_quad - self.exp_log_precision).sum()
+        retval = .5 * (self.exp_precision * -2. *  self.exp_mean_quad \
+            - self.exp_log_precision)
+        return np.sum(retval)
+
+    def expected_natural_params(self, X1, X2):
+        """Expected value of the natural parameters.
+
+        Args:
+            X1 (numpy.ndarray): First sufficient statistics.
+            X2 (numpy.ndarray): Second sufficient statistics.
+
+        Returns:
+            np1 (numpy.ndarray): First natural parameters.
+            np2 (numpy.ndarray): Second natural parameters.
+            lnorm (numpy.ndarray): Expected value of the log-normalizer.
+
+        """
+        lnorm = np.zeros(X1.shape[1]) + self.lognorm()
+        np1 = self.np1[None, :] + np.zeros((X1.shape[1], X1.shape[0]))
+        np2 = self.np2[None, :] + np.zeros((X1.shape[1], X1.shape[0]))
+        return np1, np2, lnorm
 
     def accumulate_stats(self, X1, X2):
         """Accumulate the sufficient statistics (of the posterior) to

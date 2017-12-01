@@ -19,7 +19,7 @@ class JointGamma:
 
     Sufficient statistics:
         - T_1(x) = x
-        - T_2(x) = - ln(x)
+        - T_2(x) = ln(x)
 
     """
 
