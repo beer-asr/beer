@@ -373,6 +373,13 @@ class MLPNormalFull(nn.Module):
         llh = Variable(torch.zeros(mus.size(0)))
         tri_idxs = torch.tril(torch.ones(mus.size(1), mus.size(1)),
                               diagonal=-1)
+
+        # Note (LO)
+        # ---------
+        # This is inefficient but so far I didn't find a smart
+        # way to compute the log-likelihood without the "for loop".
+        # The problem is mostly that we have one covariance matrix per
+        # sample.
         for i in range(mus.size(0)):
             # Build the covariance matrix.
             D = torch.diag(torch.sqrt(logvars[i]).exp())
