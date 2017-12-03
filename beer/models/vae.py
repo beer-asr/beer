@@ -253,7 +253,7 @@ def naturals_from_mu_logvar(mu, logvar):
 
 
 class MLPNormalDiag(nn.Module):
-    """ Neural-Network ending with a double linear projectiong
+    """Neural-Network ending with a double linear projection
     providing the mean and the logarithm of the diagonal of the
     covariance matrix.
 
@@ -289,3 +289,41 @@ class MLPNormalDiag(nn.Module):
             (x - mu).pow(2) * (-logvar).exp()
         ).sum(1)
 
+
+class MLPNormalIso(nn.Module):
+    """Neural-Network ending with a double linear projection
+    providing the mean and the logarithm of the isotropic covariance
+    matrix.
+
+    """
+
+    def __init__(self, structure, hidden_dim, target_dim):
+        super().__init__()
+        self.structure = structure
+        self.hid_to_mu = nn.Linear(hidden_dim, target_dim)
+        self.hid_to_logvar = nn.Linear(hidden_dim, 1)
+
+    def forward(self, x):
+        h = self.structure(x)
+        return {
+            'means': self.hid_to_mu(h),
+            'logvars': self.hid_to_logvar(h)
+        }
+
+    @staticmethod
+    def log_likelihood(x, state):
+        """Log-likelihood of the data x
+
+        Args:
+            state (dict): Current state of the neural network.
+
+        Returns:
+            torch.Variable: Per-frame log-likelihood.
+
+        """
+        mu = state['means']
+        logvar = state['logvars']
+        return -.5 * (mu.size(1) * math.log(2 * math.pi)
+            + mu.size(1) * logvar
+            + (x - mu).pow(2) * (-logvar).exp()
+        ).sum(1)
