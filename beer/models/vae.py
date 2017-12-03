@@ -327,3 +327,66 @@ class MLPNormalIso(nn.Module):
             + mu.size(1) * logvar
             + (x - mu).pow(2) * (-logvar).exp()
         ).sum(1)
+
+
+class MLPNormalFull(nn.Module):
+    """Neural-Network ending with a triple linear projection
+    providing the mean and the covariance matrix. For efficiency, the
+    covariance matrix is expressed in term of it LDL' decomposition:
+        - a vector representing the (log of) the diagonal of the D
+          matrix
+        - a vector representing the lower triangular part of the L
+        matrix.
+
+    """
+
+    def __init__(self, structure, hidden_dim, target_dim):
+        super().__init__()
+        self.structure = structure
+        self.hid_to_mu = nn.Linear(hidden_dim, target_dim)
+        self.hid_to_logvar = nn.Linear(hidden_dim, target_dim)
+        self.hid_to_L = nn.Linear(hidden_dim,
+                                  target_dim * (target_dim - 1) // 2)
+
+    def forward(self, x):
+        h = self.structure(x)
+        return {
+            'means': self.hid_to_mu(h),
+            'logvars': self.hid_to_logvar(h),
+            'L_tris': self.hid_to_L(h)
+        }
+
+    @staticmethod
+    def log_likelihood(x, state):
+        """Log-likelihood of the data x
+
+        Args:
+            state (dict): Current state of the neural network.
+
+        Returns:
+            torch.Variable: Per-frame log-likelihood.
+
+        """
+        mus = state['means']
+        logvars = state['logvars']
+        L_tris = state['L_tris']
+        llh = Variable(torch.zeros(mus.size(0)))
+        tri_idxs = torch.tril(torch.ones(mus.size(1), mus.size(1)),
+                              diagonal=-1)
+        for i in range(mus.size(0)):
+            # Build the covariance matrix.
+            D = torch.diag(torch.sqrt(logvars[i]).exp())
+            L = Variable(torch.diag(torch.ones(mus.size(1))))
+            L[tri_idxs == 1] = L_tris[i]
+            cov = L @ D @ L.t()
+
+            # Logarithm of the determinant of the covariance matrix.
+            logdet = logvars[i].sum() + 2 * math.log(mus.size(1))
+
+            llh[i] = -.5 * (
+                mus.size(1) * math.log(2 * math.pi) + logdet
+                + (x[i] - mus[i]) @  cov @ (x[i] - mus[i])
+            )
+
+        return llh
+
