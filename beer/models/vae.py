@@ -47,7 +47,7 @@ class VAE(nn.Module):
                 variable.
 
         Note:
-            If the model is not in training model i.e.:
+            If the model is not in training mode i.e.:
 
                  >>> model.training
                  False
