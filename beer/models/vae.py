@@ -289,6 +289,23 @@ class MLPNormalDiag(nn.Module):
             (x - mu).pow(2) * (-logvar).exp()
         ).sum(1)
 
+    @staticmethod
+    def sample(state):
+        """Sample data using the reparametization trick.
+
+        Args:
+            state (dict): Current state of the MLP.
+
+        Returns:
+            torch.Variable: Samples from the Normal MLP that can be
+                differentiated w.r.t. the parameters of the MLP.
+
+        """
+        mus = state['means']
+        inv_std_devs = torch.exp(-.5 * state['logvars'])
+        noise = Variable(torch.randn(mus.size(0), mus.size(1)))
+        return mus + inv_std_devs * noise
+
 
 class MLPNormalIso(nn.Module):
     """Neural-Network ending with a double linear projection
@@ -328,6 +345,23 @@ class MLPNormalIso(nn.Module):
             + (x - mu).pow(2) * (-logvar).exp()
         ).sum(1)
 
+    @staticmethod
+    def sample(state):
+        """Sample data using the reparametization trick.
+
+        Args:
+            state (dict): Current state of the MLP.
+
+        Returns:
+            torch.Variable: Samples from the Normal MLP that can be
+                differentiated w.r.t. the parameters of the MLP.
+
+        """
+        mus = state['means']
+        inv_std_devs = torch.exp(-.5 * state['logvars'])
+        noise = Variable(torch.randn(mus.size(0), mus.size(1)))
+        return mus + inv_std_devs * noise
+
 
 class MLPNormalFull(nn.Module):
     """Neural-Network ending with a triple linear projection
@@ -352,7 +386,7 @@ class MLPNormalFull(nn.Module):
         h = self.structure(x)
         return {
             'means': self.hid_to_mu(h),
-            'logvars': self.hid_to_logvar(h),
+            'logprecs': self.hid_to_logvar(h),
             'L_tris': self.hid_to_L(h)
         }
 
@@ -368,7 +402,7 @@ class MLPNormalFull(nn.Module):
 
         """
         mus = state['means']
-        logvars = state['logvars']
+        logprecs = state['logprecs']
         L_tris = state['L_tris']
         llh = Variable(torch.zeros(mus.size(0)))
         tri_idxs = torch.tril(torch.ones(mus.size(1), mus.size(1)),
@@ -381,19 +415,53 @@ class MLPNormalFull(nn.Module):
         # The problem is mostly that we have one covariance matrix per
         # sample.
         for i in range(mus.size(0)):
-            # Build the covariance matrix.
-            D = torch.diag(torch.sqrt(logvars[i]).exp())
+            # Build the precision matrix.
+            D = torch.diag(torch.exp(logprecs[i]))
             L = Variable(torch.diag(torch.ones(mus.size(1))))
             L[tri_idxs == 1] = L_tris[i]
-            cov = L @ D @ L.t()
+            prec = L @ D @ L.t()
 
             # Logarithm of the determinant of the covariance matrix.
-            logdet = logvars[i].sum() + 2 * math.log(mus.size(1))
+            logdet = -logprecs[i].sum() - 2 * math.log(mus.size(1))
 
             llh[i] = -.5 * (
                 mus.size(1) * math.log(2 * math.pi) + logdet
-                + (x[i] - mus[i]) @  cov @ (x[i] - mus[i])
+                + (x[i] - mus[i]) @  prec @ (x[i] - mus[i])
             )
 
         return llh
+
+    @staticmethod
+    def sample(state):
+        """Sample data using the reparametization trick.
+
+        Args:
+            state (dict): Current state of the MLP.
+
+        Returns:
+            torch.Variable: Samples from the Normal MLP that can be
+                differentiated w.r.t. the parameters of the MLP.
+
+        """
+
+
+        mus = state['means']
+        logprecs = state['logprecs']
+        L_tris = state['L_tris']
+        tri_idxs = torch.tril(torch.ones(mus.size(1), mus.size(1)),
+                              diagonal=-1)
+
+        noise = Variable(torch.randn(mus.size(0), mus.size(1)))
+
+        samples = Variable(torch.zeros(mus.size(0), mus.size(1)))
+        for i in range(mus.size(0)):
+            # Compute the inverse of the standard deviation (matrix).
+            sqrt_D = torch.diag(torch.exp(.5 * logprecs[i]).exp())
+            L = Variable(torch.diag(torch.ones(mus.size(1))))
+            L[tri_idxs == 1] = L_tris[i]
+            sqrt_prec = L @ sqrt_D
+
+            samples[i] = mus[i] + sqrt_prec @ noise[i]
+
+        return samples
 
