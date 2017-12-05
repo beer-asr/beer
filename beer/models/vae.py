@@ -34,6 +34,7 @@ class VAE(nn.Module):
         self.decoder = decoder
         self.latent_model = latent_model
         self.nsamples = nsamples
+        self.sample =True
 
     def forward(self, x):
         """Forward data through the VAE model.
@@ -61,12 +62,15 @@ class VAE(nn.Module):
         # "trick". "z" is a L x N x K tensor where L is the number of
         # samples for the reparameterization "trick", N is the number
         # of frames and K is the dimension of the latent space.
-        samples = []
-        for i in range(self.nsamples):
-            samples.append(self.encoder.sample(encoder_state))
-        samples = torch.stack(samples)
+        if self.sample:
+            samples = []
+            for i in range(self.nsamples):
+                samples.append(self.encoder.sample(encoder_state))
+            samples = torch.stack(samples)
 
-        decoder_state = self.decoder(samples)
+            decoder_state = self.decoder(samples)
+        else:
+            decoder_state = self.decoder(encoder_state['means'])
 
         return {
             'encoder_state': encoder_state,
@@ -74,7 +78,7 @@ class VAE(nn.Module):
             'decoder_state': decoder_state
         }
 
-    def loss(self, x, state):
+    def loss(self, x, state, kl_weight=1.0):
         """Loss function of the VAE. This is the negative of the
         variational objective function i.e.:
 
@@ -92,6 +96,7 @@ class VAE(nn.Module):
         llh = self.decoder.log_likelihood(x, state['decoder_state']).sum()
         kl = self.encoder.kl_div(state['encoder_state'],
                                  state['latent_model_state'])
+        kl *= kl_weight
 
         return -(llh - kl) / x.size(0), llh, kl
 

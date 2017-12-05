@@ -74,7 +74,9 @@ def plot_llhs(grid, values, radius):
 def plot_encodings(model, data):
     model.eval()
     X = Variable(torch.from_numpy(data).contiguous().float())
-    _, _, z_mu, z_logvar = model(X)
+    state = model(X)
+    z_mu = state['encoder_state']['means']
+    z_logvar = state['encoder_state']['logvars']
 
     z_mu = z_mu.data.numpy()
     z_stddev = (z_logvar * 0.5).exp().data.numpy()
@@ -97,9 +99,15 @@ def get_losses(model, grid):
     model.eval()
     for X in grid:
         X = Variable(torch.from_numpy(X).contiguous().float())
-        obs_mu, obs_logvar,  mu, logvar = model(X.view(1, -1))
-        loss = model.loss(X, obs_mu, obs_logvar, mu, logvar)
-        loss = tuple(l.data.numpy()[0] for l in loss[:-1])
+        model.sample = False
+        state = model(X.view(1, -1))
+        model.sample = True
+        obs_mu = state['decoder_state']['means']
+        obs_logvar = state['decoder_state']['logvars']
+        mu = state['encoder_state']['means']
+        logvar = state['encoder_state']['logvars']
+        loss = model.loss(X, state)
+        loss = tuple(l.data.numpy()[0] for l in loss)
         losses.append(loss)
 
     return losses
@@ -117,9 +125,13 @@ def plot_grid_values(fig, grid, values, radius):
 
 
 def plot_gaussians(fig, mus, stddevs, color='black', alpha=0.3):
+    if stddevs.shape[1] == 1:
+        stddevs_d1 = stddevs_d2 = stddevs[:, 0]
+    else:
+        stddevs_d1, stddevs_d2 = stddevs[:, 0], stddevs[:, 1]
     fig.ellipse(
         mus[:, 0], mus[:, 1],
-        width=stddevs[:, 0], height=stddevs[:, 1],
+        width=stddevs_d1, height=stddevs_d2,
         fill_alpha=alpha, fill_color=color,
         line_color=None,
     )
@@ -159,3 +171,4 @@ def box_for_data(data, spacing=0.1):
     maxs = data.max(axis=0) + spacing
 
     return tuple(mins), tuple(maxs)
+

@@ -5,6 +5,5 @@ from .vae import VAE
 from .vae import NaturalIsotropicGaussian
 from .vae import MLPNormalDiag
 from .vae import MLPNormalIso
-from .vae import MLPNormalFull
 
 

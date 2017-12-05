@@ -9,7 +9,7 @@ import math
 
 
 def run_training(training_data, model, optimizer, nb_epochs, history, batch_size,
-                 lrate_latent_model):
+                 lrate_latent_model, kl_weight=1.0):
     model.train()
     for epoch_no in range(1, nb_epochs+1):
         epoch_data = np.copy(training_data)
@@ -21,7 +21,7 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
             X = Variable(torch.from_numpy(X).float())
             optimizer.zero_grad()
             state = model(X)
-            loss, llh, kld = model.loss(X, state)
+            loss, llh, kld = model.loss(X, state, kl_weight=kl_weight)
             loss.backward()
             optimizer.step()
             #model.latent_model.natural_grad_update(acc_stats,
