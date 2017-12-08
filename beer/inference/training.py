@@ -24,8 +24,9 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
             loss, llh, kld = model.loss(X, state, kl_weight=kl_weight)
             loss.backward()
             optimizer.step()
-            #model.latent_model.natural_grad_update(acc_stats,
-            #    scale=scale, lrate=lrate_latent_model)
+
+            model.latent_model.natural_grad_update(state['latent_model_state'],
+                scale=scale, lrate=lrate_latent_model)
 
             el.accumulate(-loss.data[0], kld.data[0], llh.data[0])
             #el.accumulate(

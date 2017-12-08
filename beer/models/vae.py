@@ -96,6 +96,7 @@ class VAE(nn.Module):
         llh = self.decoder.log_likelihood(x, state['decoder_state']).sum()
         kl = self.encoder.kl_div(state['encoder_state'],
                                  state['latent_model_state'])
+        #kl -= self.latent_model.posterior.kl_div(self.latent_model.prior)
         kl *= kl_weight
 
         return -(llh - kl) / x.size(0), llh, kl
@@ -116,14 +117,6 @@ class NaturalIsotropicGaussian:
             'np_quadr': np_quadr,
             'exp_log_norm': exp_log_norm
         }
-
-    def expected_natural_params(self, stats_linear, stats_quadr):
-        # stats_linear and stats_quadr are ignored as the parameters
-        # of the Gaussian are fixed.
-        np_linear, np_quadr = self._np_linear.view(1, -1), \
-            self._np_quadr.view(1, -1)
-        exp_log_norm = log_norm(np_linear, np_quadr)
-        return np_linear, np_quadr, exp_log_norm
 
     def natural_grad_update(self, acc_stats, scale, lrate):
         pass
@@ -194,9 +187,9 @@ class MLPNormalDiag(nn.Module):
 
         """
         mus = state['means']
-        inv_std_devs = torch.exp(-.5 * state['logvars'])
+        std_devs = torch.exp(.5 * state['logvars'])
         noise = Variable(torch.randn(mus.size(0), mus.size(1)))
-        return mus + inv_std_devs * noise
+        return mus + std_devs * noise
 
     @staticmethod
     def expected_sufficient_statistics(state):
@@ -302,9 +295,9 @@ class MLPNormalIso(nn.Module):
 
         """
         mus = state['means']
-        inv_std_devs = torch.exp(-.5 * state['logvars'])
+        std_devs = torch.exp(.5 * state['logvars'])
         noise = Variable(torch.randn(mus.size(0), mus.size(1)))
-        return mus + inv_std_devs * noise
+        return mus + std_devs * noise
 
     @staticmethod
     def expected_sufficient_statistics(state):

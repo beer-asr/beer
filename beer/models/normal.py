@@ -3,88 +3,60 @@
 
 """
 
-from .. import priors
+from ..priors import NormalGammaPrior
 import copy
 import numpy as np
+import torch
+from torch.autograd import Variable
 
 
 class NormalDiagonalCovariance:
     """Bayesian Normal distribution with diagonal covariance matrix."""
 
     @staticmethod
-    def create(dim, mean_prec=1e-3, prec_shape=1e-3, prec_rate=1e-3):
-        mean_prior = priors.NormalDiagonalCovariance.from_mean_precision(
-            np.zeros(dim),
-            np.ones(dim) * mean_prec
-        )
-        prec_prior = priors.JointGamma.from_shapes_rates(
-            np.ones(dim) * prec_shape,
-            np.ones(dim) * prec_rate
-        )
-        return NormalDiagonalCovariance(mean_prior, prec_prior)
+    def create(dim, means=None, precisions=None, shapes=None, rates=None):
+        if means is None: means = np.zeros(dim)
+        if precisions is None: precisions = np.ones(dim)
+        if shapes is None: shapes = np.ones(dim)
+        if rates is None: rates = np.ones(dim)
 
-    def __init__(self, mean_prior, precision_prior):
+        prior = NormalGammaPrior.from_std_parameters(means, precisions,
+                                                     shapes, rates)
+        return NormalDiagonalCovariance(prior)
+
+    def __init__(self, prior):
         """Initialize the Bayesian normal distribution.
 
         Args:
-            mean_prior (beer.priors.NormalDiagonalCovariance): Prior
-                over the mean parameters.
-            precision_prior (beer.priors.JointGamma): Prior over the
-                diagonal of the covariance matrix.
+            prior (``beer.priors.NormalGammaPrior``): Prior over the
+                means and precisions.
 
         """
-        self.mean_prior = mean_prior
-        self.precision_prior = precision_prior
-        self.mean_posterior = copy.deepcopy(mean_prior)
-        self.precision_posterior = copy.deepcopy(precision_prior)
-        self._update()
+        self.prior = prior
+        self.posterior = copy.deepcopy(prior)
 
-    @property
-    def np1(self):
-        """First natural parameter vector."""
-        return self._np1
+    def __call__(self, exp_x1, exp_x2):
+        exp_T1, exp_T2, _, _ = self.posterior.grad_lognorm()
+        return {
+            'np_linear': Variable(torch.FloatTensor(exp_T2)),
+            'np_quadr': Variable(torch.FloatTensor(exp_T1)),
+            'exp_log_norm': Variable(torch.FloatTensor(np.array([self.lognorm()]))),
+            'acc_stats': self.accumulate_stats(exp_x1.data.numpy().T,
+                exp_x2.data.numpy().T)
+        }
 
-    @property
-    def np2(self):
-        """Second natural parameter vector."""
-        return self._np2
-
-    def _update(self):
-        self.exp_mean, self.exp_mean_quad = self.mean_posterior.grad_lognorm()
-        self.exp_precision, self.exp_log_precision = \
-            self.precision_posterior.grad_lognorm()
-        self._np1 = self.exp_precision * self.exp_mean
-        self._np2 = -.5 * self.exp_precision
 
     def lognorm(self):
         """Expected value of the log-normalizer with respect to the
         posterior distribution of the parameters.
 
         Returns:
-            float: expected log-normalizer.
+            float: expected value of the log-normalizer.
 
         """
-        retval = .5 * (self.exp_precision * -2. *  self.exp_mean_quad \
-            - self.exp_log_precision)
-        return np.sum(retval)
-
-    def expected_natural_params(self, X1, X2):
-        """Expected value of the natural parameters.
-
-        Args:
-            X1 (numpy.ndarray): First sufficient statistics.
-            X2 (numpy.ndarray): Second sufficient statistics.
-
-        Returns:
-            np1 (numpy.ndarray): First natural parameters.
-            np2 (numpy.ndarray): Second natural parameters.
-            lnorm (numpy.ndarray): Expected value of the log-normalizer.
-
-        """
-        lnorm = np.zeros(X1.shape[1]) + self.lognorm()
-        np1 = self.np1[None, :] + np.zeros((X1.shape[1], X1.shape[0]))
-        np2 = self.np2[None, :] + np.zeros((X1.shape[1], X1.shape[0]))
-        return np1, np2, lnorm
+        dim = len(self.posterior.np1)
+        _, _, exp_T3, exp_T4 = self.posterior.grad_lognorm()
+        return (exp_T3 @ np.ones(dim) + exp_T4 @ np.ones(dim))
 
     def accumulate_stats(self, X1, X2):
         """Accumulate the sufficient statistics (of the posterior) to
@@ -95,13 +67,13 @@ class NormalDiagonalCovariance:
             X2 (numpy.ndarray): Second sufficient statistics.
 
         """
+        dim = X1.shape[0]
         nsamples = X1.shape[1]
         return {
-            'mean_s1': self.exp_precision * X1.sum(axis=1),
-            'mean_s2': self.exp_precision * nsamples,
-            'prec_s1': self.exp_mean * X1.sum(axis=1) -.5 * X2.sum(axis=1) \
-               + nsamples * self.exp_mean_quad,
-            'prec_s2': .5 * nsamples
+            'T1': X2.sum(axis=1),
+            'T2': X1.sum(axis=1),
+            'T3': -nsamples * np.ones(dim),
+            'T4': -nsamples * np.ones(dim)
         }
 
     def exp_llh(self, X):
@@ -117,11 +89,10 @@ class NormalDiagonalCovariance:
             dict: Accumulated statistics for the update.
 
         """
-        X1, X2 = X, X**2
-        exp_llh = self.np1 @ X1
-        exp_llh += self.np2 @ X2
-        exp_llh -= self.lognorm()
-        exp_llh -= .5 * X.shape[0] * np.log(2 * np.pi)
+        np1, np2, _, _ = self.posterior.grad_lognorm()
+        X1, X2 = X.T, X.T**2
+        exp_llh = -np1 @ X2 - np2 @ X1 - self.lognorm()
+        exp_llh -= .5 * X1.shape[0] * np.log(2 * np.pi)
         return exp_llh, self.accumulate_stats(X1, X2)
 
     def kl_div_posterior_prior(self):
@@ -131,11 +102,9 @@ class NormalDiagonalCovariance:
             float: KL divergence.
 
         """
-        kl_div = self.mean_posterior.kl_div(self.mean_prior)
-        kl_div += self.precision_prior.kl_div(self.precision_prior)
-        return kl_div
+        return self.posterior.kl_div(self.prior)
 
-    def natural_grad_update(self, acc_stats, scale, lrate):
+    def natural_grad_update(self, state, scale, lrate):
         """Perform a natural gradient update of the posteriors'
         parameters.
 
@@ -145,21 +114,21 @@ class NormalDiagonalCovariance:
             lrate (float): Learning rate.
 
         """
+        acc_stats = state['acc_stats']
+
         # Compute the gradients.
-        mean_grad_np1 = self.mean_prior.np1 + scale * acc_stats['mean_s1'] \
-            - self.mean_posterior.np1
-        mean_grad_np2 = self.mean_prior.np2 + scale * acc_stats['mean_s2'] \
-            - self.mean_posterior.np2
-        prec_grad_np1 = self.precision_prior.np1 + scale * acc_stats['prec_s1'] \
-            - self.precision_posterior.np1
-        prec_grad_np2 = self.precision_prior.np2 + scale * acc_stats['prec_s2'] \
-            - self.precision_posterior.np2
+        grad_np1 = self.prior.np1 + scale * acc_stats['T1'] \
+            - self.posterior.np1
+        grad_np2 = self.prior.np2 + scale * acc_stats['T2'] \
+            - self.posterior.np2
+        grad_np3 = self.prior.np1 + scale * acc_stats['T3'] \
+            - self.posterior.np3
+        grad_np4 = self.prior.np2 + scale * acc_stats['T4'] \
+            - self.posterior.np4
 
         # Update the posterior distribution.
-        self.mean_posterior.np1 += lrate * mean_grad_np1
-        self.mean_posterior.np2 += lrate * mean_grad_np2
-        self.precision_posterior.np1 += lrate * prec_grad_np1
-        self.precision_posterior.np2 += lrate * prec_grad_np2
-
-        self._update()
+        self.posterior.np1 += lrate * grad_np1
+        self.posterior.np2 += lrate * grad_np2
+        self.posterior.np3 += lrate * grad_np3
+        self.posterior.np4 += lrate * grad_np4
 
