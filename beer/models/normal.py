@@ -3,23 +3,27 @@
 
 """
 
+from .model import ConjugateExponentialModel
 from ..priors import NormalGammaPrior
 import copy
 import numpy as np
 
 
-class NormalDiagonalCovariance:
+class NormalDiagonalCovariance(ConjugateExponentialModel):
     """Bayesian Normal distribution with diagonal covariance matrix."""
 
     @staticmethod
-    def create(dim, means=None, precisions=None, shapes=None, rates=None):
-        if means is None: means = np.zeros(dim)
-        if precisions is None: precisions = np.ones(dim)
-        if shapes is None: shapes = np.ones(dim)
-        if rates is None: rates = np.ones(dim)
+    def create(dim, mean=None, cov=None, prior_count=1.):
+        if mean is None: mean = np.zeros(dim)
+        if cov is None: precision = np.identity(dim)
 
-        prior = NormalGammaPrior.from_std_parameters(means, precisions,
-                                                     shapes, rates)
+        variances = 1. / np.diag(precision)
+        prior = NormalGammaPrior.from_std_parameters(
+            mean,
+            np.ones(dim) * prior_count,
+            (variances * prior_count),
+            np.ones(dim) * prior_count
+        )
         return NormalDiagonalCovariance(prior)
 
     @staticmethod
@@ -80,22 +84,33 @@ class NormalDiagonalCovariance:
         """
         return self.sufficient_statistics(X).sum(axis=0)
 
-    def exp_llh(self, X):
+    def exp_llh(self, X, accumulate=False):
         """Expected value of the log-likelihood w.r.t to the posterior
         distribution over the parameters.
 
         Args:
             X (numpy.ndarray): Data as a matrix.
+            accumulate (boolean): If True, returns the accumulated
+                statistics.
 
         Returns:
             numpy.ndarray: Per-frame expected value of the
                 log-likelihood.
-            dict: Accumulated statistics for the update.
+            numpy.ndarray: Accumulated statistics (if ``accumulate=True``).
 
         """
         T = self.sufficient_statistics(X)
         exp_natural_params = self.posterior.grad_lognorm()
-        return T @ exp_natural_params - self.lognorm()
+
+        # Note: the lognormalizer is already included in the expected
+        # value of the natural parameters.
+        exp_llh = T @ exp_natural_params
+
+        if accumulate:
+            acc_stats = T.sum(axis=0)
+            return exp_llh, acc_stats
+
+        return exp_llh
 
     def kl_div_posterior_prior(self):
         """KL divergence between the posterior and prior distribution.

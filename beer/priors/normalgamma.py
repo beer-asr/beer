@@ -70,10 +70,10 @@ class NormalGammaPrior:
 
         """
         np1, np2, np3, np4 = self.natural_params.reshape(4, -1)
-        lognorm = gammaln(-.5 * (np4 -1))
-        lognorm += -.5 * np.log(-np3)
-        lognorm += .5 * (np4 -1 ) * np.log(.5 * (np1 + ((np2**2) / np3)))
-        return lognorm
+        lognorm = gammaln(.5 * (np4 + 1))
+        lognorm += -.5 * np.log(np3)
+        lognorm += -.5 * (np4 + 1) * np.log(.5 * (np1 - ((np2**2) / np3)))
+        return lognorm.sum()
 
     def grad_lognorm(self):
         """Gradient of the log-normalizer. This correspond to the
