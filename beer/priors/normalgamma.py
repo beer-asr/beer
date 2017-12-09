@@ -18,14 +18,14 @@ class NormalGammaPrior:
     Sufficient statistics:
         - T_1(m, p) = -p/2
         - T_2(m, p) = p * m
-        - T_3(m, p) = - (ln p) / 2
-        - T_4(m, p) = (p * m^2) / 2
+        - T_3(m, p) = -(p * m^2) / 2
+        - T_4(m, p) = (ln p) / 2
 
     Natural parameters:
-        - np1 = p0 * m0^2 + 2 b0
+        - np1 = p0 * m0^2 + 2 * b0
         - np2 = p0 * m0
-        - np3 = 2 * (a0 - 1/2)
-        - np4 = p0
+        - np3 = p0
+        - np4 = 2 * a0 - 1
 
     """
 
@@ -45,28 +45,21 @@ class NormalGammaPrior:
                 distribution.
 
         """
-        return cls(
+        return cls(np.hstack([
             precisions * (means**2) + 2 * rates,
             precisions * means,
-            2 * (shapes - .5),
-            precisions
-        )
+            precisions,
+            2 * shapes - 1
+        ]))
 
-
-    def __init__(self, np1, np2, np3, np4):
+    def __init__(self, natural_params):
         """Initialize the prior from its natural parameters.
 
         Args:
-            np1 (numpy.ndarray): First natural parameter.
-            np2 (numpy.ndarray): Second natural parameter.
-            np3 (numpy.ndarray): Third natural parameter.
-            np4 (numpy.ndarray): Fourth natural parameter.
+            natural_params (numpy.ndarray): Natural parameters.
 
         """
-        self.np1 = np1
-        self.np2 = np2
-        self.np3 = np3
-        self.np4 = np4
+        self.natural_params = natural_params
 
     def lognorm(self):
         """Log normalizer of the density.
@@ -76,9 +69,10 @@ class NormalGammaPrior:
                 parameters.
 
         """
-        lognorm = -.5 * np.log(self.np4) + gammaln(.5 * (self.np3 + 1))
-        lognorm -= (.5 * (self.np3 + 1)) \
-            * np.log(.5 * (self.np1 - (self.np2 ** 2) / self.np4))
+        np1, np2, np3, np4 = self.natural_params.reshape(4, -1)
+        lognorm = gammaln(-.5 * (np4 -1))
+        lognorm += -.5 * np.log(-np3)
+        lognorm += .5 * (np4 -1 ) * np.log(.5 * (np1 + ((np2**2) / np3)))
         return lognorm
 
     def grad_lognorm(self):
@@ -87,26 +81,16 @@ class NormalGammaPrior:
 
         Returns
             ``numpy.ndarray``: Expected value of the first sufficient
-                statistics.
-            ``numpy.ndarray``: Expected value of the second sufficient
-                statistics.
-            ``numpy.ndarray``: Expected value of the third sufficient
-                statistics.
-            ``numpy.ndarray``: Expected value of the fourth sufficient
-                statistics.
 
         """
-        exp_T1 = - (self.np3 + 1) / (2 * self.np1 - (self.np2 ** 2) / self.np4)
-        exp_T2 =  ((self.np3 + 1) / 2) \
-            * (1. / (2 * (self.np1 - (self.np2 ** 2) / self.np4))) \
-            * (self.np2 / self.np4)
-        exp_T3 = .5 * psi(.5 * (self.np3 + 1)) \
-            - .5 * np.log(.5 * (self.np1 - (self.np2 ** 2) / self.np4))
-        exp_T4 = -.5 * self.np4 - .5 * (self.np3 + 1) \
-            * (1. / (2 * self.np1 - (self.np2 ** 2) / self.np4)) \
-            * .5 * (self.np2 ** 2 ) / (self.np4 ** 2)
-
-        return exp_T1, exp_T2, exp_T3, exp_T4
+        np1, np2, np3, np4 = self.natural_params.reshape(4, -1)
+        grad1 = -(np4 + 1) / (2 * (np1 - ((np2 ** 2) / np3)))
+        grad2 = (np2 * (np4 + 1)) / (np3 * np1 - (np2 ** 2))
+        grad3 = - 1 / (2 * np3) - ((np2 ** 2) * (np4 + 1)) \
+            / (2 * np3 * (np3 * np1 - (np2 ** 2)))
+        grad4 = .5 * psi(.5 * (np4 + 1)) \
+            - .5 *np.log(.5 * (np1 - ((np2 ** 2) / np3)))
+        return np.hstack([grad1, grad2, grad3, grad4])
 
     def kl_div(self, other):
         """KL divergence between the two distribution of them form.
@@ -119,11 +103,6 @@ class NormalGammaPrior:
             float: Value of the dirvergence.
 
         """
-        exp_T1, exp_T2, exp_T3, exp_T4 = self.grad_lognorm()
-        kl = (self.np1 - other.np1) @ exp_T1
-        kl += (self.np2 - other.np2) @ exp_T2
-        kl += (self.np3 - other.np3) @ exp_T3
-        kl += (self.np4 - other.np4) @ exp_T4
-        kl += other.lognorm() - self.lognorm()
-        return kl
+        return (self.natural_params - other.natural_params) @ self.grad_lognorm() \
+            + other.lognorm() - self.lognorm()
 
