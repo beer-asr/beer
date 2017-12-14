@@ -1,8 +1,10 @@
 
-"""Normal distribution with prior over the mean and covariance matrix.
+"""Bayesian Normal distribution with prior over the mean and
+covariance matrix.
 
 """
 
+import abc
 from .model import ConjugateExponentialModel
 from ..priors import NormalGammaPrior
 from ..priors import NormalWishartPrior
