@@ -52,6 +52,7 @@ class ConjugateExponentialModel(metaclass=abc.ABCMeta):
             # Monitor convergence.
             if abs(previous_lower_bound - lower_bound) <= threshold:
                 has_converged = True
+            previous_lower_bound = lower_bound
 
             # Update the parameters.
             self.natural_grad_update(acc_stats, scale, lrate)
