@@ -101,6 +101,13 @@ class NormalDiagonalCovariance(ConjugateExponentialModel):
         """
         return self.sufficient_statistics(X).sum(axis=0)
 
+    def expected_natural_params(self, T):
+        '''Expected value of the natural parameters of the model given
+        the sufficient statistics. 
+
+        '''
+        return self.posterior.grad_lognorm(), None
+
     def exp_llh(self, X, accumulate=False):
         """Expected value of the log-likelihood w.r.t to the posterior
         distribution over the parameters.

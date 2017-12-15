@@ -45,6 +45,7 @@ class Model(metaclass=abc.ABCMeta):
         for epoch in range(1, max_epochs + 1):
             for mini_batch in _mini_batches(data, mb_size, seed):
                 lower_bound, llh, kld = self._fit_step(mini_batch)
+            print('ln p(x) >=', lower_bound[0], llh[0], kld[0])
 
 
 class ConjugateExponentialModel(Model, metaclass=abc.ABCMeta):

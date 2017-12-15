@@ -4,16 +4,17 @@ prior over the latent space.
 
 """
 
-import numpy as np
 import math
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torch.autograd import Variable
+from torch import optim
+import numpy as np
+from .model import Model
 
 
-class VAE(nn.Module):
+class VAE(nn.Module, Model):
     """Variational Auto-Encoder (VAE)."""
 
 
@@ -34,7 +35,28 @@ class VAE(nn.Module):
         self.decoder = decoder
         self.latent_model = latent_model
         self.nsamples = nsamples
-        self.sample =True
+        self.sample = True
+
+    def _fit_step(self, mini_batch):
+        X = Variable(torch.from_numpy(mini_batch).float())
+        self._fit_cache['optimizer'].zero_grad()
+        state = self(X)
+        loss, llh, kld = self.loss(X, state)
+        loss.backward()
+        self._fit_cache['optimizer'].step()
+
+        return -loss.data.numpy(), llh.data.numpy(), kld.data.numpy()
+
+    def fit(self, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e-3,
+            latent_model_lrate=1.):
+        self._fit_cache = {
+            'optimizer':optim.Adam(self.parameters(), lr=lrate, 
+                                   weight_decay=1e-6),
+            'latent_model_lrate': latent_model_lrate,
+            'data_size': np.prod(data.shape[:-1])
+        }
+        super().fit(data, mini_batch_size, max_epochs,seed)
+
 
     def forward(self, x):
         """Forward data through the VAE model.
@@ -49,14 +71,9 @@ class VAE(nn.Module):
 
         """
         encoder_state = self.encoder(x)
-
-        # Expected value of the sufficient statistics.
-        exp_x, exp_x2 = self.encoder.expected_sufficient_statistics(
-            encoder_state)
-        encoder_state = {**encoder_state, 'exp_x': exp_x, 'exp_x2': exp_x2}
-
         # Forward the statistics to the latent model.
-        latent_model_state = self.latent_model(exp_x, exp_x2)
+        p_np_params, acc_stats = self.latent_model.expected_natural_params(
+                encoder_state['exp_T'])
 
         # Samples of the latent variable using the reparameterization
         # "trick". "z" is a L x N x K tensor where L is the number of
@@ -74,7 +91,8 @@ class VAE(nn.Module):
 
         return {
             'encoder_state': encoder_state,
-            'latent_model_state': latent_model_state,
+            'p_np_params': Variable(torch.FloatTensor(p_np_params)),
+            'acc_stats': acc_stats,
             'decoder_state': decoder_state
         }
 
@@ -94,49 +112,64 @@ class VAE(nn.Module):
 
         """
         llh = self.decoder.log_likelihood(x, state['decoder_state']).sum()
-        kl = self.encoder.kl_div(state['encoder_state'],
-                                 state['latent_model_state'])
-        #kl -= self.latent_model.posterior.kl_div(self.latent_model.prior)
+        kl = self.encoder.kl_div(state['encoder_state'], state['p_np_params']).sum()
         kl *= kl_weight
 
         return -(llh - kl) / x.size(0), llh, kl
 
 
-class NaturalIsotropicGaussian:
-    def __init__(self, dim, log_var=0.0):
-        var = math.exp(log_var)
-        self._np_linear = Variable(torch.FloatTensor([0]*dim))
-        self._np_quadr = Variable(torch.FloatTensor([-0.5 / var]*dim))
-
-    def __call__(self, exp_x, exp_x2):
-        np_linear = Variable(torch.ones(exp_x.size())) * self._np_linear
-        np_quadr = Variable(torch.ones(exp_x2.size())) * self._np_quadr
-        exp_log_norm = log_norm(np_linear, np_quadr)
-        return {
-            'np_linear': np_linear,
-            'np_quadr': np_quadr,
-            'exp_log_norm': exp_log_norm
-        }
-
-    def natural_grad_update(self, acc_stats, scale, lrate):
-        pass
-
-def log_norm(np_linear, np_quadr):
-    return - 0.5 * torch.log((-2*np_quadr)).sum(dim=1) - 0.25 * (np_linear.pow(2) * (1.0/np_quadr)).sum(dim=1)
-
-
 class MLPNormalDiag(nn.Module):
-    """Neural-Network ending with a double linear projection
+    '''Neural-Network ending with a double linear projection
     providing the mean and the logarithm of the diagonal of the
     covariance matrix.
 
-    """
+    '''
+    @staticmethod
+    def sufficient_statistics(data):
+        '''Compute the sufficient statistics of the data.'''
+        return torch.cat([data**2, data, 
+                          Variable(torch.ones(data.size()).float()),
+                          Variable(torch.ones(data.size()).float())], dim=1)
+
+    @staticmethod
+    def log_likelihood(data, state):
+        '''Log-likelihood of the data give the current state of the 
+        network.
+
+        '''
+        s_stats = MLPNormalDiag.sufficient_statistics(data)
+        nparams = state['natural_params']
+        log_base_measure = -.5 * math.log(2 * math.pi)
+        llh = torch.sum((nparams * s_stats).sum(dim=1) + log_base_measure)
+
+        # normalize by the number of samples (from the
+        # reparameterization trick.)
+        if len(nparams.size()) > 2:
+            llh /= nparams.size(0)
+
+        return llh
+
+    @staticmethod
+    def sample(state):
+        '''Sample data using the reparametization trick.'''
+        mean = state['mean']
+        std_dev = torch.exp(.5 * state['std_dev'])
+        noise = Variable(torch.randn(*mean.size()))
+        return mean + std_dev * noise
+
+    @staticmethod
+    def kl_div(state, p_nparams):
+        '''KL divergence between the posterior distribution and the
+        prior.
+
+        '''
+        return ((state['natural_params'] - p_nparams) * state['exp_T']).sum(dim=1)
 
     def __init__(self, structure, hidden_dim, target_dim):
         super().__init__()
         self.structure = structure
         self.hid_to_mu = nn.Linear(hidden_dim, target_dim)
-        self.hid_to_logvar = nn.Linear(hidden_dim, target_dim)
+        self.hid_to_logprec = nn.Linear(hidden_dim, target_dim)
 
     def forward(self, x):
         if len(x.size()) > 2:
@@ -145,90 +178,23 @@ class MLPNormalDiag(nn.Module):
             x_reshaped = x
 
         h = self.structure(x_reshaped)
+        mean = self.hid_to_mu(h).view(*x.size())
+        logprec = self.hid_to_logprec(h)
+        diag_prec = torch.exp(logprec.view(*x.size()))
         return {
-            'means': self.hid_to_mu(h).view(*x.size()),
-            'logvars': self.hid_to_logvar(h).view(*x.size())
+            'exp_T': torch.cat([mean**2 +  1/diag_prec, mean, 
+                                Variable(torch.ones(*x.size())), 
+                                Variable(torch.ones(*x.size()))], 
+                               dim=1),
+            'mean': mean.view(*x.size()),
+            'std_dev': torch.exp(-.5 * logprec).view(*x.size()),
+            'natural_params': torch.cat([
+                (-.5 * diag_prec).view(*x.size()), 
+                (diag_prec * mean).view(*x.size()),
+                (-.5 * diag_prec * mean ** 2).view(*x.size()),
+                (.5 * torch.log(diag_prec)).view(*x.size())
+            ], dim=-1)
         }
-
-    @staticmethod
-    def log_likelihood(x, state):
-        """Log-likelihood of the data x
-
-        Args:
-            state (dict): Current state of the neural network.
-
-        Returns:
-            torch.Variable: Per-frame log-likelihood.
-
-        """
-        mus = state['means']
-        logvars = state['logvars']
-        llh = -.5 * (math.log(2 * math.pi) + logvars +
-            (x - mus).pow(2) * (-logvars).exp()
-        ).sum()
-
-        # normalize by the number of samples (from the
-        # reparameterization trick.)
-        if len(mus.size()) > 2:
-            llh /= mus.size(0)
-
-        return llh
-
-    @staticmethod
-    def sample(state):
-        """Sample data using the reparametization trick.
-
-        Args:
-            state (dict): Current state of the MLP.
-
-        Returns:
-            torch.Variable: Samples from the Normal MLP that can be
-                differentiated w.r.t. the parameters of the MLP.
-
-        """
-        mus = state['means']
-        std_devs = torch.exp(.5 * state['logvars'])
-        noise = Variable(torch.randn(mus.size(0), mus.size(1)))
-        return mus + std_devs * noise
-
-    @staticmethod
-    def expected_sufficient_statistics(state):
-        """Expected value of the sufficient statistics (x, x**2).
-
-        Args:
-            state (dict): Current state of the MLP.
-
-        Returns:
-            torch.Variable: Expected value of x.
-            torch.Variable: Expected value of x**2
-
-        """
-        return state['means'], torch.exp(state['logvars']) \
-            + state['means'].pow(2)
-
-    @staticmethod
-    def kl_div(state, prior_state):
-        """KL divergence between the posterior distribution and the
-        prior.
-
-        Args:
-            state (dict): Current state of the MLP.
-            latent_model_state (dict): Current state of the prior.
-
-        """
-        exp_x, exp_x2 = state['exp_x'], state['exp_x2']
-
-        var = torch.exp(state['logvars'])
-        q_np_linear, q_np_quadr = state['means'] / var, -.5 / var
-        p_np_linear, p_np_quadr = prior_state['np_linear'], \
-            prior_state['np_quadr']
-        exp_log_norm = prior_state['exp_log_norm']
-
-        kl = ((q_np_linear - p_np_linear) * exp_x).sum(dim=1)
-        kl += ((q_np_quadr - p_np_quadr) * exp_x2).sum(dim=1)
-        kl += exp_log_norm - log_norm(q_np_linear, q_np_quadr)
-
-        return kl.sum()
 
 
 class MLPNormalIso(nn.Module):
