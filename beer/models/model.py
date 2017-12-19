@@ -27,7 +27,8 @@ class Model(metaclass=abc.ABCMeta):
     def _fit_step(self, mini_batch):
         NotImplemented
 
-    def fit(self, data, mini_batch_size=-1, max_epochs=1, seed=None):
+    def fit(self, data, mini_batch_size=-1, max_epochs=1, seed=None,
+            callback=None):
         '''Fit the model to the data using Variational Bayes training.
 
         Args:
@@ -45,7 +46,9 @@ class Model(metaclass=abc.ABCMeta):
         for epoch in range(1, max_epochs + 1):
             for mini_batch in _mini_batches(data, mb_size, seed):
                 lower_bound, llh, kld = self._fit_step(mini_batch)
-            print('ln p(x) >=', lower_bound[0], llh[0], kld[0])
+
+                if callback is not None:
+                    callback(lower_bound, llh, kld)
 
 
 class ConjugateExponentialModel(Model, metaclass=abc.ABCMeta):
@@ -59,13 +62,13 @@ class ConjugateExponentialModel(Model, metaclass=abc.ABCMeta):
         kld = self.kl_div_posterior_prior()
         lower_bound = (scale * exp_llh - kld)
         self.natural_grad_update(acc_stats, scale, self._fit_cache['lrate'])
-        return lower_bound, exp_llh, kld
+        return lower_bound / self._fit_cache['data_size'], exp_llh, kld
 
     def fit(self, data, mini_batch_size=-1, max_epochs=1, seed=None,
-            lrate=1.):
+            lrate=1., callback=None):
         self._fit_cache = {
             'lrate': lrate,
             'data_size': np.prod(data.shape[:-1])
         }
-        super().fit(data, mini_batch_size, max_epochs,seed)
+        super().fit(data, mini_batch_size, max_epochs, seed, callback)
 

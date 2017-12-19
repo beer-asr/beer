@@ -35,36 +35,59 @@ class VAE(nn.Module, Model):
         self.decoder = decoder
         self.latent_model = latent_model
         self.nsamples = nsamples
-        self.sample = True
 
     def _fit_step(self, mini_batch):
+        mini_batch_size = np.prod(mini_batch.shape[:-1])
+        data_size = self._fit_cache['data_size']
+        scale = float(data_size) / mini_batch_size
         X = Variable(torch.from_numpy(mini_batch).float())
         self._fit_cache['optimizer'].zero_grad()
         state = self(X)
-        loss, llh, kld = self.loss(X, state)
+        loss, llh, kld = self.loss(X, state,
+            kl_weight=self._fit_cache['kl_weight'])
+        loss, llh, kld = loss.sum(), llh.sum(), kld.sum()
+        loss /= X.size(0)
         loss.backward()
         self._fit_cache['optimizer'].step()
+        self.latent_model.natural_grad_update(state['acc_stats'],
+            scale=scale, lrate=self._fit_cache['latent_model_lrate'])
 
-        return -loss.data.numpy(), llh.data.numpy(), kld.data.numpy()
+        elbo  =-loss.data.numpy()[0] \
+            - self.latent_model.kl_div_posterior_prior() / data_size
+
+        return elbo, llh.data.numpy()[0], kld.data.numpy()[0]
 
     def fit(self, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e-3,
-            latent_model_lrate=1.):
+            latent_model_lrate=1., kl_weight=1.0, callback=None):
         self._fit_cache = {
-            'optimizer':optim.Adam(self.parameters(), lr=lrate, 
+            'optimizer':optim.Adam(self.encoder.parameters(), lr=lrate,
                                    weight_decay=1e-6),
             'latent_model_lrate': latent_model_lrate,
-            'data_size': np.prod(data.shape[:-1])
+            'data_size': np.prod(data.shape[:-1]),
+            'kl_weight': kl_weight
         }
-        super().fit(data, mini_batch_size, max_epochs,seed)
+        super().fit(data, mini_batch_size, max_epochs, seed, callback)
+
+    def evaluate(self, data, sampling=True):
+        torch_data = Variable(torch.from_numpy(data).float())
+        state = self(torch_data, sampling=sampling)
+        loss, llh, kld = self.loss(torch_data, state)
+        return -loss.data.numpy(), llh.data.numpy(), kld.data.numpy(), \
+            state['encoder_state']['mean'].data.numpy(), \
+            torch.pow(state['encoder_state']['std_dev'], 2).data.numpy(), \
+            state['decoder_state']['mean'].data.numpy(), \
+            torch.pow(state['decoder_state']['std_dev'], 2).data.numpy()
 
 
-    def forward(self, x):
+    def forward(self, x, sampling=True):
         """Forward data through the VAE model.
 
         Args:
             x (torch.Variable): Data to process. The first dimension is
                 the number of samples and the second dimension is the
                 dimension of the latent space.
+            sampling (boolearn): If True, sample to approximate the
+                expectation of the log-likelihood.
 
         Returns:
             dict: State of the VAE.
@@ -73,21 +96,21 @@ class VAE(nn.Module, Model):
         encoder_state = self.encoder(x)
         # Forward the statistics to the latent model.
         p_np_params, acc_stats = self.latent_model.expected_natural_params(
-                encoder_state['exp_T'])
+                encoder_state['mean'].data.numpy(),
+                (encoder_state['std_dev']**2).data.numpy())
 
         # Samples of the latent variable using the reparameterization
         # "trick". "z" is a L x N x K tensor where L is the number of
         # samples for the reparameterization "trick", N is the number
         # of frames and K is the dimension of the latent space.
-        if self.sample:
+        if sampling:
             samples = []
             for i in range(self.nsamples):
                 samples.append(self.encoder.sample(encoder_state))
             samples = torch.stack(samples)
-
             decoder_state = self.decoder(samples)
         else:
-            decoder_state = self.decoder(encoder_state['means'])
+            decoder_state = self.decoder(encoder_state['mean'])
 
         return {
             'encoder_state': encoder_state,
@@ -111,11 +134,11 @@ class VAE(nn.Module, Model):
             torch.Variable: Symbolic computation of the loss function.
 
         """
-        llh = self.decoder.log_likelihood(x, state['decoder_state']).sum()
-        kl = self.encoder.kl_div(state['encoder_state'], state['p_np_params']).sum()
+        llh = self.decoder.log_likelihood(x, state['decoder_state'])
+        kl = self.encoder.kl_div(state['encoder_state'], state['p_np_params'])
         kl *= kl_weight
 
-        return -(llh - kl) / x.size(0), llh, kl
+        return -(llh - kl), llh, kl
 
 
 class MLPNormalDiag(nn.Module):
@@ -127,25 +150,22 @@ class MLPNormalDiag(nn.Module):
     @staticmethod
     def sufficient_statistics(data):
         '''Compute the sufficient statistics of the data.'''
-        return torch.cat([data**2, data, 
+        return torch.cat([data**2, data,
                           Variable(torch.ones(data.size()).float()),
                           Variable(torch.ones(data.size()).float())], dim=1)
 
     @staticmethod
     def log_likelihood(data, state):
-        '''Log-likelihood of the data give the current state of the 
+        '''Log-likelihood of the data give the current state of the
         network.
 
         '''
         s_stats = MLPNormalDiag.sufficient_statistics(data)
         nparams = state['natural_params']
-        log_base_measure = -.5 * math.log(2 * math.pi)
-        llh = torch.sum((nparams * s_stats).sum(dim=1) + log_base_measure)
-
-        # normalize by the number of samples (from the
-        # reparameterization trick.)
-        if len(nparams.size()) > 2:
-            llh /= nparams.size(0)
+        log_base_measure = -.5 * data.size(1) * math.log(2 * math.pi)
+        llh = torch.sum(nparams * s_stats, dim=-1)
+        if len(llh.size()) > 1: llh = llh.sum(dim=0) / nparams.size(0)
+        llh += log_base_measure
 
         return llh
 
@@ -153,7 +173,7 @@ class MLPNormalDiag(nn.Module):
     def sample(state):
         '''Sample data using the reparametization trick.'''
         mean = state['mean']
-        std_dev = torch.exp(.5 * state['std_dev'])
+        std_dev = state['std_dev']
         noise = Variable(torch.randn(*mean.size()))
         return mean + std_dev * noise
 
@@ -163,7 +183,7 @@ class MLPNormalDiag(nn.Module):
         prior.
 
         '''
-        return ((state['natural_params'] - p_nparams) * state['exp_T']).sum(dim=1)
+        return ((state['natural_params'] - p_nparams) * state['exp_T']).sum(dim=-1)
 
     def __init__(self, structure, hidden_dim, target_dim):
         super().__init__()
@@ -182,126 +202,197 @@ class MLPNormalDiag(nn.Module):
         logprec = self.hid_to_logprec(h)
         diag_prec = torch.exp(logprec.view(*x.size()))
         return {
-            'exp_T': torch.cat([mean**2 +  1/diag_prec, mean, 
-                                Variable(torch.ones(*x.size())), 
-                                Variable(torch.ones(*x.size()))], 
+            'exp_T': torch.cat([mean**2 +  1/diag_prec, mean,
+                                Variable(torch.ones(*x.size())),
+                                Variable(torch.ones(*x.size()))],
                                dim=1),
             'mean': mean.view(*x.size()),
             'std_dev': torch.exp(-.5 * logprec).view(*x.size()),
             'natural_params': torch.cat([
-                (-.5 * diag_prec).view(*x.size()), 
+                (-.5 * diag_prec).view(*x.size()),
                 (diag_prec * mean).view(*x.size()),
-                (-.5 * diag_prec * mean ** 2).view(*x.size()),
-                (.5 * torch.log(diag_prec)).view(*x.size())
+                (-.5 * diag_prec * (mean ** 2)).view(*x.size()),
+                (.5 * logprec).view(*x.size())
             ], dim=-1)
         }
 
+class MLPNormalDiag2(nn.Module):
+    '''Neural-Network ending with a double linear projection
+    providing the mean and the logarithm of the diagonal of the
+    covariance matrix.
 
-class MLPNormalIso(nn.Module):
-    """Neural-Network ending with a double linear projection
-    providing the mean and the logarithm of the isotropic covariance
-    matrix.
-
-    """
-
-    def __init__(self, structure, hidden_dim, target_dim):
-        super().__init__()
-        self.structure = structure
-        self.hid_to_mu = nn.Linear(hidden_dim, target_dim)
-        self.hid_to_logvar = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x):
-        if len(x.size()) > 2:
-            x_reshaped = x.view(-1, x.size(2))
-            logvar_size = (x.size(0), x.size(1), 1)
-        else:
-            x_reshaped = x
-            logvar_size = (x.size(0), 1)
-
-        h = self.structure(x_reshaped)
-
-        return {
-            'means': self.hid_to_mu(h).view(*x.size()),
-            'logvars': self.hid_to_logvar(h).view(*logvar_size)
-        }
+    '''
+    @staticmethod
+    def sufficient_statistics(data):
+        '''Compute the sufficient statistics of the data.'''
+        data2 = data[:, :, None] * data[:, None, :]
+        return torch.cat([data2.view(data.size(0), -1), data,
+                          Variable(torch.ones(data.size(0)).float()),
+                          Variable(torch.ones(data.size(0)).float())], dim=1)
 
     @staticmethod
-    def log_likelihood(x, state):
-        """Log-likelihood of the data x
+    def log_likelihood(data, state):
+        '''Log-likelihood of the data give the current state of the
+        network.
 
-        Args:
-            state (dict): Current state of the neural network.
-
-        Returns:
-            torch.Variable: Per-frame log-likelihood.
-
-        """
-        mus = state['means']
-        logvars = state['logvars']
-        llh = -.5 * (math.log(2 * math.pi)
-            + logvars + (x - mus).pow(2) * (-logvars).exp()).sum()
-
-        # normalize by the number of samples (from the
-        # reparameterization trick.)
-        if len(mus.size()) > 2:
-            llh /= mus.size(0)
+        '''
+        s_stats = MLPNormalDiag.sufficient_statistics(data)
+        nparams = state['natural_params']
+        log_base_measure = -.5 * data.size(1) * math.log(2 * math.pi)
+        llh = torch.sum(nparams * s_stats, dim=-1)
+        if len(llh.size()) > 1: llh = llh.sum(dim=0) / nparams.size(0)
+        llh += log_base_measure
 
         return llh
 
     @staticmethod
     def sample(state):
-        """Sample data using the reparametization trick.
-
-        Args:
-            state (dict): Current state of the MLP.
-
-        Returns:
-            torch.Variable: Samples from the Normal MLP that can be
-                differentiated w.r.t. the parameters of the MLP.
-
-        """
-        mus = state['means']
-        std_devs = torch.exp(.5 * state['logvars'])
-        noise = Variable(torch.randn(mus.size(0), mus.size(1)))
-        return mus + std_devs * noise
+        '''Sample data using the reparametization trick.'''
+        mean = state['mean']
+        std_dev = state['std_dev']
+        noise = Variable(torch.randn(*mean.size()))
+        return mean + std_dev * noise
 
     @staticmethod
-    def expected_sufficient_statistics(state):
-        """Expected value of the sufficient statistics (x, x**2).
-
-        Args:
-            state (dict): Current state of the MLP.
-
-        Returns:
-            torch.Variable: Expected value of x.
-            torch.Variable: Expected value of x**2
-
-        """
-        return state['means'], torch.exp(state['logvars']) \
-            + state['means'].pow(2)
-
-    @staticmethod
-    def kl_div(state, prior_state):
-        """KL divergence between the posterior distribution and the
+    def kl_div(state, p_nparams):
+        '''KL divergence between the posterior distribution and the
         prior.
 
-        Args:
-            state (dict): Current state of the MLP.
-            latent_model_state (dict): Current state of the prior.
+        '''
+        return ((state['natural_params'] - p_nparams) * state['exp_T']).sum(dim=-1)
 
-        """
-        exp_x, exp_x2 = state['exp_x'], state['exp_x2']
+    def __init__(self, structure, hidden_dim, target_dim):
+        super().__init__()
+        self.structure = structure
+        self.hid_to_mu = nn.Linear(hidden_dim, target_dim)
+        self.hid_to_logprec = nn.Linear(hidden_dim, target_dim)
 
-        var = torch.exp(state['logvars'])
-        q_np_linear, q_np_quadr = state['means'] / var, \
-            -.5 * Variable(torch.ones(exp_x2.size(1))) / var
-        p_np_linear, p_np_quadr = prior_state['np_linear'], \
-            prior_state['np_quadr']
-        exp_log_norm = prior_state['exp_log_norm']
+    def forward(self, x):
+        if len(x.size()) > 2:
+            x_reshaped = x.view(-1, x.size(2))
+        else:
+            x_reshaped = x
 
-        kl = ((q_np_linear - p_np_linear) * exp_x).sum(dim=1)
-        kl += ((q_np_quadr - p_np_quadr) * exp_x2).sum(dim=1)
-        kl += exp_log_norm - log_norm(q_np_linear, q_np_quadr)
+        h = self.structure(x_reshaped)
+        mean = self.hid_to_mu(h).view(*x.size())
+        logprec = self.hid_to_logprec(h)
+        diag_prec = torch.exp(logprec.view(*x.size()))
 
-        return kl.sum()
+        # Expected value of the sufficient statistics.
+        idxs = torch.arange(0, x_reshaped.size(1)).long()
+        mean2 = mean[:, :, None] * mean[:, None, :]
+        XX = mean2
+        XX[:, idxs, idxs] += 1 / diag_prec
 
+        # First natural parameter (-.5 * precision_matrix).
+        identity = Variable(torch.eye(x_reshaped.size(1)))
+        np1 = -.5 * torch.exp(logprec)[:, None] * identity[None, :, :]
+        np1 = np1.view(logprec.size(0), -1)
+
+        np = torch.cat([
+                np1,
+                (diag_prec * mean).view(*x.size()),
+                -.5 * (diag_prec * mean ** 2).sum(-1)[:, None],
+                (.5 * logprec).sum(-1)[:, None]
+        ], dim=-1)
+
+        return {
+            'exp_T': torch.cat([XX.view(mean.size(0), -1), mean,
+                                Variable(torch.ones(x.size(0), 1)),
+                                Variable(torch.ones(x.size(0), 1))], dim=1),
+            'mean': mean.view(*x.size()),
+            'std_dev': torch.exp(-.5 * logprec).view(*x.size()),
+            'natural_params': np
+        }
+
+class MLPNormalIso(nn.Module):
+    '''Neural-Network ending with a double linear projection
+    providing the mean and the isotropic covariance matirx
+
+    '''
+    @staticmethod
+    def sufficient_statistics(data):
+        '''Compute the sufficient statistics of the data.'''
+        data2 = data[:, :, None] * data[:, None, :]
+        return torch.cat([data2.view(data.size(0), -1), data,
+                          Variable(torch.ones(data.size(0)).float()),
+                          Variable(torch.ones(data.size(0)).float())], dim=1)
+
+    @staticmethod
+    def log_likelihood(data, state):
+        '''Log-likelihood of the data give the current state of the
+        network.
+
+        '''
+        s_stats = MLPNormalIso.sufficient_statistics(data)
+        nparams = state['natural_params']
+        log_base_measure = -.5 * data.size(1) * math.log(2 * math.pi)
+        llh = torch.sum(nparams * s_stats, dim=-1)
+        if len(llh.size()) > 1: llh = llh.sum(dim=0) / nparams.size(0)
+        llh += log_base_measure
+
+        return llh
+
+    @staticmethod
+    def sample(state):
+        '''Sample data using the reparametization trick.'''
+        mean = state['mean']
+        std_dev = state['std_dev']
+        noise = Variable(torch.randn(*mean.size()))
+        return mean + std_dev * noise
+
+    @staticmethod
+    def kl_div(state, p_nparams):
+        '''KL divergence between the posterior distribution and the
+        prior.
+
+        '''
+        return ((state['natural_params'] - p_nparams) * state['exp_T']).sum(dim=-1)
+
+    def __init__(self, structure, hidden_dim, target_dim):
+        super().__init__()
+        self.structure = structure
+        self.hid_to_mu = nn.Linear(hidden_dim, target_dim)
+        self.hid_to_logprec = nn.Linear(hidden_dim, 1)
+
+    def forward(self, x):
+        if len(x.size()) > 2:
+            x_reshaped = x.view(-1, x.size(2))
+        else:
+            x_reshaped = x
+
+        # Forward the data through the neural network.
+        h = self.structure(x_reshaped)
+
+        # Get the mean and the diagonal of the precision matrix.
+        mean = self.hid_to_mu(h).view(*x.size()) + x
+        logprec = self.hid_to_logprec(h)
+        diag_prec = Variable(torch.ones(mean.size(1))) * torch.exp(logprec)
+        diag_prec = diag_prec.view(*x.size())
+
+        # Expected value of the sufficient statistics.
+        idxs = torch.arange(0, x_reshaped.size(1)).long()
+        mean2 = mean[:, :, None] * mean[:, None, :]
+        XX = mean2
+        XX[:, idxs, idxs] += 1/ diag_prec
+
+        # First natural parameter (-.5 * precision_matrix).
+        identity = Variable(torch.eye(x_reshaped.size(1)))
+        np1 = -.5 * torch.exp(logprec)[:, None] * identity[None, :, :]
+        np1 = np1.view(logprec.size(0), -1)
+
+        np = torch.cat([
+                np1,
+                (diag_prec * mean).view(*x.size()),
+                -.5 * (diag_prec * mean ** 2).sum(1)[:, None],
+                (.5 * mean.size(1) * logprec)
+        ], dim=-1)
+
+        return {
+            'exp_T': torch.cat([XX.view(mean.size(0), -1), mean,
+                                Variable(torch.ones(x.size(0), 1)),
+                                Variable(torch.ones(x.size(0), 1))], dim=1),
+            'mean': mean.view(*x.size()),
+            'std_dev': torch.sqrt(1/diag_prec).view(*x.size()),
+            'natural_params': np
+        }

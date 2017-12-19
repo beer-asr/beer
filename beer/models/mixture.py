@@ -79,6 +79,25 @@ class Mixture(ConjugateExponentialModel):
         """
         return self.sufficient_statistics(X).sum(axis=0)
 
+    def expected_natural_params(self, mean, var):
+        '''Expected value of the natural parameters of the model given
+        the sufficient statistics.
+
+        '''
+        T = self.components[0].sufficient_statistics_from_mean_var(mean, var)
+        T2 = np.c_[T, np.ones(T.shape[0])]
+
+        # Inference.
+        per_component_exp_llh = T2 @ self._np_params_matrix.T
+        exp_llh = logsumexp(per_component_exp_llh, axis=1)
+        resps = np.exp(per_component_exp_llh - exp_llh[:, None])
+
+        # Accumulate the sufficient statistics.
+        acc_stats = resps.T @ T2[:, :-1], resps.sum(axis=0)
+
+        return (resps @ self._np_params_matrix)[:, :-1], acc_stats
+
+
     def exp_llh(self, X, accumulate=False):
         """Expected value of the log-likelihood w.r.t to the posterior
         distribution over the parameters.
@@ -103,6 +122,7 @@ class Mixture(ConjugateExponentialModel):
         # Components' responsibilities.
         exp_llh = logsumexp(per_component_exp_llh, axis=1)
         resps = np.exp(per_component_exp_llh - exp_llh[:, None])
+        exp_llh -= .5 * X.shape[1] * np.log(2 * np.pi)
 
         if accumulate:
             acc_stats = resps.T @ T[:, :-1], resps.sum(axis=0)
