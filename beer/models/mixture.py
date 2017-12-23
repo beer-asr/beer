@@ -92,10 +92,14 @@ class Mixture(ConjugateExponentialModel):
         exp_llh = logsumexp(per_component_exp_llh, axis=1)
         resps = np.exp(per_component_exp_llh - exp_llh[:, None])
 
+        # Build the matrix of expected natural parameters.
+        matrix = np.c_[[component.expected_natural_params(mean, var)[0][0]
+                        for component in self.components]]
+
         # Accumulate the sufficient statistics.
         acc_stats = resps.T @ T2[:, :-1], resps.sum(axis=0)
 
-        return (resps @ self._np_params_matrix)[:, :-1], acc_stats
+        return (resps @ matrix), acc_stats
 
 
     def exp_llh(self, X, accumulate=False):

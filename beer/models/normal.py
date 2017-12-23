@@ -67,14 +67,6 @@ class NormalDiagonalCovariance(ConjugateExponentialModel):
         return np.c_[mean**2 + var, mean, np.ones_like(mean),
                      np.ones_like(mean)]
 
-    @staticmethod
-    def diag_natural_params(natural_params):
-        '''Conver the natural parameters of a Normal distribution with
-        full covariance matrix to an approximate diagonal one.
-
-        '''
-        return natural_params
-
     def __init__(self, prior, posterior=None):
         """Initialize the Bayesian normal distribution.
 
@@ -129,7 +121,12 @@ class NormalDiagonalCovariance(ConjugateExponentialModel):
 
         '''
         T = self.sufficient_statistics_from_mean_var(mean, var)
-        return self.posterior.grad_lognorm(), T.sum(axis=0)
+        np1, np2, np3, np4 = self.posterior.grad_lognorm().reshape(4, -1)
+        identity = np.eye(var.shape[1])
+        np1 = (np1[:, None] * identity[None, :, :]).reshape(-1)
+        return np.c_[np1[None], np2[None], np3.sum(axis=-1)[None],
+                     np4.sum(axis=-1)[None]], \
+             T.sum(axis=0)
 
     def exp_llh(self, X, accumulate=False):
         """Expected value of the log-likelihood w.r.t to the posterior
@@ -312,7 +309,7 @@ class NormalFullCovariance(ConjugateExponentialModel):
 
         '''
         T = self.sufficient_statistics_from_mean_var(mean, var)
-        return self.posterior.grad_lognorm(), \
+        return self.posterior.grad_lognorm()[None, :], \
              T.sum(axis=0)
 
     def exp_llh(self, X, accumulate=False):
