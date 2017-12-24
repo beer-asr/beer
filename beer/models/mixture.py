@@ -1,6 +1,7 @@
 
 """Bayesian Mixture model."""
 
+from itertools import chain
 from .model import ConjugateExponentialModel
 from ..priors import DirichletPrior
 from scipy.special import logsumexp
@@ -23,7 +24,7 @@ class Mixture(ConjugateExponentialModel):
 
         return Mixture(prior_weights, components)
 
-    def __init__(self, prior_weights, components):
+    def __init__(self, prior_weights, components, posterior_weights=None):
         """Initialize the Bayesian normal distribution.
 
         Args:
@@ -36,8 +37,11 @@ class Mixture(ConjugateExponentialModel):
         self._np_params_matrix = None
 
         self.prior_weights = prior_weights
-        self.posterior_weights = copy.deepcopy(prior_weights)
         self.components = components
+        if posterior_weights is not None:
+            self.posterior_weights = posterior_weights
+        else:
+            self.posterior_weights = copy.deepcopy(prior_weights)
 
         self._prepare()
 
@@ -173,4 +177,27 @@ class Mixture(ConjugateExponentialModel):
         self.posterior_weights.natural_params += lrate * natural_grad
 
         self._prepare()
+
+    def split(self):
+        '''Split each component into two sub-components.
+
+        Returns:
+            (``Mixture``): A new mixture with two times more
+                components.
+
+        '''
+        # Create the prior/posterior over the weights.
+        prior_np = .5 * np.c_[self.prior_weights.natural_params,
+                              self.prior_weights.natural_params].ravel()
+        post_np = .5 * np.c_[self.posterior_weights.natural_params,
+                             self.posterior_weights.natural_params].ravel()
+        new_prior_weights = DirichletPrior(prior_np)
+        new_posterior_weights = DirichletPrior(post_np)
+
+        # Split the Normal distributions.
+        new_components = [comp.split() for comp in self.components]
+        new_components = list(chain.from_iterable(new_components))
+
+        return Mixture(new_prior_weights, new_components,
+                       new_posterior_weights)
 
