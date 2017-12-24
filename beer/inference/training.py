@@ -9,7 +9,7 @@ import math
 
 
 def run_training(training_data, model, optimizer, nb_epochs, history, batch_size,
-                 lrate_latent_model):
+                 lrate_latent_model, kl_weight=1.0):
     model.train()
     for epoch_no in range(1, nb_epochs+1):
         epoch_data = np.copy(training_data)
@@ -20,19 +20,20 @@ def run_training(training_data, model, optimizer, nb_epochs, history, batch_size
             scale = float(epoch_data.shape[0]) / X.shape[0]
             X = Variable(torch.from_numpy(X).float())
             optimizer.zero_grad()
-            obs_mu, obs_logvar, z_mu, z_logvar = model(X)
-            loss, llh, kld, acc_stats = \
-                model.loss(X, obs_mu, obs_logvar, z_mu, z_logvar)
+            state = model(X)
+            loss, llh, kld = model.loss(X, state, kl_weight=kl_weight)
             loss.backward()
             optimizer.step()
-            model.latent_model.natural_grad_update(acc_stats,
+
+            model.latent_model.natural_grad_update(state['latent_model_state'],
                 scale=scale, lrate=lrate_latent_model)
 
-            el.accumulate(
-                -loss.data[0], kld.data[0], llh.data[0],
-                gaussian_entropy(z_logvar).data[0],
-                gaussian_entropy(obs_logvar.view(-1, X.size(1))).data[0]
-            )
+            el.accumulate(-loss.data[0], kld.data[0], llh.data[0])
+            #el.accumulate(
+            #    -loss.data[0], kld.data[0], llh.data[0],
+            #    gaussian_entropy(z_logvar).data[0],
+            #    gaussian_entropy(obs_logvar.view(-1, X.size(1))).data[0]
+            #)
 
         history.log(el)
 
@@ -49,17 +50,20 @@ class EpochLog:
         self.h_z = 0
         self.h_x = 0
 
-    def accumulate(self, elbo, kld, llh, h_z, h_x):
+    def accumulate(self, elbo, kld, llh, h_z=None, h_x=None):
         self.elbo += elbo
         self.kld += kld
         self.llh += llh
-        self.h_z += h_z
-        self.h_x += h_x
+        #self.h_z += h_z
+        #self.h_x += h_x
 
     def __str__(self):
-        return "elbo: {:3.6f} llh: {:3.6f} kld: {:3.6f} H_q(z): {:3.6f} H_p(x|z): {:3.6f}".format(
-                    self.elbo, self.llh, self.kld, self.h_z, self.h_x
+        return 'elbo: {:3.6f} llh: {:3.6f} kld: {:3.6f}'.format(
+            self.elbo, self.llh, self.kld
         )
+        #return "elbo: {:3.6f} llh: {:3.6f} kld: {:3.6f} H_q(z): {:3.6f} H_p(x|z): {:3.6f}".format(
+        #            self.elbo, self.llh, self.kld, self.h_z, self.h_x
+        #)
 
 
 class History:
