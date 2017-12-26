@@ -48,8 +48,7 @@ class Mixture(ConjugateExponentialModel):
     @property
     def weights(self):
         """Expected value of the weights."""
-        grad = self.posterior_weights.grad_lognorm()
-        return np.exp(grad - logsumexp(grad))
+        return np.exp(self.posterior_weights.grad_lognorm(normalize=True))
 
     def sufficient_statistics(self, X):
         """Compute the sufficient statistics of the data.
@@ -69,19 +68,6 @@ class Mixture(ConjugateExponentialModel):
             for component in self.components])
         self._np_params_matrix = np.c_[matrix,
             self.posterior_weights.grad_lognorm()]
-
-    def accumulate_stats(self, X):
-        """Accumulate the sufficient statistics to update the
-        posterior distributions.
-
-        Args:
-            X (numpy.ndarray): Data.
-
-        Returns:
-            (numpy.ndarray): Accumulated sufficient statistics.
-
-        """
-        return self.sufficient_statistics(X).sum(axis=0)
 
     def expected_natural_params(self, mean, var):
         '''Expected value of the natural parameters of the model given
@@ -162,14 +148,14 @@ class Mixture(ConjugateExponentialModel):
         comp_stats, weights_stats = acc_stats
 
         # Update the components.
-        for i, component in enumerate(self.components):
-            # Compute the natural gradient.
-            natural_grad = component.prior.natural_params \
-                + scale * comp_stats[i] \
-                - component.posterior.natural_params
+        #for i, component in enumerate(self.components):
+        #    # Compute the natural gradient.
+        #    natural_grad = component.prior.natural_params \
+        #        + scale * comp_stats[i] \
+        #        - component.posterior.natural_params
 
-            # Update the posterior distribution.
-            component.posterior.natural_params += lrate * natural_grad
+        #    # Update the posterior distribution.
+        #    component.posterior.natural_params += lrate * natural_grad
 
         # Update the weights.
         natural_grad = self.prior_weights.natural_params \

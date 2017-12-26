@@ -2,7 +2,7 @@
 """Dirichlet conjugate prior of the Categorical distribution."""
 
 import numpy as np
-from scipy.special import psi, gammaln
+from scipy.special import psi, gammaln, logsumexp
 
 
 class DirichletPrior:
@@ -55,17 +55,24 @@ class DirichletPrior:
         return -gammaln(np.sum(self.natural_params + 1)) \
             + np.sum(gammaln(self.natural_params + 1))
 
-    def grad_lognorm(self):
+    def grad_lognorm(self, normalize=False):
         """Gradient of the log-normalizer. This correspond to the
         expected value of the sufficient statistics.
+
+        Args:
+            normalize (boolean): Ensure the exponential of the results
+                sum up to one.
 
         Returns
             ``numpy.ndarray``: Expected value of the sufficient
                 statistics.
 
         """
-        return -psi(np.sum(self.natural_params + 1)) \
+        retval = -psi(np.sum(self.natural_params + 1)) \
             + psi(self.natural_params + 1)
+        if normalize:
+            retval -= logsumexp(retval)
+        return retval
 
     def kl_div(self, other):
         """KL divergence between the two distribution of them form.
