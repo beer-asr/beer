@@ -73,9 +73,7 @@ class NestedMixture(ConjugateExponentialModel):
     def _prepare(self):
         matrix = np.vstack([component.posterior.grad_lognorm()
             for component in self.c_components])
-        #log_weights = self.posterior_weights.grad_lognorm()
-        log_weights = np.zeros(len(self.c_posterior_weights))
-        c_log_weights = np.hstack([log_weights[i] + post_weights.grad_lognorm()
+        c_log_weights = np.hstack([post_weights.grad_lognorm()
             for i, post_weights in enumerate(self.c_posterior_weights)])
         self._np_params_matrix = np.c_[matrix, c_log_weights]
 
@@ -126,13 +124,11 @@ class NestedMixture(ConjugateExponentialModel):
         # where N is the number of frames, C is the number of
         # components per cluster and K is the number of clusters.
         M = per_cluster_component_exp_llh.reshape(T.shape[0], -1,
-            len(self.c_posterior_weights)) \
-            + self.posterior_weights.grad_lognorm()
+            len(self.c_posterior_weights))
 
         # Conditional responsibilities of the components.
         M_lognorm = logsumexp(M, axis=1)
-        w_M_lognorm = M_lognorm
-#+ self.posterior_weights.grad_lognorm()
+        w_M_lognorm = M_lognorm + self.posterior_weights.grad_lognorm()
 
         # Total log-likelihood and responsibilities of the clusters.
         exp_llh = logsumexp(w_M_lognorm, axis=1)
