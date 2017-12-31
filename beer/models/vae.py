@@ -12,7 +12,9 @@ from torch import nn
 from torch.autograd import Variable
 from torch import optim
 import numpy as np
+
 from .model import Model
+from ..priors import NormalGammaPrior
 
 
 class VAE(nn.Module, Model):
@@ -53,7 +55,7 @@ class VAE(nn.Module, Model):
         self._fit_cache['optimizer'].zero_grad()
 
         # Forward the data through the VAE.
-        state = self(X)
+        state = self(X, self._fit_cache['sample'])
 
         # Compute the loss (negative ELBO).
         loss, llh, kld = self.loss(X, state,
@@ -83,13 +85,14 @@ class VAE(nn.Module, Model):
             kld.data.numpy()[0] / mini_batch_size + latent_model_kl
 
     def fit(self, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e-3,
-            latent_model_lrate=1., kl_weight=1.0, callback=None):
+            latent_model_lrate=1., kl_weight=1.0, sample=True, callback=None):
         self._fit_cache = {
             'optimizer':optim.Adam(self.parameters(), lr=lrate,
                                    weight_decay=1e-6),
             'latent_model_lrate': latent_model_lrate,
             'data_size': np.prod(data.shape[:-1]),
-            'kl_weight': kl_weight
+            'kl_weight': kl_weight,
+            'sample': sample
         }
         super().fit(data, mini_batch_size, max_epochs, seed, callback)
 
@@ -100,10 +103,7 @@ class VAE(nn.Module, Model):
         loss, llh, kld = self.loss(torch_data, state)
         return -loss.data.numpy(), llh.data.numpy(), kld.data.numpy(), \
             state['encoder_state'].mean.data.numpy(), \
-            state['encoder_state'].std_dev().data.numpy()**2, \
-            state['decoder_state'].mean.data.numpy(), \
-            state['decoder_state'].std_dev().data.numpy()**2
-
+            state['encoder_state'].std_dev().data.numpy()**2
 
     def forward(self, X, sampling=True):
         '''Forward data through the VAE model.
@@ -177,27 +177,64 @@ class VAE(nn.Module, Model):
         return -(llh - kl[:, None]), llh, kl
 
 
-class NormalPosteriors:
-    '''Object that wraps the output of a MLP and behaves as a set of
-    Normal distribution (with diagional covariance matrix).
+class MLPEncoderState(metaclass=abc.ABCMeta):
+    'Abstract Base Class for the state of a the VAE encoder.'
 
-    '''
+    @property
+    def mean(self):
+        'Mean of each distribution.'
+        return self._mean
+
+    @property
+    def prec(self):
+        'Diagonal of the precision matrix for each distribution.'
+        return self._prec
+
+    @abc.abstractmethod
+    def sample(self):
+        'sample data using the reparametization trick.'
+        NotImplemented
+
+    @abc.abstractmethod
+    def kl_div(self, p_nparams):
+        'kl divergence between the posterior and prior distribution.'
+        NotImplemented
+
+
+class MLPDecoderState(metaclass=abc.ABCMeta):
+    'Abstract Base Class for the state of a the VAE decoder.'
+
+    @abc.abstractmethod
+    def natural_params(self):
+        'Natural parameters for each distribution.'
+        NotImplemented
+
+    @abc.abstractmethod
+    def log_base_measure(self, X):
+        'Natural parameters for each distribution.'
+        NotImplemented
+
+    @abc.abstractmethod
+    def sufficient_statistics(self, X):
+        'Sufficient statistics of the given data.'
+        NotImplemented
+
+    def log_likelihood(self, X, nsamples=1):
+        'Log-likelihood of the data.'
+        s_stats = self.sufficient_statistics(X)
+        nparams = self.natural_params()
+        log_bmeasure = self.log_base_measure(X)
+        nparams = nparams.view(nsamples, X.size(0), -1)
+        return torch.sum(nparams * s_stats, dim=-1) + log_bmeasure
+
+
+class MLPStateNormal(MLPEncoderState, MLPDecoderState):
 
     def __init__(self, mean, prec):
-        '''Initialize the set of Normal distribution.
-
-        Args:
-            mean (torch.autograd.Variable): Mean for each Normal
-                distribution.
-            logprec (torch.autograd.Variable): Log-precision for each
-                Normal distribution.
-
-        '''
-        self.mean = mean
-        self.prec = prec
+        self._mean = mean
+        self._prec = prec
 
     def exp_T(self):
-        'Expected sufficient statistics for each distribution.'
         idxs = torch.arange(0, self.mean.size(1)).long()
         XX = self.mean[:, :, None] * self.mean[:, None, :]
         XX[:, idxs, idxs] += 1 / self.prec
@@ -205,11 +242,9 @@ class NormalPosteriors:
                           Variable(torch.ones(self.mean.size(0), 2))], dim=-1)
 
     def std_dev(self):
-        'Standard deviation (per-dimension) for each distribution.'
         return 1 / torch.sqrt(self.prec)
 
     def natural_params(self):
-        'Natural parameters for each of the distribution.'
         identity = Variable(torch.eye(self.mean.size(1)))
         np1 = -.5 * self.prec[:, None] * identity[None, :, :]
         np1 = np1.view(self.mean.size(0), -1)
@@ -218,32 +253,47 @@ class NormalPosteriors:
         np4 = .5 * torch.log(self.prec).sum(-1)[:, None]
         return torch.cat([np1, np2, np3, np4], dim=-1)
 
-    @staticmethod
-    def sufficient_statistics(X):
-        'Sufficient statistics of the given data.'
-        XX = X[:, :, None] * X[:, None, :]
-        return torch.cat([XX.view(X.size(0), -1), X,
-                          Variable(torch.ones(X.size(0), 2).float())], dim=-1)
-
-    def log_likelihood(self, X, nsamples=1):
-        'Log-likelihood of the data.'
-        s_stats = self.sufficient_statistics(X)
-        nparams = self.natural_params()
-        nparams = nparams.view(nsamples, X.size(0), -1)
-        log_base_measure = -.5 * X.size(-1) * math.log(2 * math.pi)
-        return torch.sum(nparams * s_stats, dim=-1) + log_base_measure
-
     def sample(self):
-        '''sample data using the reparametization trick.'''
         noise = Variable(torch.randn(*self.mean.size()))
         return self.mean + self.std_dev() * noise
 
     def kl_div(self, p_nparams):
-        '''kl divergence between the posterior distribution and the
-        prior.
+        return ((self.natural_params() - p_nparams) * self.exp_T()).sum(dim=-1)
+
+    def sufficient_statistics(self, X):
+        XX = X[:, :, None] * X[:, None, :]
+        return torch.cat([XX.view(X.size(0), -1), X,
+                          Variable(torch.ones(X.size(0), 2).float())], dim=-1)
+
+    def log_base_measure(self, X):
+        return -.5 * X.size(-1) * math.log(2 * math.pi)
+
+
+class MLPStateNormalGamma(MLPDecoderState):
+
+    def __init__(self, natural_params):
+        self._natural_params = natural_params
+
+    def natural_params(self):
+        return self._natural_params
+
+    def sufficient_statistics(self, X):
+        return torch.cat([X, Variable(torch.ones(X.size(0),
+            X.size(1) + 1).float())], dim=-1)
+
+    def log_base_measure(self, X):
+        return -.5 * X.size(-1) * math.log(2 * math.pi)
+
+    def as_priors(self):
+        '''Convert the current MLPState into a list of prior objects.
+
+        Returns:
+            list: The corresponding priors of the ``MLPState``.
 
         '''
-        return ((self.natural_params() - p_nparams) * self.exp_T()).sum(dim=-1)
+        priors = [NormalGammaPrior(nparams.data.numpy()[:-1])
+                  for nparams in self._natural_params]
+        return priors
 
 
 class MLPModel(nn.Module):
@@ -251,7 +301,7 @@ class MLPModel(nn.Module):
     the VAE. The output of this network are the parameters of a
     conjugate exponential model. The proper way to use this class
     is to wrap with an object that "knows" how to make sense of the
-    outptuts (see ``MLPNormalDiag``, ``MLPNormalIso``, ...).
+    outptuts (see ``MLPEncoderState``, ``MLPDecoderIso``, ...).
 
     Note:
         This class only define the neural network structure and does
@@ -304,16 +354,10 @@ class MLPModel(nn.Module):
                 self.residual_mapping[i] = len(self.residual_connections) - 1
 
     def forward(self, X):
-        # Forward the data through the inner structure of the model.
         h = self.structure(X)
-
-        # Get the final outputs:
         outputs = [transform(h) for transform in self.output_layer]
-
-        # Apply the residual connection (if any).
         for idx1, idx2 in self.residual_mapping.items():
             outputs[idx1] += self.residual_connections[idx2](X)
-
         return outputs
 
 class MLPNormalDiag(MLPModel):
@@ -338,7 +382,7 @@ class MLPNormalDiag(MLPModel):
 
     def forward(self, X):
         mean, logprec = super().forward(X)
-        return NormalPosteriors(mean, torch.exp(logprec))
+        return MLPStateNormal(mean, torch.exp(logprec))
 
 
 class MLPNormalIso(MLPModel):
@@ -362,6 +406,51 @@ class MLPNormalIso(MLPModel):
 
     def forward(self, X):
         mean, logprec = super().forward(X)
-        return NormalPosteriors(mean,
+        return MLPStateNormal(mean,
             torch.exp(logprec) * Variable(torch.ones(mean.size(1)).float()))
+
+
+class MLPNormalGamma(MLPModel):
+    '''Neural-Network ending with 4 linear and non-linear projection
+    corresponding to the natural parameters of the Normal-Gamma
+    density. This MLP cannot be used as a decoder.
+
+    '''
+
+    def __init__(self, structure, dim, prior_count=1.):
+        '''Initialize a ``MLPNormalGamma`` MLP.
+
+        Args:
+            structure (``torch.Sequential``): Sequence linear/
+                non-linear operations.
+            dim (int): Desired dimension of the modeled random
+                variable.
+            prior_count (float): Number of pseudo-observations.
+
+        '''
+        self.prior_count = prior_count
+        super().__init__(structure, [(dim // 2, False)] * 2)
+
+    def forward(self, X):
+        outputs = super().forward(X)
+
+        mean = outputs[0]
+        prec = torch.log(1 + torch.exp(outputs[1]))
+        a = self.prior_count * Variable(torch.ones(*mean.size()))
+        b = self.prior_count / prec
+
+        np1 = self.prior_count * (mean ** 2) + 2 * b
+        np2 = self.prior_count * mean
+        np3 = self.prior_count * Variable(torch.ones(*mean.size()))
+        np4 = 2 * a - 1
+
+        # Commpute the log-normalizer.
+        lognorm = torch.lgamma(.5 * (np4 + 1))
+        lognorm += -.5 * torch.log(np3)
+        lognorm += -.5 * (np4 + 1) * torch.log(.5 * (np1 - ((np2**2)/ np3)))
+        lognorm = lognorm.sum(dim=-1)
+
+        retval = MLPStateNormalGamma(torch.cat([np1, np2, np3, np4]
+            + [-lognorm[:, None]], dim=-1))
+        return retval
 

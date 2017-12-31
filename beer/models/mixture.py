@@ -148,14 +148,14 @@ class Mixture(ConjugateExponentialModel):
         comp_stats, weights_stats = acc_stats
 
         # Update the components.
-        #for i, component in enumerate(self.components):
-        #    # Compute the natural gradient.
-        #    natural_grad = component.prior.natural_params \
-        #        + scale * comp_stats[i] \
-        #        - component.posterior.natural_params
+        for i, component in enumerate(self.components):
+            # Compute the natural gradient.
+            natural_grad = component.prior.natural_params \
+                + scale * comp_stats[i] \
+                - component.posterior.natural_params
 
-        #    # Update the posterior distribution.
-        #    component.posterior.natural_params += lrate * natural_grad
+            # Update the posterior distribution.
+            component.posterior.natural_params += lrate * natural_grad
 
         # Update the weights.
         natural_grad = self.prior_weights.natural_params \
