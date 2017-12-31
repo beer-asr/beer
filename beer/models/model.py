@@ -5,11 +5,6 @@ import abc
 import numpy as np
 
 
-log_fmt = 'ln p(X) = {0: <12,.3f} E[ln p(X|...)] = {1: <12,.3f} ' \
-          'D(q || p) = {2:.3f}'
-
-
-
 def _mini_batches(data, mini_batch_size, seed=None):
     rng = np.random.RandomState()
     if seed is not None:
@@ -62,7 +57,9 @@ class ConjugateExponentialModel(Model, metaclass=abc.ABCMeta):
         kld = self.kl_div_posterior_prior()
         lower_bound = (scale * exp_llh - kld)
         self.natural_grad_update(acc_stats, scale, self._fit_cache['lrate'])
-        return lower_bound / self._fit_cache['data_size'], exp_llh, kld
+        return lower_bound / self._fit_cache['data_size'], \
+            exp_llh / self._fit_cache['data_size'], \
+            kld / self._fit_cache['data_size']
 
     def fit(self, data, mini_batch_size=-1, max_epochs=1, seed=None,
             lrate=1., callback=None):
