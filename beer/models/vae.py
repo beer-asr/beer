@@ -14,7 +14,7 @@ from torch import optim
 import numpy as np
 
 from .model import Model
-from ..priors import NormalGammaPrior
+from ..priors import NormalGammaPrior, DirichletPrior
 
 
 class VAE(nn.Module, Model):
@@ -112,7 +112,7 @@ class VAE(nn.Module, Model):
             x (torch.Variable): Data to process. The first dimension is
                 the number of samples and the second dimension is the
                 dimension of the latent space.
-            sampling (boolearn): If True, sample to approximate the
+            sampling (boolean): If True, sample to approximate the
                 expectation of the log-likelihood.
 
         Returns:
@@ -278,8 +278,8 @@ class MLPStateNormalGamma(MLPDecoderState):
         return self._natural_params
 
     def sufficient_statistics(self, X):
-        return torch.cat([X, Variable(torch.ones(X.size(0),
-            X.size(1) + 1).float())], dim=-1)
+        return torch.cat([X, Variable(torch.ones(X.size(0), 1).float())],
+                         dim=-1)
 
     def log_base_measure(self, X):
         return -.5 * X.size(-1) * math.log(2 * math.pi)
@@ -293,6 +293,34 @@ class MLPStateNormalGamma(MLPDecoderState):
         '''
         priors = [NormalGammaPrior(nparams.data.numpy()[:-1])
                   for nparams in self._natural_params]
+        return priors
+
+
+class MLPStateMixtureNormalGamma(MLPStateNormalGamma):
+
+    @staticmethod
+    def _mixture_priors_from_nparams(nparams, ncomps):
+        np_comps = nparams[:-ncomps].reshape(ncomps, -1)
+        components = [NormalGammaPrior(np_comp) for np_comp in np_comps]
+        prior_weights = DirichletPrior(nparams[-ncomps:])
+        return prior_weights, components
+
+    def __init__(self, dim, ncomps, natural_params):
+        super().__init__(natural_params)
+        self._dim = dim
+        self._ncomps = ncomps
+
+    def sufficient_statistics(self, X):
+        return torch.cat([X, Variable(torch.ones(X.size(0), 1).float())],
+                         dim=-1)
+
+    def log_base_measure(self, X):
+        return self._ncomps * super().log_base_measure(X)
+
+    def as_priors(self):
+        priors = [self._mixture_priors_from_nparams(
+                  nparams.data.numpy()[:-1], self._ncomps)
+                  for nparams in self.natural_params()]
         return priors
 
 
@@ -411,11 +439,35 @@ class MLPNormalIso(MLPModel):
 
 
 class MLPNormalGamma(MLPModel):
-    '''Neural-Network ending with 4 linear and non-linear projection
-    corresponding to the natural parameters of the Normal-Gamma
-    density. This MLP cannot be used as a decoder.
+    '''Neural-Network ending with 2 linear and non-linear projection
+    corresponding to the parameters of the Normal-Gamma density. This
+    MLP cannot be used as a decoder.
 
     '''
+
+    @staticmethod
+    def _get_natural_params(outputs, prior_count):
+        # Get the standard parameters from the decoder.
+        mean = next(outputs)
+        # To avoid error we make sure that the variance is vanishing
+        # by adding a small constant.
+        var = 1e-2 + torch.log(1 + torch.exp(next(outputs)))
+        a = prior_count * Variable(torch.ones(*mean.size()))
+        b = prior_count * var
+
+        # Convert the natural parameters to their natural form.
+        np1 = prior_count * (mean ** 2) + 2 * b
+        np2 = prior_count * mean
+        np3 = prior_count * Variable(torch.ones(*mean.size()))
+        np4 = 2 * a - 1
+
+        # Commpute the log-normalizer w.r.t the natural parameters.
+        lognorm = torch.lgamma(.5 * (np4 + 1))
+        lognorm += -.5 * torch.log(np3)
+        lognorm += -.5 * (np4 + 1) * torch.log(.5 * (np1 - ((np2**2)/ np3)))
+        lognorm = lognorm.sum(dim=-1)
+
+        return torch.cat([np1, np2, np3, np4, -lognorm[:, None]], dim=-1)
 
     def __init__(self, structure, dim, prior_count=1.):
         '''Initialize a ``MLPNormalGamma`` MLP.
@@ -429,28 +481,57 @@ class MLPNormalGamma(MLPModel):
 
         '''
         self.prior_count = prior_count
-        super().__init__(structure, [(dim // 2, False)] * 2)
+        super().__init__(structure, [(dim // 4, False)] * 2)
 
     def forward(self, X):
-        outputs = super().forward(X)
+        outputs = iter(super().forward(X))
+        return MLPStateNormalGamma(self._get_natural_params(outputs,
+                                                            self.prior_count))
 
-        mean = outputs[0]
-        prec = torch.log(1 + torch.exp(outputs[1]))
-        a = self.prior_count * Variable(torch.ones(*mean.size()))
-        b = self.prior_count / prec
 
-        np1 = self.prior_count * (mean ** 2) + 2 * b
-        np2 = self.prior_count * mean
-        np3 = self.prior_count * Variable(torch.ones(*mean.size()))
-        np4 = 2 * a - 1
+class MLPMixtureNormalGamma(MLPModel):
+    '''Neural-Network outputing the conjugate prior of a Mixture model.'''
 
-        # Commpute the log-normalizer.
-        lognorm = torch.lgamma(.5 * (np4 + 1))
-        lognorm += -.5 * torch.log(np3)
-        lognorm += -.5 * (np4 + 1) * torch.log(.5 * (np1 - ((np2**2)/ np3)))
-        lognorm = lognorm.sum(dim=-1)
+    def __init__(self, structure, dim, ncomps, prior_count=1.):
+        '''Initialization.
 
-        retval = MLPStateNormalGamma(torch.cat([np1, np2, np3, np4]
-            + [-lognorm[:, None]], dim=-1))
-        return retval
+        Args:
+            structure (``torch.Sequential``): Sequence linear/
+                non-linear operations.
+            dim (int): Desired dimension of the modeled random
+                variable.
+            ncomps (int): number of components in the mixture.
+            prior_count (float): Number of pseudo-observations.
+
+        '''
+        # Dimension of the MLP's output for 1 component of the mixture.
+        dim_comp = (dim - ncomps) // (ncomps * 4)
+
+        self.ncomps = ncomps
+        self.prior_count = prior_count
+        self.dim = dim
+        final_projections = [(dim_comp, False)] * 2 * ncomps
+        final_projections += [(ncomps, False)]
+        super().__init__(structure, final_projections)
+
+    def forward(self, X):
+        outputs = iter(super().forward(X))
+        lognorm = Variable(torch.zeros(X.size(0)))
+        nparams = []
+        for _ in range(self.ncomps):
+            n = MLPNormalGamma._get_natural_params(outputs,
+                self.prior_count)
+            nparams.append(n[:, :-1])
+            lognorm += -n[:, -1]
+
+        # Prior over the weights.
+        unnormed_w = 1 + torch.exp(next(outputs))
+        w_nparams = self.prior_count * unnormed_w / torch.sum(unnormed_w, dim=-1)[:, None] - 1
+        lognorm += -torch.lgamma(self.prior_count * Variable(torch.ones(w_nparams.size(0))))
+        lognorm += torch.sum(torch.lgamma(w_nparams + 1), dim=-1)
+
+        # Global natural parameters.
+        nparams = torch.cat(nparams + [w_nparams, -lognorm[:, None]], dim=-1)
+
+        return MLPStateMixtureNormalGamma(self.dim, self.ncomps, nparams)
 
