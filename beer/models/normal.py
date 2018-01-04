@@ -180,8 +180,6 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         '''
         dim = len(self.mean)
         evals, evecs = np.linalg.eigh(self.cov)
-        #basis = np.zeros(dim)
-        #basis[-1] = evals[-1]
         basis = evals
 
         dist1 = self.create(dim=dim,
