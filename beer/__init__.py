@@ -7,6 +7,3 @@ from .models import Mixture
 from .models import NestedMixture
 
 from . import models
-from . import vae
-from . import inference
-
