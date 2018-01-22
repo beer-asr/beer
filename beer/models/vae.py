@@ -15,9 +15,10 @@ import numpy as np
 
 from .model import Model
 from ..priors import NormalGammaPrior, DirichletPrior
+from ..training import mini_batches
 
 
-class VAE(nn.Module, Model):
+class VAE(nn.Module):
     """Variational Auto-Encoder (VAE)."""
 
     def __init__(self, encoder, decoder, latent_model, nsamples):
@@ -94,7 +95,14 @@ class VAE(nn.Module, Model):
             'kl_weight': kl_weight,
             'sample': sample
         }
-        super().fit(data, mini_batch_size, max_epochs, seed, callback)
+
+        mb_size = mini_batch_size if mini_batch_size > 0 else len(data)
+        for epoch in range(1, max_epochs + 1):
+            for mini_batch in mini_batches(data, mb_size, seed):
+                lower_bound, llh, kld = self._fit_step(mini_batch)
+
+                if callback is not None:
+                    callback(lower_bound, llh, kld)
 
     def evaluate(self, data, sampling=True):
         'Convenience function mostly for plotting and debugging.'

@@ -3,16 +3,7 @@
 
 import abc
 import numpy as np
-
-
-def _mini_batches(data, mini_batch_size, seed=None):
-    rng = np.random.RandomState()
-    if seed is not None:
-        rng.seed(seed)
-    indices = rng.choice(data.shape[0], size=data.shape[0], replace=False)
-    splits = np.array_split(indices, data.shape[0] // mini_batch_size)
-    for split in splits:
-        yield data[split]
+from ..training import mini_batches
 
 
 class Model(metaclass=abc.ABCMeta):
@@ -22,31 +13,8 @@ class Model(metaclass=abc.ABCMeta):
     def _fit_step(self, mini_batch):
         NotImplemented
 
-    def fit(self, data, mini_batch_size=-1, max_epochs=1, seed=None,
-            callback=None):
-        '''Fit the model to the data using Variational Bayes training.
 
-        Args:
-            data (numpy.ndarray): Training data.
-            mini_batch_size (int): Size of the mini-batches. If 0 or
-                negative, the size of the mini-batches will be the size
-                of the whole data set.
-            max_epochs (int): Maximum number of epochs.
-            seed (integer): Seed the random generator. For the same
-                seed number, the iteration over the mini-batches will
-                be exactly the same (does not affect the model itself).
-
-        '''
-        mb_size = mini_batch_size if mini_batch_size > 0 else len(data)
-        for epoch in range(1, max_epochs + 1):
-            for mini_batch in _mini_batches(data, mb_size, seed):
-                lower_bound, llh, kld = self._fit_step(mini_batch)
-
-                if callback is not None:
-                    callback(lower_bound, llh, kld)
-
-
-class ConjugateExponentialModel(Model, metaclass=abc.ABCMeta):
+class ConjugateExponentialModel(metaclass=abc.ABCMeta):
     '''Abstract base class for Conjugate Exponential models.'''
 
     def _fit_step(self, mini_batch):
@@ -67,5 +35,12 @@ class ConjugateExponentialModel(Model, metaclass=abc.ABCMeta):
             'lrate': lrate,
             'data_size': np.prod(data.shape[:-1])
         }
-        super().fit(data, mini_batch_size, max_epochs, seed, callback)
+
+        mb_size = mini_batch_size if mini_batch_size > 0 else len(data)
+        for epoch in range(1, max_epochs + 1):
+            for mini_batch in mini_batches(data, mb_size, seed):
+                lower_bound, llh, kld = self._fit_step(mini_batch)
+
+                if callback is not None:
+                    callback(lower_bound, llh, kld)
 
