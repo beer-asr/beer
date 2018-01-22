@@ -23,20 +23,14 @@ def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e
     mb_size = mini_batch_size if mini_batch_size > 0 else len(data)
     for epoch in range(1, max_epochs + 1):
         for mini_batch in mini_batches(data, mb_size, seed):
-            # Number of samples in the mini-batch
-            mini_batch_size = np.prod(mini_batch.shape[:-1])
+            # Forward the data through the VAE.
+            X = Variable(torch.from_numpy(mini_batch).float())
+            state = model(X, sample)
+
+            nb_datapoints_in_batch = np.prod(mini_batch.shape[:-1])
 
             # Scale of the sufficient statistics.
-            scale = float(data_size) / mini_batch_size
-
-            # Convert the data into the suitable pytorch Variable
-            X = Variable(torch.from_numpy(mini_batch).float())
-
-            # Clean up the previously accumulated gradient.
-            optimizer.zero_grad()
-
-            # Forward the data through the VAE.
-            state = model(X, sample)
+            scale = float(data_size) / nb_datapoints_in_batch
 
             # Compute the loss (negative ELBO).
             loss, llh, kld = model.loss(X, state, kl_weight=kl_weight)
@@ -44,13 +38,11 @@ def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e
 
             # We normalize the loss so we don't have to tune the learning rate
             # depending on the batch size.
-            loss /= float(mini_batch_size)
+            loss /= float(nb_datapoints_in_batch) # TODO -- PyTorch should take care of this
 
-            # Backward propagation of the gradient.
+            # Neural updates
+            optimizer.zero_grad()
             loss.backward()
-
-            # Update of the parameters of the neural network part of the
-            # model.
             optimizer.step()
 
             # Natural gradient step of the latent model.
@@ -59,11 +51,9 @@ def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e
 
             # Full elbo (including the KL div. of the latent model).
             latent_model_kl = model.latent_model.kl_div_posterior_prior() / data_size
-            elbo = -loss.data.numpy()[0] - latent_model_kl
-
-            lower_bound = elbo
-            llh = llh.data.numpy()[0] / mini_batch_size
-            kld = kld.data.numpy()[0] / mini_batch_size + latent_model_kl 
+            lower_bound = -loss.data.numpy()[0] - latent_model_kl
+            llh = llh.data.numpy()[0] / nb_datapoints_in_batch
+            kld = kld.data.numpy()[0] / nb_datapoints_in_batch + latent_model_kl 
 
             if callback is not None:
                 callback(lower_bound, llh, kld)
