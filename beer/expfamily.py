@@ -21,13 +21,21 @@ def _exp_stats_and_log_norm(natural_params, log_norm_fn):
 
 
 ########################################################################
-## Dirichlet distribution.
+## Densities log-normalizer functions.
 ########################################################################
 
 def _dirichlet_log_norm(natural_params):
     # (Module 'torch' has no 'lgamma' member) pylint: disable=E1101
     return - torch.lgamma((natural_params + 1).sum()) \
         + torch.lgamma(natural_params + 1).sum()
+
+
+def _normalgamma_log_norm(natural_params):
+        np1, np2, np3, np4 = natural_params.view(4, -1)
+        lognorm = torch.lgamma(.5 * (np4 + 1))
+        lognorm += -.5 * torch.log(np3)
+        lognorm += -.5 * (np4 + 1) * torch.log(.5 * (np1 - ((np2**2) / np3)))
+        return torch.sum(lognorm)
 
 
 class ExpFamilyDensity:
@@ -82,9 +90,7 @@ def dirichlet(prior_counts):
     '''Create a Dirichlet density function.
 
     Args:
-        prior_counts (Tensor/Variable): Prior counts for each category.
-            If a ``Variable`` is passed, it should be created with
-            ``requires_grad=True``.
+        prior_counts (Tensor): Prior counts for each category.
 
     Returns:
         A Dirichlet density.
@@ -95,3 +101,28 @@ def dirichlet(prior_counts):
         natural_params = ta.Variable(natural_params, requires_grad=True)
     return ExpFamilyDensity(natural_params, _dirichlet_log_norm)
 
+def normalgamma(mean, precision, prior_counts):
+    '''Create a NormalGamma density function.
+
+    Args:
+        dim (int): Dimension of the density.
+        mean (Tensor): Mean of the Normal.
+        precision (Tensor): Mean of the Gamma.
+        prior_counts (float): Strength of the prior.
+
+    Returns:
+        A NormalGamma density.
+
+    '''
+    dim = mean.size(0)
+    n_mean = mean
+    n_precision = prior_counts * torch.ones_like(n_mean)
+    g_shapes = precision * prior_counts
+    g_rates = prior_counts
+    natural_params = ta.Variable(torch.cat([
+        n_precision * (n_mean ** 2) + 2 * g_rates,
+        n_precision * n_mean,
+        n_precision,
+        2 * g_shapes - 1
+    ]), requires_grad=True)
+    return ExpFamilyDensity(natural_params, _normalgamma_log_norm)
