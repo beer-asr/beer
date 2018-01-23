@@ -27,11 +27,6 @@ def dirichlet_grad_log_norm(natural_params):
     return -psi(np.sum(natural_params + 1)) + psi(natural_params + 1)
 
 
-def dirichlet_sufficient_statistics(X):
-    # (Invalid Argument Name) pylint: disable=C0103
-    return np.log(X)
-
-
 class TestDirichlet(unittest.TestCase):
 
     def test_create_from_tensor(self):
@@ -57,39 +52,12 @@ class TestDirichlet(unittest.TestCase):
         div = beer.kl_divergence(model1, model2)
         self.assertAlmostEqual(div, 0.)
 
-    def test_log_base_measure(self):
-        model = beer.dirichlet(torch.ones(4))
-        X = torch.from_numpy(np.array([[0.1, 0.9], [0.5, 0.5], [0.3, 0.7]]))
-        log_bmeasure = model.log_base_measure(X)
-        self.assertAlmostEqual(log_bmeasure, 0.)
-
-    def test_log_likelihood(self):
-        model = beer.dirichlet(torch.ones(2).double())
-        X = Variable(torch.from_numpy(np.array([
-            [0.1, 0.9],
-            [0.5, 0.5],
-            [0.3, 0.7]
-        ])))
-        s_stats = dirichlet_sufficient_statistics(X.numpy())
-        natural_params = model.natural_params.data.numpy()
-        log_norm = dirichlet_log_norm(natural_params)
-        llh = s_stats @ natural_params - log_norm
-        model_llh = model.log_likelihood(X).data.numpy()
-        self.assertTrue(np.allclose(model_llh, llh))
-
     def test_log_norm(self):
         model = beer.dirichlet(torch.ones(4))
         model_log_norm = model.log_norm.data.numpy()
         natural_params = model.natural_params.data.numpy()
         log_norm = dirichlet_log_norm(natural_params)
         self.assertAlmostEqual(model_log_norm, log_norm)
-
-    def test_sufficient_statistics(self):
-        model = beer.dirichlet(torch.ones(4))
-        X = torch.from_numpy(np.array([[0.1, 0.9], [0.5, 0.5], [0.3, 0.7]]))
-        s_stats = dirichlet_sufficient_statistics(X.numpy())
-        model_s_stats = model.sufficient_statistics(X).numpy()
-        self.assertTrue(np.allclose(model_s_stats, s_stats))
 
 
 if __name__ == '__main__':
