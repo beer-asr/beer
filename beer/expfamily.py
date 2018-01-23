@@ -20,10 +20,11 @@ def _exp_stats_and_log_norm(natural_params, log_norm_fn):
     return natural_params.grad, log_norm
 
 
-def _log_likelihood(natural_params, log_norm, sufficient_statistics,
-                    log_base_measure):
-    # (Anomalous backslash in string) pylint: disable=W1401
-    return sufficient_statistics @ natural_params - log_norm + log_base_measure
+def _log_likelihood(X, natural_params, log_norm, sufficient_statistics_fn,
+                    log_base_measure_fn):
+    # (Invalid Argument Name) pylint: disable=C0103
+    return sufficient_statistics_fn(X) @ natural_params \
+        - log_norm + log_base_measure_fn(X)
 
 ########################################################################
 ## Dirichlet distribution.
@@ -92,13 +93,14 @@ class ExpFamilyDensity:
         'B(X)'
         return self._log_bmeasure_fn(X)
 
-    def log_likelihood(self, X):
+    def log_likelihood(self, X, s_stats_fn=None,
+                       log_bmeasure_fn=None):
         # (Invalid Argument Name) pylint: disable=C0103
         'Log-likelihood of the data given the parameters of the model.'
-        s_stats = self._s_stats_fn(X)
-        log_bmeasure = self._log_bmeasure_fn(X)
-        return _log_likelihood(self.natural_params, self.log_norm, s_stats,
-                               log_bmeasure)
+        if s_stats_fn is None: s_stats_fn = self._s_stats_fn
+        if log_bmeasure_fn is None: log_bmeasure_fn = self._log_bmeasure_fn
+        return _log_likelihood(X, self.natural_params, self.log_norm,
+                               s_stats_fn, log_bmeasure_fn)
 
     def sufficient_statistics(self, X):
         # (Invalid Argument Name) pylint: disable=C0103
