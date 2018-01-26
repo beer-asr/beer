@@ -8,4 +8,4 @@ from .models import NestedMixture
 
 from . import models
 
-from .training import train_vae, train_conj_exp
+from .training import train_vae, train_loglinear_model

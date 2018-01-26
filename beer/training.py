@@ -58,7 +58,7 @@ def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e
             if callback is not None:
                 callback(lower_bound, llh, kld)
 
-def train_conj_exp(model, data, mini_batch_size=-1, max_epochs=1, seed=None,
+def train_loglinear_model(model, data, mini_batch_size=-1, max_epochs=1, seed=None,
         lrate=1., callback=None):
     data_size= np.prod(data.shape[:-1])
 
