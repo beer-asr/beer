@@ -68,7 +68,7 @@ def train_conj_exp(model, data, mini_batch_size=-1, max_epochs=1, seed=None,
             mini_batch_size = np.prod(mini_batch.shape[:-1])
             scale = float(data_size) / mini_batch_size
 
-            exp_llhs, acc_stats = model.exp_llh(mini_batch, accumulate=True) # TODO exp_llh() should definitely appear in the base class
+            exp_llhs, acc_stats = model.exp_llh(mini_batch, accumulate=True)
             exp_llh = np.sum(exp_llhs)
             kld = model.kl_div_posterior_prior()
             lower_bound = (scale * exp_llh - kld)

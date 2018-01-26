@@ -122,24 +122,6 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         '''
         NotImplemented
 
-    @abc.abstractmethod
-    def exp_llh(self, X, accumulate=False):
-        """Expected value of the log-likelihood w.r.t to the posterior
-        distribution over the parameters.
-
-        Args:
-            X (numpy.ndarray): Data as a matrix.
-            accumulate (boolean): If True, returns the accumulated
-                statistics.
-
-        Returns:
-            numpy.ndarray: Per-frame expected value of the
-                log-likelihood.
-            numpy.ndarray: Accumulated statistics (if ``accumulate=True``).
-
-        """
-        NotImplemented
-
     def kl_div_posterior_prior(self):
         """KL divergence between the posterior and prior distribution.
 
