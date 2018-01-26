@@ -3,6 +3,7 @@ Distribution.
 
 '''
 
+import math
 import torch
 import torch.autograd as ta
 
@@ -36,6 +37,30 @@ def _normalgamma_log_norm(natural_params):
         lognorm += -.5 * torch.log(np3)
         lognorm += -.5 * (np4 + 1) * torch.log(.5 * (np1 - ((np2**2) / np3)))
         return torch.sum(lognorm)
+
+
+def _normalwishart_split_nparams(natural_params):
+    # We need to retrieve the 4 natural parameters organized as
+    # follows:
+    #   [ np1_1, ..., np1_D^2, np2_1, ..., np2_D, np3, np4]
+    #
+    # The dimension D is found by solving the polynomial:
+    #   D^2 + D - len(self.natural_params[:-2]) = 0
+    D = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params[:-2]))))
+    np1, np2 = natural_params[:int(D**2)].view(D, D), \
+         natural_params[int(D**2):-2]
+    np3, np4 = natural_params[-2:]
+    return np1, np2, np3, np4, D
+
+
+def _normalwishart_log_norm(natural_params):
+        np1, np2, np3, np4, D = _normalwishart_split_nparams(natural_params)
+        lognorm = .5 * ((np4 + D) * D * math.log(2) - D * torch.log(np3))
+        logdet = torch.log(torch.det(np1 - torch.ger(np2, np2) / np3))
+        lognorm += -.5 * (np4 + D) * logdet
+        seq = ta.Variable(torch.arange(1, D + 1, 1))
+        lognorm += torch.lgamma(.5 * (np4 + D + 1 - seq)).sum()
+        return lognorm
 
 
 class ExpFamilyDensity:
@@ -101,11 +126,11 @@ def dirichlet(prior_counts):
         natural_params = ta.Variable(natural_params, requires_grad=True)
     return ExpFamilyDensity(natural_params, _dirichlet_log_norm)
 
+
 def normalgamma(mean, precision, prior_counts):
     '''Create a NormalGamma density function.
 
     Args:
-        dim (int): Dimension of the density.
         mean (Tensor): Mean of the Normal.
         precision (Tensor): Mean of the Gamma.
         prior_counts (float): Strength of the prior.
@@ -126,3 +151,26 @@ def normalgamma(mean, precision, prior_counts):
         2 * g_shapes - 1
     ]), requires_grad=True)
     return ExpFamilyDensity(natural_params, _normalgamma_log_norm)
+
+
+def normalwishart(mean, precision, prior_counts):
+    '''Create a NormalWishart density function.
+
+    Args:
+        mean (Tensor): Mean of the Normal.
+        precision (Tensor): Mean of the Wishart (matrix).
+        prior_counts (float): Strength of the prior.
+
+    Returns:
+        A NormalWishart density.
+
+    '''
+    if len(precision.size()) != 2: raise ValueError('Expect a (D x D).')
+
+    natural_params = ta.Variable(torch.cat([
+        (prior_counts * torch.ger(mean, mean) + precision).view(-1),
+        prior_counts * mean,
+        (torch.ones(1) * prior_counts).type(mean.type()),
+        (torch.ones(1) * (prior_counts - 1)).type(mean.type())
+    ]), requires_grad=True)
+    return ExpFamilyDensity(natural_params, _normalwishart_log_norm)

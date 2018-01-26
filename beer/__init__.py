@@ -12,3 +12,4 @@ from .expfamily import ExpFamilyDensity
 from .expfamily import kl_divergence
 from .expfamily import dirichlet
 from .expfamily import normalgamma
+from .expfamily import normalwishart
