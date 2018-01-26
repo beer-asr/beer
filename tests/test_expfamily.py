@@ -148,7 +148,6 @@ class TestNormalWishart(unittest.TestCase):
         model_s_stats = model.expected_sufficient_statistics.data.numpy()
         natural_params = model.natural_params.data.numpy()
         s_stats = normalwishart_grad_log_norm(natural_params)
-        print(model_s_stats, s_stats)
         self.assertTrue(np.allclose(model_s_stats, s_stats))
 
     def test_kl_divergence(self):
