@@ -16,6 +16,21 @@ def mini_batches(data, mini_batch_size, seed=None):
 
 def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e-3,
         latent_model_lrate=1., kl_weight=1.0, sample=True, callback=None):
+    ''' Train a VAE model.
+
+    Args:
+        model (VAE): the model to train
+        data (numpy.ndarray): the data to fit the model to
+        mini_batch_size (int): size of minibatch; -1 for all data in one batch
+        max_epochs (int): number of epochs
+        seed (int): random seed for minibatch creation
+        lrate (float): learning rate for training the neural component of the VAE
+        latent_model_lrate (float): learning rate for the natural gradient updates
+        kl_weight (float): multiplicative factor for the KLD term
+        sample (boolen): let the VAE sample in the latent space
+        callback (): function to collect training progress. Not extremely versatile now
+    '''
+
     optimizer = optim.Adam(model.parameters(), lr=lrate, weight_decay=1e-6)
     latent_model_lrate = latent_model_lrate
     data_size = np.prod(data.shape[:-1])
@@ -60,6 +75,18 @@ def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e
 
 def train_loglinear_model(model, data, mini_batch_size=-1, max_epochs=1, seed=None,
         lrate=1., callback=None):
+    ''' Train a VAE model.
+
+    Args:
+        model (ConjugateExponentialModel): the model to train
+        data (numpy.ndarray): the data to fit the model to
+        mini_batch_size (int): size of minibatch; -1 for all data in one batch
+        max_epochs (int): number of epochs
+        seed (int): random seed for minibatch creation
+        lrate (float): learning rate for natural gradient updates
+        callback (): function to collect training progress. Not extremely versatile now
+    '''
+
     data_size= np.prod(data.shape[:-1])
 
     mb_size = mini_batch_size if mini_batch_size > 0 else len(data)
