@@ -32,7 +32,6 @@ def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e
     '''
 
     optimizer = optim.Adam(model.parameters(), lr=lrate, weight_decay=1e-6)
-    latent_model_lrate = latent_model_lrate
     data_size = np.prod(data.shape[:-1])
 
     mb_size = mini_batch_size if mini_batch_size > 0 else len(data)
