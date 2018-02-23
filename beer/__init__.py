@@ -1,4 +1,6 @@
 
+from . import features
+
 from .priors import NormalGammaPrior
 
 from .models import NormalDiagonalCovariance
