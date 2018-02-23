@@ -2,11 +2,9 @@
 '''Basic speech features extraction.'''
 
 
-import argparse
-import io
-import scipy.signal
+from functools import lru_cache
 import numpy as np
-import os
+import scipy.signal
 
 
 def hz2mel(hz):
@@ -39,6 +37,7 @@ def __triangle(center, a, b, x):
     return retval
 
 
+@lru_cache(maxsize=8)
 def create_fbank(nfilters, fft_len=512, srate=16000, lowfreq=0, highfreq=None,
                  hz2scale=hz2mel, scale2hz=mel2hz, align_filt_center=True):
     '''Create a set of triangular filter.
