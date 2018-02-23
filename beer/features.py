@@ -4,6 +4,7 @@
 
 import argparse
 import io
+import scipy.signal
 import numpy as np
 import os
 
@@ -12,7 +13,6 @@ def hz2mel(hz):
     'Convert Hertz to Mel value(s).'
     return 2595 * np.log10(1+hz/700.)
 
-f
 def mel2hz(mel):
     'Convert Mel value(s) to Hertz.'
     return 700*(10**(mel/2595.0)-1)
@@ -39,19 +39,19 @@ def __triangle(center, a, b, x):
     return retval
 
 
-def create_fbank(nfilters, npoints=512, srate=16000, lowfreq=0, highfreq=None,
-                 hz2scale=hz2mel, scale2hz=mel2hz, align_filt_center=False):
+def create_fbank(nfilters, fft_len=512, srate=16000, lowfreq=0, highfreq=None,
+                 hz2scale=hz2mel, scale2hz=mel2hz, align_filt_center=True):
     '''Create a set of triangular filter.
 
     Args:
         nfilter (int): Number of filters.
-        npoints (int): Number of points of the FFT transform.
+        fft_len (int): Number of points of the FFT transform.
         srate (int): Sampling rate of the signal to be filtered.
         lowfreq (float): Global cut off frequency (Hz).
         highfreq (float): Global cut off frequency (Hz).
         hz2scale (function): Conversion from Hertz to the 'perceptual' scale to use.
         scale2hz (function): Inversion function of ``hz2scale``.
-        align_center (boolean): Align the center of the filters to FFT
+        align_filt_center (boolean): Align the center of the filters to FFT
             frequency bin. Set to False for exact HTK FBANK features.
 
     Returns
@@ -62,18 +62,18 @@ def create_fbank(nfilters, npoints=512, srate=16000, lowfreq=0, highfreq=None,
     low = hz2scale(lowfreq)
     high = hz2scale(highfreq)
     centers = np.linspace(low, high, nfilters + 2)
-    if align_center:
+    if align_filt_center:
         centers = np.floor(fft_len * scale2hz(centers) / srate)
     else:
         centers = fft_len * scale2hz(centers) / srate
     filters = np.zeros((nfilters, fft_len // 2))
     for i in range(1, nfilters + 1):
-        filters[i - 1, :] = triangle(centers[i], centers[i - 1], centers[i + 1],
+        filters[i - 1, :] = __triangle(centers[i], centers[i - 1], centers[i + 1],
             np.arange(0, fft_len // 2))
     return filters
 
 
-def add_deriv(fea, winlens=(2,2)):
+def add_deltas(fea, winlens=(2,2)):
     '''Add derivatives to features (deltas, double deltas, triple_delas, ...)
 
     Args:
@@ -84,20 +84,19 @@ def add_deriv(fea, winlens=(2,2)):
         numpy.ndarray: Feature array augmented with derivatives.
 
     '''
-    import scipy.signal
     fea_list = [fea]
-    dtype = fea.dtype
     for wlen in winlens:
-        dfilter = -np.arange(-wlen, wlen+1, dtype=fea_list[0].dtype)
+        dfilter = -np.arange(-wlen, wlen+1)
         dfilter = dfilter / (2 * dfilter.dot(dfilter))
         fea = np.r_[fea[[0]].repeat(wlen,0), fea, fea[[-1]].repeat(wlen,0)]
-        fea = scipy.signal.lfilter(dfilter, 1, fea, 0)[2*wlen:].astype(fea_list[0].dtype)
+        fea = scipy.signal.lfilter(dfilter, 1, fea, 0)[2*wlen:]
         fea_list.append(fea)
     return np.hstack(fea_list)
 
 
 def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, hz2scale=hz2mel,
-          lowfreq=20, nfilters=26, preemph=0.97, scale2hz=mel2hz, srate=16000, window=np.hamming):
+          lowfreq=20, nfilters=26, preemph=0.97, scale2hz=mel2hz, srate=16000,
+          window=np.hamming):
     '''Extract the FBANK features.
 
     The features are extracted according to the following scheme:
@@ -132,7 +131,7 @@ def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, hz2scale=hz2mel,
     flen_samp = int(srate * flen)
 
     # Compute the number of frames.
-    nframes = (len(s_t) - flen_samp) // frate_samp + 1
+    nframes = (len(signal) - flen_samp) // frate_samp + 1
 
     # Pre-emphasis filtering.
     s_t = np.array(signal, dtype=np.float32)
@@ -151,7 +150,7 @@ def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, hz2scale=hz2mel,
     magspec = np.abs(np.fft.rfft(frames, n=fft_len, axis=-1)[:, :-1])
 
     # Filtering.
-    filters = create_fbank2(nfilters, fft_len, lowfreq=lowfreq, highfreq=hifreq)
+    filters = create_fbank(nfilters, fft_len, lowfreq=lowfreq, highfreq=hifreq)
     melspec = magspec @ filters.T
 
     return np.log(melspec + 1e-30)
