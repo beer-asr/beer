@@ -5,7 +5,7 @@
 # (Module 'torch' has no 'ones' member) pylint: disable=E1101
 
 import sys
-sys.path.append('./')
+sys.path.insert(0, './')
 import unittest
 import beer
 import numpy as np
