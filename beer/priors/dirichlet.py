@@ -87,4 +87,3 @@ class DirichletPrior:
         """
         return (self.natural_params - other.natural_params) @ self.grad_lognorm() \
             + other.lognorm() - self.lognorm()
-

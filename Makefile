@@ -1,12 +1,6 @@
 
-test_models:
-	python -m doctest docs/models.rst -f
+expfamily:
+	python tests/test_expfamily.py
 
-test_priors:
-	python -m doctest docs/priors.rst -f
-
-test_vae:
-	python -m doctest docs/vae.rst -f
-
-test: test_priors test_models
+test: expfamily
 
