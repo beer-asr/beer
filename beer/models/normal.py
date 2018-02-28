@@ -19,13 +19,12 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
 
     @staticmethod
     @abc.abstractmethod
-    def create(prior_mean, prior_prec=None, prior_count=1., random_init=False):
+    def create(prior_mean, prior_cov=None, prior_count=1., random_init=False):
         '''Create a Normal distribution.
 
         Args:
-            prior_mean (Tensor): Expected mean of the prior.
-            prior_prec (Tensor): Expected precision matrix of the
-                prior.
+            prior_mean (Tensor): Expected mean.
+            prior_cov (Tensor): Expected covariance matrix.
             prior_count (float): Strength of the prior.
             random_init (boolean): If true, initialize the expected
                 mean of the posterior randomly.
@@ -180,24 +179,24 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
 
 
 class NormalDiagonalCovariance(Normal):
-    """Bayesian Normal distribution with diagonal covariance matrix."""
+    'Bayesian Normal distribution with diagonal covariance matrix.'
 
     @staticmethod
-    def create(prior_mean, prior_prec, prior_count=1., random_init=False):
-        diag_prec = prior_prec if len(prior_prec.size()) == 1 else \
-            torch.diag(prior_prec)
+    def create(prior_mean, prior_cov, prior_count=1., random_init=False):
+        diag_cov = prior_prec if len(prior_cov.size()) == 1 else \
+            torch.diag(prior_cov)
+        diag_prec = 1. / diag_cov
 
         if prior_mean.size() != diag_prec.size():
             raise ValueError('Dimension mismatch: mean {} != precision {}'.format(
                 prior_mean.size(), diag_prec.size()))
         prior = NormalGammaPrior(prior_mean, diag_prec, prior_count)
         if random_init:
-            rand_mean = np.random.multivariate_normal(vmean.data.numpy(),
-                np.diag(vprec.data.numpy()))
-            rand_vmean = torch.from_numpy(rand_mean),
-            rand_vmean = rand_vmean.type(prior_mean.type())
-
-            posterior = NormalGammaPrior(rand_vmean, vprec, prior_count)
+            rand_mean = np.random.multivariate_normal(prior_mean.numpy(),
+                np.diag(diag_prec.numpy()))
+            rand_mean = torch.from_numpy(rand_mean)
+            rand_mean = rand_mean.type(prior_mean.type())
+            posterior = NormalGammaPrior(rand_mean, diag_prec, prior_count)
         else:
             posterior = NormalGammaPrior(prior_mean, diag_prec, prior_count)
 
@@ -205,7 +204,8 @@ class NormalDiagonalCovariance(Normal):
 
     @staticmethod
     def sufficient_statistics(X):
-        return np.c_[X**2, X, np.ones_like(X), np.ones_like(X)]
+        return torch.cat([X ** 2, X, torch.ones_like(X), torch.ones_like(X)],
+                         dim=-1)
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
@@ -237,7 +237,8 @@ class NormalDiagonalCovariance(Normal):
 
     @property
     def count(self):
-        return self.posterior.natural_params[-1]
+        np1, _, _, np4 = self.posterior.expected_sufficient_statistics.view(4, -1)
+        return (self.posterior.natural_params[-1].data[0] + 1) /  (-4 * np1[-1])
 
     def lognorm(self):
         _, np2, np3, np4 = self.posterior.grad_lognorm().reshape(4, -1)
