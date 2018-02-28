@@ -85,12 +85,12 @@ class TestDirichletPrior(unittest.TestCase):
     def test_create(self):
         model = beer.DirichletPrior(torch.ones(4))
         self.assertTrue(isinstance(model, beer.ExpFamilyDensity))
-        self.assertAlmostEqual(model.natural_params.data.sum(), 0.)
+        self.assertAlmostEqual(model.natural_params.sum(), 0.)
 
     def test_exp_sufficient_statistics(self):
         model = beer.DirichletPrior(torch.ones(4))
-        model_s_stats = model.expected_sufficient_statistics.data.numpy()
-        natural_params = model.natural_params.data.numpy()
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
         s_stats = dirichlet_grad_log_norm(natural_params)
         self.assertTrue(np.allclose(model_s_stats, s_stats))
 
@@ -102,8 +102,8 @@ class TestDirichletPrior(unittest.TestCase):
 
     def test_log_norm(self):
         model = beer.DirichletPrior(torch.ones(4))
-        model_log_norm = model.log_norm.data.numpy()
-        natural_params = model.natural_params.data.numpy()
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
         log_norm = dirichlet_log_norm(natural_params)
         self.assertAlmostEqual(model_log_norm, log_norm)
 
@@ -116,8 +116,8 @@ class TestNormalGammaPrior(unittest.TestCase):
 
     def test_exp_sufficient_statistics(self):
         model = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
-        model_s_stats = model.expected_sufficient_statistics.data.numpy()
-        natural_params = model.natural_params.data.numpy()
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
         s_stats = normalgamma_grad_log_norm(natural_params)
         self.assertTrue(np.allclose(model_s_stats, s_stats))
 
@@ -129,8 +129,8 @@ class TestNormalGammaPrior(unittest.TestCase):
 
     def test_log_norm(self):
         model = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
-        model_log_norm = model.log_norm.data.numpy()
-        natural_params = model.natural_params.data.numpy()
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
         log_norm = normalgamma_log_norm(natural_params)
         self.assertTrue(len(model_log_norm) == 1 and model_log_norm.shape[0] == 1)
         self.assertAlmostEqual(model_log_norm[0], log_norm)
@@ -139,27 +139,26 @@ class TestNormalGammaPrior(unittest.TestCase):
 class TestNormalWishartPrior(unittest.TestCase):
 
     def test_create(self):
-        model = beer.NormalWishartPrior(torch.zeros(2), torch.eye(2), 1.)
+        model = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
         self.assertTrue(isinstance(model, beer.ExpFamilyDensity))
 
     def test_exp_sufficient_statistics(self):
-
-        model = beer.NormalWishartPrior(torch.zeros(2), torch.eye(2), 1.)
-        model_s_stats = model.expected_sufficient_statistics.data.numpy()
-        natural_params = model.natural_params.data.numpy()
+        model = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
         s_stats = normalwishart_grad_log_norm(natural_params)
         self.assertTrue(np.allclose(model_s_stats, s_stats))
 
     def test_kl_divergence(self):
-        model1 = beer.NormalWishartPrior(torch.zeros(2), torch.eye(2), 1.)
-        model2 = beer.NormalWishartPrior(torch.zeros(2), torch.eye(2), 1.)
+        model1 = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
+        model2 = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
         div = beer.kl_divergence(model1, model2)
         self.assertAlmostEqual(div, 0.)
 
     def test_log_norm(self):
-        model = beer.NormalWishartPrior(torch.zeros(2), torch.eye(2), 1.)
-        model_log_norm = model.log_norm.data.numpy()
-        natural_params = model.natural_params.data.numpy()
+        model = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
         log_norm = normalwishart_log_norm(natural_params)
         self.assertTrue(len(model_log_norm) == 1 and model_log_norm.shape[0] == 1)
         self.assertAlmostEqual(model_log_norm[0], log_norm, places=4)

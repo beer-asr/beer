@@ -82,17 +82,17 @@ class ExpFamilyDensity:
     @property
     def expected_sufficient_statistics(self):
         'Expected value of the sufficient statistics.'
-        return self._expected_sufficient_statistics
+        return self._expected_sufficient_statistics.data
 
     @property
     def log_norm(self):
         'Value of the log-partition function for the given parameters.'
-        return self._log_norm
+        return self._log_norm.data
 
     @property
     def natural_params(self):
         'Natural parameters of the density'
-        return self._natural_params
+        return self._natural_params.data
 
     @natural_params.setter
     def natural_params(self, value):
@@ -153,24 +153,27 @@ def NormalGammaPrior(mean, precision, prior_counts):
     return ExpFamilyDensity(natural_params, _normalgamma_log_norm)
 
 
-def NormalWishartPrior(mean, precision, prior_counts):
+def NormalWishartPrior(mean, cov, prior_counts):
     '''Create a NormalWishart density function.
 
     Args:
-        mean (Tensor): Mean of the Normal.
-        precision (Tensor): Mean of the Wishart (matrix).
+        mean (Tensor): Expected mean of the Normal.
+        cov (Tensor): Expected covariance matrix.
         prior_counts (float): Strength of the prior.
 
     Returns:
         A NormalWishart density.
 
     '''
-    if len(precision.size()) != 2: raise ValueError('Expect a (D x D).')
+    if len(cov.size()) != 2: raise ValueError('Expect a (D x D) matrix')
 
+    D = mean.size(0)
+    dof = prior_counts + D
+    V = dof * cov
     natural_params = ta.Variable(torch.cat([
-        (prior_counts * torch.ger(mean, mean) + precision).view(-1),
+        (prior_counts * torch.ger(mean, mean) + V).view(-1),
         prior_counts * mean,
         (torch.ones(1) * prior_counts).type(mean.type()),
-        (torch.ones(1) * (prior_counts - 1)).type(mean.type())
+        (torch.ones(1) * (dof - D)).type(mean.type())
     ]), requires_grad=True)
     return ExpFamilyDensity(natural_params, _normalwishart_log_norm)

@@ -5,9 +5,9 @@ covariance matrix.
 """
 
 import abc
+import math
 from .model import ConjugateExponentialModel
 from ..expfamily import NormalGammaPrior, NormalWishartPrior
-import copy
 import torch
 import torch.autograd as ta
 import numpy as np
@@ -102,16 +102,6 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         NotImplemented
 
     @abc.abstractmethod
-    def lognorm(self):
-        """Expected value of the log-normalizer.
-
-        Returns:
-            float: expected value of the log-normalizer.
-
-        """
-        NotImplemented
-
-    @abc.abstractmethod
     def expected_natural_params(self, mean, var):
         '''Expected value of the natural parameters of the model.
 
@@ -187,9 +177,9 @@ class NormalDiagonalCovariance(Normal):
             torch.diag(prior_cov)
         diag_prec = 1. / diag_cov
 
-        if prior_mean.size() != diag_prec.size():
-            raise ValueError('Dimension mismatch: mean {} != precision {}'.format(
-                prior_mean.size(), diag_prec.size()))
+        if prior_mean.size(0) != diag_prec.size(0):
+            raise ValueError('Dimension mismatch: mean {} != cov {}'.format(
+                prior_mean.size(0), diag_prec.size(0)))
         prior = NormalGammaPrior(prior_mean, diag_prec, prior_count)
         if random_init:
             rand_mean = np.random.multivariate_normal(prior_mean.numpy(),
@@ -238,13 +228,10 @@ class NormalDiagonalCovariance(Normal):
     @property
     def count(self):
         np1, _, _, np4 = self.posterior.expected_sufficient_statistics.view(4, -1)
-        return (self.posterior.natural_params[-1].data[0] + 1) /  (-4 * np1[-1])
-
-    def lognorm(self):
-        _, np2, np3, np4 = self.posterior.grad_lognorm().reshape(4, -1)
-        return -np.sum(np3 + np4) - .5 * len(np2) * np.log(2 * np.pi)
+        return (self.posterior.natural_params[-1] + 1) /  (-4 * np1[-1])
 
     def expected_natural_params(self, mean, var):
+        # TODO: pytorch version.
         T = self.sufficient_statistics_from_mean_var(mean, var)
         np1, np2, np3, np4 = self.posterior.grad_lognorm().reshape(4, -1)
         identity = np.eye(var.shape[1])
@@ -255,104 +242,83 @@ class NormalDiagonalCovariance(Normal):
 
     def exp_llh(self, X, accumulate=False):
         T = self.sufficient_statistics(X)
-        exp_natural_params = self.posterior.grad_lognorm()
+        exp_natural_params = self.posterior.expected_sufficient_statistics
 
         # Note: the lognormalizer is already included in the expected
         # value of the natural parameters.
         exp_llh = T @ exp_natural_params - .5 * X.shape[1] * np.log(2 * np.pi)
 
         if accumulate:
-            acc_stats = T.sum(axis=0)
+            acc_stats = T.sum(dim=0)
             return exp_llh, acc_stats
 
         return exp_llh
 
 
 class NormalFullCovariance(Normal):
-    """Bayesian Normal distribution with diagonal covariance matrix."""
+    'Bayesian Normal distribution with diagonal covariance matrix.'
 
     @staticmethod
-    def create(mean, cov, prior_count=1., random_init=False):
-        prior = NormalWishartPrior.from_std_parameters(
-            mean,
-            prior_count,
-            cov,
-            dim - 1 + prior_count
-        )
+    def __extract_natural_params(natural_params):
+        # We need to retrieve the 4 natural parameters organized as
+        # follows:
+        #   [ np1_1, ..., np1_D^2, np2_1, ..., np2_D, np3, np4]
+        #
+        # The dimension D is found by solving the polynomial:
+        #   D^2 + D - len(self.natural_params[:-2]) = 0
+        D = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params[:-2]))))
+        np1, np2 = natural_params[:int(D**2)].view(D, D), \
+             natural_params[int(D**2):-2]
+        np3, np4 = natural_params[-2:]
+        return np1, np2, np3, np4, D
 
+    @staticmethod
+    def create(prior_mean, prior_cov, prior_count=1., random_init=False):
+        if prior_mean.size(0) != prior_cov.size(0):
+            raise ValueError('Dimension mismatch: mean {} != cov {}'.format(
+                prior_mean.size(0), prior_cov.size(0)))
+        prior = NormalWishartPrior(prior_mean, prior_cov, prior_count)
         if random_init:
-            posterior = NormalWishartPrior.from_std_parameters(
-                np.random.multivariate_normal(mean, cov),
-                prior_count,
-                cov,
-                dim - 1 + prior_count
-            )
+            rand_mean = np.random.multivariate_normal(prior_mean.numpy(),
+                prior_cov.numpy())
+            rand_mean = torch.from_numpy(rand_mean)
+            rand_mean = rand_mean.type(prior_mean.type())
+            posterior = NormalWishartPrior(rand_mean, prior_cov, prior_count)
         else:
-            posterior = None
-
+            posterior = NormalWishartPrior(prior_mean, prior_cov, prior_count)
         return NormalFullCovariance(prior, posterior)
 
     @staticmethod
     def sufficient_statistics(X):
-        """Compute the sufficient statistics of the data.
-
-        Args:
-            X (numpy.ndarray): Data.
-
-        Returns:
-            (numpy.ndarray): Sufficient statistics of the data.
-
-        """
         return np.c_[(X[:, :, None] * X[:, None, :]).reshape(len(X), -1),
             X, np.ones(len(X)), np.ones(len(X))]
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        """Compute the sufficient statistics of the data.
-
-        Returns:
-            (numpy.ndarray): Sufficient statistics of the data.
-
-        """
         idxs = np.identity(mean.shape[1]).reshape(-1) == 1
         XX = (mean[:, :, None] * mean[:, None, :]).reshape(mean.shape[0], -1)
         XX[:, idxs] += var
         return np.c_[XX, mean, np.ones(len(mean)), np.ones(len(mean))]
 
     def __init__(self, prior, posterior=None):
-        """Initialize the Bayesian normal distribution.
-
-        Args:
-            prior (``beer.priors.NormalWishartPrior``): Prior over the
-                means and precisions.
-
-        """
         self.prior = prior
-        if posterior is not None:
-            self.posterior = posterior
-        else:
-            self.posterior = copy.deepcopy(prior)
+        self.posterior = posterior
 
     @property
     def mean(self):
-        grad = self.posterior.grad_lognorm()
-        np1, np2, _, _, _ = NormalWishartPrior.extract_natural_params(grad)
-        return np.linalg.inv(-2 * np1) @ np2
+        nparams = self.posterior.expected_sufficient_statistics
+        np1, np2, _, _, _ = self.__extract_natural_params(nparams)
+        return torch.inverse(-2 * np1) @ np2
 
     @property
     def cov(self):
-        grad = self.posterior.grad_lognorm()
-        np1, _, _, _, _ = NormalWishartPrior.extract_natural_params(grad)
-        return np.linalg.inv(-2 * np1)
+        nparams = self.posterior.expected_sufficient_statistics
+        np1, _, _, _, _ = self.__extract_natural_params(nparams)
+        return torch.inverse(-2 * np1)
 
     @property
     def count(self):
         return self.posterior.natural_params[-1]
-
-    def lognorm(self):
-        grad = self.posterior.grad_lognorm()
-        _, _, np3, np4, D = NormalWishartPrior.extract_natural_params(grad)
-        return -np.sum(np3 + np4 - .5 * D * np.log(2 * np.pi))
 
     def expected_natural_params(self, mean, var):
         T = self.sufficient_statistics_from_mean_var(mean, var)

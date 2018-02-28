@@ -2,7 +2,6 @@
 '''Abstract Base Class for a model.'''
 
 import abc
-import numpy as np
 
 
 class Model(metaclass=abc.ABCMeta):
