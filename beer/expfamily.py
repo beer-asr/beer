@@ -111,7 +111,7 @@ def kl_divergence(model1, model2):
                                model2.natural_params, model1.natural_params)
 
 
-def Dirichlet(prior_counts):
+def DirichletPrior(prior_counts):
     '''Create a Dirichlet density function.
 
     Args:
@@ -127,7 +127,7 @@ def Dirichlet(prior_counts):
     return ExpFamilyDensity(natural_params, _dirichlet_log_norm)
 
 
-def NormalGamma(mean, precision, prior_counts):
+def NormalGammaPrior(mean, precision, prior_counts):
     '''Create a NormalGamma density function.
 
     Args:
@@ -153,7 +153,7 @@ def NormalGamma(mean, precision, prior_counts):
     return ExpFamilyDensity(natural_params, _normalgamma_log_norm)
 
 
-def NormalWishart(mean, precision, prior_counts):
+def NormalWishartPrior(mean, precision, prior_counts):
     '''Create a NormalWishart density function.
 
     Args:

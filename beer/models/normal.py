@@ -6,9 +6,10 @@ covariance matrix.
 
 import abc
 from .model import ConjugateExponentialModel
-from ..priors import NormalGammaPrior
-from ..priors import NormalWishartPrior
+from ..expfamily import NormalGammaPrior, NormalWishartPrior
 import copy
+import torch
+import torch.autograd as ta
 import numpy as np
 
 
@@ -18,15 +19,16 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
 
     @staticmethod
     @abc.abstractmethod
-    def create(dim, mean=None, cov=None, prior_count=1., random_init=False):
+    def create(prior_mean, prior_prec=None, prior_count=1., random_init=False):
         '''Create a Normal distribution.
 
         Args:
-            mean (numpy.ndarray): Mean of the distribution.
-            cov (numpy.ndarray): Covariance matrix of the distribution.
+            prior_mean (Tensor): Expected mean of the prior.
+            prior_prec (Tensor): Expected precision matrix of the
+                prior.
             prior_count (float): Strength of the prior.
-            random_init (boolean): If true, initialize the mean by
-                sampling from the prior.
+            random_init (boolean): If true, initialize the expected
+                mean of the posterior randomly.
 
         Returns:
             ``Normal``: An initialized Normal distribution.
@@ -82,19 +84,22 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
     @property
     @abc.abstractmethod
     def mean(self):
-        '''Expected value of the mean of the distribution.'''
+        'Expected value of the mean w.r.t. posterior distribution.'
         NotImplemented
 
     @property
     @abc.abstractmethod
     def cov(self):
-        '''Expected value of the covariance matrix of the distribution.'''
+        '''Expected value of the covariance matrix w.r.t posterior
+         distribution.
+
+        '''
         NotImplemented
 
     @property
     @abc.abstractmethod
     def count(self):
-        '''Number of data points used to estimate the parameters.'''
+        'Number of data points used to estimate the parameters.'
         NotImplemented
 
     @abc.abstractmethod
@@ -178,27 +183,23 @@ class NormalDiagonalCovariance(Normal):
     """Bayesian Normal distribution with diagonal covariance matrix."""
 
     @staticmethod
-    def create(dim, mean=None, cov=None, prior_count=1., random_init=False):
-        if mean is None: mean = np.zeros(dim)
-        if cov is None: cov = np.identity(dim)
+    def create(prior_mean, prior_prec, prior_count=1., random_init=False):
+        diag_prec = prior_prec if len(prior_prec.size()) == 1 else \
+            torch.diag(prior_prec)
 
-        variances = np.diag(cov)
-        prior = NormalGammaPrior.from_std_parameters(
-            mean,
-            np.ones(dim) * prior_count,
-            ((1/variances) * prior_count),
-            np.ones(dim) * prior_count
-        )
-
+        if prior_mean.size() != diag_prec.size():
+            raise ValueError('Dimension mismatch: mean {} != precision {}'.format(
+                prior_mean.size(), diag_prec.size()))
+        prior = NormalGammaPrior(prior_mean, diag_prec, prior_count)
         if random_init:
-            posterior = NormalGammaPrior.from_std_parameters(
-                np.random.multivariate_normal(mean, cov),
-                np.ones(dim) * prior_count,
-                ((1/variances) * prior_count),
-                np.ones(dim) * prior_count
-            )
+            rand_mean = np.random.multivariate_normal(vmean.data.numpy(),
+                np.diag(vprec.data.numpy()))
+            rand_vmean = torch.from_numpy(rand_mean),
+            rand_vmean = rand_vmean.type(prior_mean.type())
+
+            posterior = NormalGammaPrior(rand_vmean, vprec, prior_count)
         else:
-            posterior = None
+            posterior = NormalGammaPrior(prior_mean, diag_prec, prior_count)
 
         return NormalDiagonalCovariance(prior, posterior)
 
@@ -211,29 +212,28 @@ class NormalDiagonalCovariance(Normal):
         return np.c_[mean**2 + var, mean, np.ones_like(mean),
                      np.ones_like(mean)]
 
-    def __init__(self, prior, posterior=None):
-        """Initialize the Bayesian normal distribution.
+    def __init__(self, prior, posterior):
+        '''Initialize the Bayesian normal distribution.
 
         Args:
-            prior (``beer.priors.NormalGammaPrior``): Prior over the
+            prior (``beer.NormalGammaPrior``): Prior over the
+                means and precisions.
+            posterior (``beer.NormalGammaPrior``): Prior over the
                 means and precisions.
 
-        """
+        '''
         self.prior = prior
-        if posterior is not None:
-            self.posterior = posterior
-        else:
-            self.posterior = copy.deepcopy(prior)
+        self.posterior = posterior
 
     @property
     def mean(self):
-        np1, np2, _, _ = self.posterior.grad_lognorm().reshape(4, -1)
+        np1, np2, _, _ = self.posterior.expected_sufficient_statistics.view(4, -1)
         return np2 / (-2 * np1)
 
     @property
     def cov(self):
-        np1, _, _, _ = self.posterior.grad_lognorm().reshape(4, -1)
-        return np.diag(1/(-2 * np1))
+        np1, np2, _, _ = self.posterior.expected_sufficient_statistics.view(4, -1)
+        return torch.diag(1/(-2 * np1))
 
     @property
     def count(self):
@@ -271,10 +271,7 @@ class NormalFullCovariance(Normal):
     """Bayesian Normal distribution with diagonal covariance matrix."""
 
     @staticmethod
-    def create(dim, mean=None, cov=None, prior_count=1., random_init=False):
-        if mean is None: mean = np.zeros(dim)
-        if cov is None: cov = np.identity(dim)
-
+    def create(mean, cov, prior_count=1., random_init=False):
         prior = NormalWishartPrior.from_std_parameters(
             mean,
             prior_count,
