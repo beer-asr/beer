@@ -290,8 +290,9 @@ class NormalFullCovariance(Normal):
 
     @staticmethod
     def sufficient_statistics(X):
-        return np.c_[(X[:, :, None] * X[:, None, :]).reshape(len(X), -1),
-            X, np.ones(len(X)), np.ones(len(X))]
+        return torch.cat([(X[:, :, None] * X[:, None, :]).view(len(X), -1),
+            X, torch.ones(X.size(0), 1).type(X.type()),
+            torch.ones(X.size(0), 1).type(X.type())], dim=-1)
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
