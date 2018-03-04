@@ -23,7 +23,7 @@ class TestNormalDiagonalCovariance(unittest.TestCase):
         m1, m2 = mean.numpy(), model.mean.numpy()
         self.assertTrue(np.allclose(m1, m2))
         c1, c2 = prec.numpy(), model.cov.numpy()
-        self.assertTrue(np.allclose(c1, c2))
+        self.assertTrue(np.allclose(c1, c2, rtol=TOLERANCE, atol=TOLERANCE))
         self.assertAlmostEqual(2.5, model.count, places=TOLERANCE)
 
     def test_create_random(self):
@@ -33,7 +33,7 @@ class TestNormalDiagonalCovariance(unittest.TestCase):
         m1, m2 = mean.numpy(), model.mean.numpy()
         self.assertFalse(np.allclose(m1, m2))
         c1, c2 = prec.numpy(), model.cov.numpy()
-        self.assertTrue(np.allclose(c1, c2))
+        self.assertTrue(np.allclose(c1, c2, rtol=TOLERANCE, atol=TOLERANCE))
         self.assertAlmostEqual(2.5, model.count, places=TOLERANCE)
 
     def test_sufficient_statistics(self):
@@ -68,6 +68,7 @@ class TestNormalFullCovariance(unittest.TestCase):
         self.assertTrue(np.allclose(m1, m2))
         c1, c2 = cov.numpy(), model.cov.numpy()
         self.assertTrue(np.allclose(c1, c2))
+        self.assertTrue(np.allclose(c1, c2, rtol=TOLERANCE, atol=TOLERANCE))
         self.assertAlmostEqual(2.5, model.count, places=TOLERANCE)
 
     def test_create_random(self):
@@ -77,7 +78,7 @@ class TestNormalFullCovariance(unittest.TestCase):
         m1, m2 = mean.numpy(), model.mean.numpy()
         self.assertFalse(np.allclose(m1, m2))
         c1, c2 = prec.numpy(), model.cov.numpy()
-        self.assertTrue(np.allclose(c1, c2))
+        self.assertTrue(np.allclose(c1, c2, rtol=TOLERANCE, atol=TOLERANCE))
         self.assertAlmostEqual(2.5, model.count, places=TOLERANCE)
 
 

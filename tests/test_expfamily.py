@@ -4,14 +4,15 @@
 # (Unordered import modules) pylint: disable=C0413
 # (Module 'torch' has no 'ones' member) pylint: disable=E1101
 
-import sys
-sys.path.insert(0, './')
-import unittest
-import beer
 import numpy as np
 from scipy.special import gammaln, psi
+import sys
 import torch
-from torch.autograd import Variable
+import unittest
+
+sys.path.insert(0, './')
+import beer
+
 
 
 ########################################################################
@@ -132,8 +133,7 @@ class TestNormalGammaPrior(unittest.TestCase):
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = normalgamma_log_norm(natural_params)
-        self.assertTrue(len(model_log_norm) == 1 and model_log_norm.shape[0] == 1)
-        self.assertAlmostEqual(model_log_norm[0], log_norm)
+        self.assertAlmostEqual(model_log_norm, log_norm)
 
 
 class TestNormalWishartPrior(unittest.TestCase):
@@ -160,8 +160,7 @@ class TestNormalWishartPrior(unittest.TestCase):
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = normalwishart_log_norm(natural_params)
-        self.assertTrue(len(model_log_norm) == 1 and model_log_norm.shape[0] == 1)
-        self.assertAlmostEqual(model_log_norm[0], log_norm, places=4)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=4)
 
 
 if __name__ == '__main__':

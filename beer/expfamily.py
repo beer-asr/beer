@@ -32,11 +32,11 @@ def _dirichlet_log_norm(natural_params):
 
 
 def _normalgamma_log_norm(natural_params):
-        np1, np2, np3, np4 = natural_params.view(4, -1)
-        lognorm = torch.lgamma(.5 * (np4 + 1))
-        lognorm += -.5 * torch.log(np3)
-        lognorm += -.5 * (np4 + 1) * torch.log(.5 * (np1 - ((np2**2) / np3)))
-        return torch.sum(lognorm)
+    np1, np2, np3, np4 = natural_params.view(4, -1)
+    lognorm = torch.lgamma(.5 * (np4 + 1))
+    lognorm += -.5 * torch.log(np3)
+    lognorm += -.5 * (np4 + 1) * torch.log(.5 * (np1 - ((np2**2) / np3)))
+    return torch.sum(lognorm)
 
 
 def _normalwishart_split_nparams(natural_params):
@@ -54,13 +54,13 @@ def _normalwishart_split_nparams(natural_params):
 
 
 def _normalwishart_log_norm(natural_params):
-        np1, np2, np3, np4, D = _normalwishart_split_nparams(natural_params)
-        lognorm = .5 * ((np4 + D) * D * math.log(2) - D * torch.log(np3))
-        logdet = torch.log(torch.det(np1 - torch.ger(np2, np2) / np3))
-        lognorm += -.5 * (np4 + D) * logdet
-        seq = ta.Variable(torch.arange(1, D + 1, 1))
-        lognorm += torch.lgamma(.5 * (np4 + D + 1 - seq)).sum()
-        return lognorm
+    np1, np2, np3, np4, D = _normalwishart_split_nparams(natural_params)
+    lognorm = .5 * ((np4 + D) * D * math.log(2) - D * torch.log(np3))
+    logdet = torch.log(torch.det(np1 - torch.ger(np2, np2) / np3))
+    lognorm += -.5 * (np4 + D) * logdet
+    seq = ta.Variable(torch.arange(1, D + 1, 1))
+    lognorm += torch.lgamma(.5 * (np4 + D + 1 - seq)).sum()
+    return lognorm
 
 
 class ExpFamilyDensity:
@@ -122,8 +122,7 @@ def DirichletPrior(prior_counts):
 
     '''
     natural_params = prior_counts - 1
-    if not isinstance(natural_params, ta.Variable):
-        natural_params = ta.Variable(natural_params, requires_grad=True)
+    natural_params = ta.Variable(natural_params, requires_grad=True)
     return ExpFamilyDensity(natural_params, _dirichlet_log_norm)
 
 
