@@ -98,7 +98,7 @@ class TestDirichletPrior(unittest.TestCase):
     def test_kl_divergence(self):
         model1 = beer.DirichletPrior(torch.ones(4))
         model2 = beer.DirichletPrior(torch.ones(4))
-        div = beer.kl_divergence(model1, model2)
+        div = beer.kl_div(model1, model2)
         self.assertAlmostEqual(div, 0.)
 
     def test_log_norm(self):
@@ -125,7 +125,7 @@ class TestNormalGammaPrior(unittest.TestCase):
     def test_kl_divergence(self):
         model1 = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
         model2 = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
-        div = beer.kl_divergence(model1, model2)
+        div = beer.kl_div(model1, model2)
         self.assertAlmostEqual(div, 0.)
 
     def test_log_norm(self):
@@ -152,7 +152,7 @@ class TestNormalWishartPrior(unittest.TestCase):
     def test_kl_divergence(self):
         model1 = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
         model2 = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
-        div = beer.kl_divergence(model1, model2)
+        div = beer.kl_div(model1, model2)
         self.assertAlmostEqual(div, 0.)
 
     def test_log_norm(self):

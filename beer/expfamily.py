@@ -56,7 +56,16 @@ def _normalwishart_split_nparams(natural_params):
 def _normalwishart_log_norm(natural_params):
     np1, np2, np3, np4, D = _normalwishart_split_nparams(natural_params)
     lognorm = .5 * ((np4 + D) * D * math.log(2) - D * torch.log(np3))
-    logdet = torch.log(torch.det(np1 - torch.ger(np2, np2) / np3))
+    tmp = np1 - torch.ger(np2, np2) /np3
+
+    # The following code compute the log of the determinant of a
+    # positive definite matrix. This is equivalent to:
+    #   >>> torch.log(torch.det(tmp))
+    # Note: the hook is necessary to correct the gradient as pytorch
+    # will return upper triangular gradient.
+    tmp.register_hook(lambda grad: .5 * (grad + grad.t()))
+    logdet = 2 * torch.log(torch.diag(torch.potrf(tmp))).sum()
+
     lognorm += -.5 * (np4 + D) * logdet
     seq = ta.Variable(torch.arange(1, D + 1, 1))
     lognorm += torch.lgamma(.5 * (np4 + D + 1 - seq)).sum()
@@ -101,7 +110,7 @@ class ExpFamilyDensity:
         self._natural_params = value
 
 
-def kl_divergence(model1, model2):
+def kl_div(model1, model2):
     '''Kullback-Leibler divergence between two densities of the same
     type.
 

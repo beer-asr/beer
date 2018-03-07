@@ -7,10 +7,11 @@ covariance matrix.
 import abc
 import math
 from .model import ConjugateExponentialModel
-from ..expfamily import NormalGammaPrior, NormalWishartPrior
+from ..expfamily import NormalGammaPrior, NormalWishartPrior, kl_div
 import torch
 import torch.autograd as ta
 import numpy as np
+import math
 
 
 class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
@@ -123,7 +124,7 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
             float: KL divergence.
 
         """
-        return self.posterior.kl_div(self.prior)
+        return kl_div(self.posterior, self.prior)
 
     def natural_grad_update(self, acc_stats, scale, lrate):
         """Perform a natural gradient update of the posteriors'
@@ -140,7 +141,9 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
             - self.posterior.natural_params
 
         # Update the posterior distribution.
-        self.posterior.natural_params += lrate * natural_grad
+        self.posterior.natural_params = ta.Variable(
+            self.posterior.natural_params + lrate * natural_grad,
+            requires_grad=True)
 
     def split(self, prior_count=1.):
         '''Split the distribution into two Normal distribution (of the
@@ -246,7 +249,8 @@ class NormalDiagonalCovariance(Normal):
 
         # Note: the lognormalizer is already included in the expected
         # value of the natural parameters.
-        exp_llh = T @ exp_natural_params - .5 * X.shape[1] * np.log(2 * np.pi)
+        exp_llh = T @ exp_natural_params - \
+            .5 * X.shape[1] * math.log(2 * math.pi)
 
         if accumulate:
             acc_stats = T.sum(dim=0)
@@ -260,6 +264,7 @@ class NormalFullCovariance(Normal):
 
     @staticmethod
     def __extract_natural_params(natural_params):
+        # TODO: this code is already in the the 'expfamily' module.
         # We need to retrieve the 4 natural parameters organized as
         # follows:
         #   [ np1_1, ..., np1_D^2, np2_1, ..., np2_D, np3, np4]
@@ -280,7 +285,7 @@ class NormalFullCovariance(Normal):
         prior = NormalWishartPrior(prior_mean, prior_cov, prior_count)
         if random_init:
             rand_mean = np.random.multivariate_normal(prior_mean.numpy(),
-                prior_cov.numpy())
+                prior_cov.numpy().astype(np.float64))
             rand_mean = torch.from_numpy(rand_mean)
             rand_mean = rand_mean.type(prior_mean.type())
             posterior = NormalWishartPrior(rand_mean, prior_cov, prior_count)
@@ -322,20 +327,22 @@ class NormalFullCovariance(Normal):
         return self.posterior.natural_params[-1]
 
     def expected_natural_params(self, mean, var):
+        # TODO: pytorch version.
         T = self.sufficient_statistics_from_mean_var(mean, var)
         return self.posterior.grad_lognorm()[None, :], \
              T.sum(axis=0)
 
     def exp_llh(self, X, accumulate=False):
         T = self.sufficient_statistics(X)
-        exp_natural_params = self.posterior.grad_lognorm()
+        exp_natural_params = self.posterior.expected_sufficient_statistics
 
         # Note: the lognormalizer is already included in the expected
         # value of the natural parameters.
-        exp_llh = T @ exp_natural_params
+        exp_llh = T @ exp_natural_params - \
+            .5 * X.shape[1] * math.log(2 * math.pi)
 
         if accumulate:
-            acc_stats = T.sum(axis=0)
+            acc_stats = T.sum(dim=0)
             return exp_llh, acc_stats
 
         return exp_llh
