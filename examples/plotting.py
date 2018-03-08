@@ -27,7 +27,8 @@ def plot_normal(fig, mean, cov, alpha=1., color='blue'):
 def plot_gmm(fig, gmm, alpha=1., color='blue'):
     'Plot a Normal density'
     for weight, comp in zip(gmm.weights, gmm.components):
-        plot_normal(fig, comp.mean, comp.cov, alpha * weight, color)
+        plot_normal(fig, comp.mean.numpy(), comp.cov.numpy(),
+            alpha * weight.numpy(), color)
 
 
 def plot_latent_model(fig, latent_model, alpha=1., color='blue'):

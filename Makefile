@@ -8,7 +8,10 @@ test_features:
 test_normal:
 	python tests/test_normal.py
 
+test_mixture:
+	python tests/test_mixture.py
 
-test_models: test_normal
+
+test_models: test_normal test_mixture
 test: test_expfamily test_features test_models
 

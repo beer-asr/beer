@@ -1,54 +1,56 @@
 
-"""Bayesian Mixture model."""
+'Bayesian Mixture model.'
 
 from itertools import chain
 from .model import ConjugateExponentialModel
-from ..priors import DirichletPrior
-from scipy.special import logsumexp
-import copy
-import numpy as np
+from ..expfamily import DirichletPrior, kl_div
+import math
+import torch
+import torch.autograd as ta
 
 
 class Mixture(ConjugateExponentialModel):
-    """Bayesian Mixture Model."""
+    'Bayesian Mixture Model.'
 
     @staticmethod
-    def create(n_components, create_component_func, args, prior_count=1):
-        # Create the prior over the weights of the mixture.
-        prior_weights = DirichletPrior.from_std_parameters(
-            np.ones(n_components) * prior_count)
+    def create(n_components, create_component_func, args={}, prior_count=1):
+        '''Create a Bayesian Mixture model.
+
+        Args:
+            n_components (int): number of components in the mixture.
+            create_component_func (function): function to create the
+                mixture components.
+            args (dictionary): arguments to pass to \
+                ``create_component_func``
+            prior_count (float): Strength of the prior over the weights.
+
+        Returns:
+            ``Mixture``: An initialized Mixture model.
+
+        '''
+        # Create the prior/posterior over the weights of the mixture.
+        prior_weights = DirichletPrior(torch.ones(n_components) * prior_count)
+        posterior_weights = DirichletPrior(torch.ones(n_components) * prior_count)
 
         # Create the components of the mixture.
         components = [create_component_func(**args)
                       for i in range(n_components)]
 
-        return Mixture(prior_weights, components)
+        return Mixture(prior_weights, components, posterior_weights)
 
-    def __init__(self, prior_weights, components, posterior_weights=None):
-        """Initialize the Bayesian normal distribution.
-
-        Args:
-            prior_weights (``beer.priors.Dirichlet``): Prior over the
-                weights of the mixture.
-            components (list): List of components of the mixture.
-
-        """
+    def __init__(self, prior_weights, components, posterior_weights):
         # This will be initialize in the _prepare() call.
         self._np_params_matrix = None
-
         self.prior_weights = prior_weights
         self.components = components
-        if posterior_weights is not None:
-            self.posterior_weights = posterior_weights
-        else:
-            self.posterior_weights = copy.deepcopy(prior_weights)
-
+        self.posterior_weights = posterior_weights
         self._prepare()
 
     @property
     def weights(self):
-        """Expected value of the weights."""
-        return np.exp(self.posterior_weights.grad_lognorm(normalize=True))
+        'Expected value of the weights.'
+        w = torch.exp(self.posterior_weights.expected_sufficient_statistics)
+        return w / w.sum()
 
     def sufficient_statistics(self, X):
         """Compute the sufficient statistics of the data.
@@ -60,16 +62,17 @@ class Mixture(ConjugateExponentialModel):
             (numpy.ndarray): Sufficient statistics of the data.
 
         """
-        return np.c_[self.components[0].sufficient_statistics(X),
-                     np.ones(X.shape[0])]
+        return torch.cat([self.components[0].sufficient_statistics(X),
+                     torch.ones(X.size(0))[:, None]], dim=-1)
 
     def _prepare(self):
-        matrix = np.vstack([component.posterior.grad_lognorm()
-            for component in self.components])
-        self._np_params_matrix = np.c_[matrix,
-            self.posterior_weights.grad_lognorm()]
+        matrix = torch.cat([component.posterior.expected_sufficient_statistics[None]
+            for component in self.components], dim=0)
+        self._np_params_matrix = torch.cat([matrix,
+            self.posterior_weights.expected_sufficient_statistics[:, None]], dim=1)
 
     def expected_natural_params(self, mean, var):
+        # TODO: pytorch version
         '''Expected value of the natural parameters of the model given
         the sufficient statistics.
 
@@ -93,50 +96,57 @@ class Mixture(ConjugateExponentialModel):
 
 
     def exp_llh(self, X, accumulate=False):
-        """Expected value of the log-likelihood w.r.t to the posterior
+        '''Expected value of the log-likelihood w.r.t to the posterior
         distribution over the parameters.
 
         Args:
-            X (numpy.ndarray): Data as a matrix.
+            X (Tensor): Data as a matrix.
             accumulate (boolean): If True, returns the accumulated
                 statistics.
 
         Returns:
-            numpy.ndarray: Per-frame expected value of the
-                log-likelihood.
-            numpy.ndarray: Accumulated statistics (if ``accumulate=True``).
+            Tensor: Per-frame expected value of the log-likelihood.
+            tuple(Tensor, Tensor): Accumulated statistics
+                (if ``accumulate=True``).
 
-        """
+        '''
         T = self.sufficient_statistics(X)
 
         # Note: the lognormalizer is already included in the expected
         # value of the natural parameters.
-        per_component_exp_llh = T @ self._np_params_matrix.T
+        per_component_exp_llh = T @ self._np_params_matrix.t()
 
         # Components' responsibilities.
-        exp_llh = logsumexp(per_component_exp_llh, axis=1)
-        resps = np.exp(per_component_exp_llh - exp_llh[:, None])
-        exp_llh -= .5 * X.shape[1] * np.log(2 * np.pi)
+        # The following line is equivatent to:
+        #    >>> scipy.special.logsumexp(per_component_exp_llh, axis=1)
+        s, _ = torch.max(per_component_exp_llh, dim=1, keepdim=True)
+        exp_llh = s + (per_component_exp_llh - s).exp().sum(dim=1, keepdim=True).log()
+
+        resps = torch.exp(per_component_exp_llh - exp_llh)
+
+        # Add the log base measure.
+        exp_llh -= .5 * X.size(1) * math.log(2 * math.pi)
 
         if accumulate:
-            acc_stats = resps.T @ T[:, :-1], resps.sum(axis=0)
+            acc_stats = resps.t() @ T[:, :-1], resps.sum(dim=0)
             return exp_llh, acc_stats
 
         return exp_llh
 
     def kl_div_posterior_prior(self):
-        """KL divergence between the posterior and prior distribution.
+        '''KL divergence between the posterior and prior distribution.
 
         Returns:
             float: KL divergence.
 
-        """
-        return self.posterior_weights.kl_div(self.prior_weights) + \
-            np.sum([component.posterior.kl_div(component.prior)
-                    for component in self.components])
+        '''
+        retval = kl_div(self.posterior_weights, self.prior_weights)
+        for component in self.components:
+            retval += kl_div(component.posterior, component.prior)
+        return retval
 
     def natural_grad_update(self, acc_stats, scale, lrate):
-        """Perform a natural gradient update of the posteriors'
+        '''Perform a natural gradient update of the posteriors'
         parameters.
 
         Args:
@@ -144,23 +154,19 @@ class Mixture(ConjugateExponentialModel):
             scale (float): Scale of the sufficient statistics.
             lrate (float): Learning rate.
 
-        """
+        '''
         comp_stats, weights_stats = acc_stats
 
         # Update the components.
         for i, component in enumerate(self.components):
-            # Compute the natural gradient.
-            natural_grad = component.prior.natural_params \
-                + scale * comp_stats[i] \
-                - component.posterior.natural_params
-
-            # Update the posterior distribution.
-            component.posterior.natural_params += lrate * natural_grad
+            component.natural_grad_update(comp_stats[i], scale, lrate)
 
         # Update the weights.
         natural_grad = self.prior_weights.natural_params \
             + scale * weights_stats - self.posterior_weights.natural_params
-        self.posterior_weights.natural_params += lrate * natural_grad
+        self.posterior_weights.natural_params = ta.Variable(\
+            self.posterior_weights.natural_params + lrate * natural_grad,
+            requires_grad=True)
 
         self._prepare()
 
@@ -168,7 +174,7 @@ class Mixture(ConjugateExponentialModel):
         '''Split each component into two sub-components.
 
         Returns:
-            (``Mixture``): A new mixture with two times more
+            ``Mixture``: A new mixture with two times more
                 components.
 
         '''
