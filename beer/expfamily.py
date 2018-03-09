@@ -67,7 +67,7 @@ def _normalwishart_log_norm(natural_params):
     logdet = 2 * torch.log(torch.diag(torch.potrf(tmp))).sum()
 
     lognorm += -.5 * (np4 + D) * logdet
-    seq = ta.Variable(torch.arange(1, D + 1, 1))
+    seq = ta.Variable(torch.arange(1, D + 1, 1).type(natural_params.type()))
     lognorm += torch.lgamma(.5 * (np4 + D + 1 - seq)).sum()
     return lognorm
 
@@ -185,3 +185,4 @@ def NormalWishartPrior(mean, cov, prior_counts):
         (torch.ones(1) * (dof - D)).type(mean.type())
     ]), requires_grad=True)
     return ExpFamilyDensity(natural_params, _normalwishart_log_norm)
+

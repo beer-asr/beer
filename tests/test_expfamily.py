@@ -1,8 +1,5 @@
-'Test the expfamily model.'
+'Test the expfamily module.'
 
-# (Missing class/method docstring) pylint: disable=C0111
-# (Unordered import modules) pylint: disable=C0413
-# (Module 'torch' has no 'ones' member) pylint: disable=E1101
 
 import numpy as np
 from scipy.special import gammaln, psi
@@ -14,10 +11,13 @@ sys.path.insert(0, './')
 import beer
 
 
+TOLPLACES = 5
+TOL = 10 ** (-TOLPLACES)
 
-########################################################################
-## Computations using numpy for testing.
-########################################################################
+
+#######################################################################
+# Computations using numpy for testing.
+#######################################################################
 
 def dirichlet_log_norm(natural_params):
     return -gammaln(np.sum(natural_params + 1)) \
@@ -81,87 +81,144 @@ def normalwishart_grad_log_norm(natural_params):
     return np.hstack([grad1.reshape(-1), grad2, grad3, grad4])
 
 
-class TestDirichletPrior(unittest.TestCase):
+#######################################################################
+# Abstract base class for implementing the logic of the tests.
+#######################################################################
+
+
+class TestDirichletPrior:
 
     def test_create(self):
-        model = beer.DirichletPrior(torch.ones(4))
+        model = beer.DirichletPrior(self.prior_counts)
         self.assertTrue(isinstance(model, beer.ExpFamilyDensity))
-        self.assertAlmostEqual(model.natural_params.sum(), 0.)
+        self.assertTrue(np.allclose(model.natural_params.numpy(),
+            self.prior_counts.numpy() - 1, rtol=TOL, atol=TOL))
 
     def test_exp_sufficient_statistics(self):
-        model = beer.DirichletPrior(torch.ones(4))
+        model = beer.DirichletPrior(self.prior_counts)
         model_s_stats = model.expected_sufficient_statistics.numpy()
         natural_params = model.natural_params.numpy()
         s_stats = dirichlet_grad_log_norm(natural_params)
-        self.assertTrue(np.allclose(model_s_stats, s_stats))
+        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
 
     def test_kl_divergence(self):
-        model1 = beer.DirichletPrior(torch.ones(4))
-        model2 = beer.DirichletPrior(torch.ones(4))
+        model1 = beer.DirichletPrior(self.prior_counts)
+        model2 = beer.DirichletPrior(self.prior_counts)
         div = beer.kl_div(model1, model2)
         self.assertAlmostEqual(div, 0.)
 
     def test_log_norm(self):
-        model = beer.DirichletPrior(torch.ones(4))
+        model = beer.DirichletPrior(self.prior_counts)
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = dirichlet_log_norm(natural_params)
         self.assertAlmostEqual(model_log_norm, log_norm)
 
 
-class TestNormalGammaPrior(unittest.TestCase):
+class TestNormalGammaPrior:
 
     def test_create(self):
-        model = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
+        model = beer.NormalGammaPrior(self.mean, self.precision,
+                                      self.prior_count)
         self.assertTrue(isinstance(model, beer.ExpFamilyDensity))
 
     def test_exp_sufficient_statistics(self):
-        model = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
+        model = beer.NormalGammaPrior(self.mean, self.precision,
+                                      self.prior_count)
         model_s_stats = model.expected_sufficient_statistics.numpy()
         natural_params = model.natural_params.numpy()
         s_stats = normalgamma_grad_log_norm(natural_params)
-        self.assertTrue(np.allclose(model_s_stats, s_stats))
+        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
 
     def test_kl_divergence(self):
-        model1 = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
-        model2 = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
+        model1 = beer.NormalGammaPrior(self.mean, self.precision,
+                                       self.prior_count)
+        model2 = beer.NormalGammaPrior(self.mean, self.precision,
+                                       self.prior_count)
         div = beer.kl_div(model1, model2)
         self.assertAlmostEqual(div, 0.)
 
     def test_log_norm(self):
-        model = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
+        model = beer.NormalGammaPrior(self.mean, self.precision,
+                                      self.prior_count)
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = normalgamma_log_norm(natural_params)
         self.assertAlmostEqual(model_log_norm, log_norm)
 
 
-class TestNormalWishartPrior(unittest.TestCase):
+class TestNormalWishartPrior:
 
     def test_create(self):
-        model = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
+        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
         self.assertTrue(isinstance(model, beer.ExpFamilyDensity))
 
     def test_exp_sufficient_statistics(self):
-        model = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
+        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
         model_s_stats = model.expected_sufficient_statistics.numpy()
         natural_params = model.natural_params.numpy()
         s_stats = normalwishart_grad_log_norm(natural_params)
-        self.assertTrue(np.allclose(model_s_stats, s_stats))
+        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
 
     def test_kl_divergence(self):
-        model1 = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
-        model2 = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
+        model1 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        model2 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
         div = beer.kl_div(model1, model2)
         self.assertAlmostEqual(div, 0.)
 
     def test_log_norm(self):
-        model = beer.NormalWishartPrior(torch.zeros(10), torch.eye(10), 1.)
+        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = normalwishart_log_norm(natural_params)
         self.assertAlmostEqual(model_log_norm, log_norm, places=4)
 
 
+#######################################################################
+# Testing condition.
+#######################################################################
+
+
+tests = [
+    (TestDirichletPrior, {'prior_counts': torch.ones(1).float()}),
+    (TestDirichletPrior, {'prior_counts': torch.ones(1).double()}),
+    (TestDirichletPrior, {'prior_counts': torch.ones(2).float()}),
+    (TestDirichletPrior, {'prior_counts': torch.ones(2).float()}),
+    (TestDirichletPrior, {'prior_counts': torch.ones(10).double()}),
+    (TestDirichletPrior, {'prior_counts': torch.ones(10).double()}),
+    (TestDirichletPrior, {'prior_counts': torch.FloatTensor([1, 2, 3, 4, 5])}),
+    (TestDirichletPrior, {'prior_counts': torch.DoubleTensor([1, 2, 3, 4, 5])}),
+
+    (TestNormalGammaPrior, {'mean': torch.zeros(2).float(), 'precision': torch.ones(2).float(), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.zeros(2).double(), 'precision': torch.ones(2).double(), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'precision': torch.ones(2).float(), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'precision': torch.ones(2).double(), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e-3}),
+    (TestNormalGammaPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e-8}),
+    (TestNormalGammaPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e4}),
+    (TestNormalGammaPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e8}),
+
+    (TestNormalWishartPrior, {'mean': torch.zeros(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.zeros(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float(), 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double(), 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e-3}),
+    (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e-8}),
+    (TestNormalWishartPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e2}),
+    (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8}),
+]
+
+
+module = sys.modules[__name__]
+for i, test in enumerate(tests, start=1):
+    name = test[0].__name__ + 'Test' + str(i)
+    setattr(module, name, type(name, (unittest.TestCase, test[0]),  test[1]))
+
+
 if __name__ == '__main__':
     unittest.main()
+
