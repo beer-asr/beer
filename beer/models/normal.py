@@ -15,7 +15,7 @@ import math
 
 
 class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
-    '''Abstract Base Class for the Normal distribution model.'''
+    'Abstract Base Class for the Normal distribution model.'
 
 
     @staticmethod
@@ -176,7 +176,7 @@ class NormalDiagonalCovariance(Normal):
 
     @staticmethod
     def create(prior_mean, prior_cov, prior_count=1., random_init=False):
-        diag_cov = prior_prec if len(prior_cov.size()) == 1 else \
+        diag_cov = prior_cov if len(prior_cov.size()) == 1 else \
             torch.diag(prior_cov)
         diag_prec = 1. / diag_cov
 
@@ -231,7 +231,7 @@ class NormalDiagonalCovariance(Normal):
     @property
     def count(self):
         np1, _, _, np4 = self.posterior.expected_sufficient_statistics.view(4, -1)
-        return (self.posterior.natural_params[-1] + 1) /  (-4 * np1[-1])
+        return float((self.posterior.natural_params[-1] + 1) /  (-4 * np1[-1]))
 
     def expected_natural_params(self, mean, var):
         # TODO: pytorch version.
@@ -324,7 +324,7 @@ class NormalFullCovariance(Normal):
 
     @property
     def count(self):
-        return self.posterior.natural_params[-1]
+        return float(self.posterior.natural_params[-1])
 
     def expected_natural_params(self, mean, var):
         # TODO: pytorch version.

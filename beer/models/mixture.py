@@ -13,24 +13,25 @@ class Mixture(ConjugateExponentialModel):
     'Bayesian Mixture Model.'
 
     @staticmethod
-    def create(n_components, create_component_func, args={}, prior_count=1):
+    def create(prior_counts, create_component_func, args={}):
         '''Create a Bayesian Mixture model.
 
         Args:
-            n_components (int): number of components in the mixture.
+            prior_count (Tensor): Prior count for each class.
             create_component_func (function): function to create the
                 mixture components.
             args (dictionary): arguments to pass to \
                 ``create_component_func``
-            prior_count (float): Strength of the prior over the weights.
 
         Returns:
             ``Mixture``: An initialized Mixture model.
 
         '''
+        n_components = len(prior_counts)
+
         # Create the prior/posterior over the weights of the mixture.
-        prior_weights = DirichletPrior(torch.ones(n_components) * prior_count)
-        posterior_weights = DirichletPrior(torch.ones(n_components) * prior_count)
+        prior_weights = DirichletPrior(prior_counts)
+        posterior_weights = DirichletPrior(prior_counts)
 
         # Create the components of the mixture.
         components = [create_component_func(**args)
@@ -62,8 +63,9 @@ class Mixture(ConjugateExponentialModel):
             (numpy.ndarray): Sufficient statistics of the data.
 
         """
+        ones = torch.ones(X.size(0)).type(X.type())
         return torch.cat([self.components[0].sufficient_statistics(X),
-                     torch.ones(X.size(0))[:, None]], dim=-1)
+                     ones[:, None]], dim=-1)
 
     def _prepare(self):
         matrix = torch.cat([component.posterior.expected_sufficient_statistics[None]
@@ -126,6 +128,10 @@ class Mixture(ConjugateExponentialModel):
 
         # Add the log base measure.
         exp_llh -= .5 * X.size(1) * math.log(2 * math.pi)
+
+        # Make sure it is a single dimension vector.
+        exp_llh = exp_llh.view(-1)
+
 
         if accumulate:
             acc_stats = resps.t() @ T[:, :-1], resps.sum(dim=0)

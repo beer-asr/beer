@@ -26,7 +26,6 @@ def _exp_stats_and_log_norm(natural_params, log_norm_fn):
 ########################################################################
 
 def _dirichlet_log_norm(natural_params):
-    # (Module 'torch' has no 'lgamma' member) pylint: disable=E1101
     return - torch.lgamma((natural_params + 1).sum()) \
         + torch.lgamma(natural_params + 1).sum()
 

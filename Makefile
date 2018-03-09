@@ -1,15 +1,15 @@
 
 test_expfamily:
-	python tests/test_expfamily.py
+	python tests/test_expfamily.py -f -v
 
 test_features:
-	python tests/test_features.py
+	python tests/test_features.py -f -v
 
 test_normal:
-	python tests/test_normal.py
+	python tests/test_normal.py -f -v
 
 test_mixture:
-	python tests/test_mixture.py
+	python tests/test_mixture.py -f -v
 
 
 test_models: test_normal test_mixture

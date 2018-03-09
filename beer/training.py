@@ -75,7 +75,7 @@ def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e
 
 def train_loglinear_model(model, data, mini_batch_size=-1, max_epochs=1, seed=None,
         lrate=1., callback=None):
-    ''' Train a VAE model.
+    '''Train a VAE model.
 
     Args:
         model (ConjugateExponentialModel): the model to train
@@ -83,7 +83,9 @@ def train_loglinear_model(model, data, mini_batch_size=-1, max_epochs=1, seed=No
         mini_batch_size (int): size of minibatch; -1 for all data in one batch
         max_epochs (int): number of epochs
         lrate (float): learning rate for natural gradient updates
-        callback (): function to collect training progress. Not extremely versatile now
+        callback (function): Function to collect training progress.
+            Not extremely versatile now
+
     '''
     data_size = float(data.size(0))
     mb_size = mini_batch_size if mini_batch_size > 0 else len(data)
