@@ -10,7 +10,6 @@ from .model import ConjugateExponentialModel
 from ..expfamily import NormalGammaPrior, NormalWishartPrior, kl_div
 import torch
 import torch.autograd as ta
-import numpy as np
 import math
 
 
@@ -42,10 +41,10 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         """Compute the sufficient statistics of the data.
 
         Args:
-            X (numpy.ndarray): Data.
+            X (Tensor): Data.
 
         Returns:
-            (numpy.ndarray): Sufficient statistics of the data.
+            (Tensor): Sufficient statistics of the data.
 
         """
         NotImplemented
@@ -56,10 +55,11 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         """Compute the sufficient statistics of the data.
 
         Args:
-            X (numpy.ndarray): Data.
+            X (Tensor): Data.
 
         Returns:
-            (numpy.ndarray): Sufficient statistics of the data.
+            (Tensor): Sufficient statistics of the data.
+
 
         """
         NotImplemented
@@ -71,12 +71,12 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         in term of a mean and variance for each data point.
 
         Args:
-            mean (numpy.ndarray): Means for each point of the data.
-            var (numpy.ndarray): Variances for each point (and
+            mean (Tensor): Means for each point of the data.
+            var (Tensor): Variances for each point (and
                 dimension) of the data.
 
         Returns:
-            (numpy.ndarray): Sufficient statistics of the data.
+            (Tensor): Sufficient statistics of the data.
 
         """
         NotImplemented
@@ -107,12 +107,12 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         '''Expected value of the natural parameters of the model.
 
         Args:
-            mean (numpy.ndarray): Mean for each data point.
-            var (numpy.ndarray): Variances for each point/dimension.
+            mean (Tensor): Mean for each data point.
+            var (Tensor): Variances for each point/dimension.
 
         Returns:
-            (numpy.ndarray): Expected natural parameters.
-            (numpy.ndarray): Accumulated statistics of the data.
+            (Tensor): Expected natural parameters.
+            (Tensor): Accumulated statistics of the data.
 
         '''
         NotImplemented
@@ -157,18 +157,11 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
             ``Normal``: Second Normal distribution.
 
         '''
-        dim = len(self.mean)
-        evals, evecs = np.linalg.eigh(self.cov)
-        basis = evals
-
-        dist1 = self.create(dim=dim,
-            mean=self.mean + evecs.T @  np.sqrt(basis),
-            cov=self.cov, prior_count=prior_count)
-        dist2 = self.create(dim=dim,
-            mean=self.mean - evecs.T @  np.sqrt(basis),
-            cov=self.cov, prior_count=prior_count)
-
-        return dist1, dist2
+        evals, evecs = torch.symeig(self.cov, eigenvectors=True)
+        mean1 = self.mean + evecs.t() @ torch.sqrt(evals)
+        mean2 = self.mean - evecs.t() @ torch.sqrt(evals)
+        return self.create(mean1, self.cov, self.count), \
+            self.create(mean2, self.cov, self.count)
 
 
 class NormalDiagonalCovariance(Normal):
@@ -185,10 +178,7 @@ class NormalDiagonalCovariance(Normal):
                 prior_mean.size(0), diag_prec.size(0)))
         prior = NormalGammaPrior(prior_mean, diag_prec, prior_count)
         if random_init:
-            rand_mean = np.random.multivariate_normal(prior_mean.numpy(),
-                np.diag(diag_prec.numpy()))
-            rand_mean = torch.from_numpy(rand_mean)
-            rand_mean = rand_mean.type(prior_mean.type())
+            rand_mean = torch.normal(prior_mean, torch.sqrt(diag_cov))
             posterior = NormalGammaPrior(rand_mean, diag_prec, prior_count)
         else:
             posterior = NormalGammaPrior(prior_mean, diag_prec, prior_count)
@@ -284,10 +274,7 @@ class NormalFullCovariance(Normal):
                 prior_mean.size(0), prior_cov.size(0)))
         prior = NormalWishartPrior(prior_mean, prior_cov, prior_count)
         if random_init:
-            rand_mean = np.random.multivariate_normal(prior_mean.numpy(),
-                prior_cov.numpy().astype(np.float64))
-            rand_mean = torch.from_numpy(rand_mean)
-            rand_mean = rand_mean.type(prior_mean.type())
+            rand_mean = torch.normal(prior_mean, torch.sqrt(torch.diag(prior_cov)))
             posterior = NormalWishartPrior(rand_mean, prior_cov, prior_count)
         else:
             posterior = NormalWishartPrior(prior_mean, prior_cov, prior_count)

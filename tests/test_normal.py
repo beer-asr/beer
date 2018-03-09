@@ -66,6 +66,18 @@ class TestNormalDiagonalCovariance:
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), rtol=TOL,
                         atol=TOL))
 
+    def test_split(self):
+        model = beer.NormalDiagonalCovariance.create(self.mean, self.cov,
+            self.prior_count)
+        smodel1, smodel2 = model.split()
+
+        cov = model.cov.numpy()
+        evals, evecs = np.linalg.eigh(cov)
+        m1 = model.mean.numpy() + evecs.T @ np.sqrt(evals)
+        m2 = model.mean.numpy() - evecs.T @ np.sqrt(evals)
+        self.assertTrue(np.allclose(m1, smodel1.mean.numpy(), atol=TOL))
+        self.assertTrue(np.allclose(m2, smodel2.mean.numpy(), atol=TOL))
+
 
 class TestNormalFullCovariance:
 
@@ -106,6 +118,18 @@ class TestNormalFullCovariance:
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
                         atol=TOL))
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
+
+    def test_split(self):
+        model = beer.NormalFullCovariance.create(self.mean, self.cov,
+            self.prior_count)
+        smodel1, smodel2 = model.split()
+
+        cov = model.cov.numpy()
+        evals, evecs = np.linalg.eigh(cov)
+        m1 = model.mean.numpy() + evecs.T @ np.sqrt(evals)
+        m2 = model.mean.numpy() - evecs.T @ np.sqrt(evals)
+        self.assertTrue(np.allclose(m1, smodel1.mean.numpy(), atol=TOL))
+        self.assertTrue(np.allclose(m2, smodel2.mean.numpy(), atol=TOL))
 
 
 data = torch.randn(20, 2)
