@@ -52,6 +52,18 @@ class TestNormalDiagonalCovariance:
         s2 = beer.NormalDiagonalCovariance.sufficient_statistics(self.X)
         self.assertTrue(np.allclose(s1, s2.numpy(), atol=TOL))
 
+    def test_sufficient_statistics_from_mean_var(self):
+        mean = self.mean.view(1, -1)
+        var = self.cov.view(1, -1)
+        if len(var.size()) == 2:
+            var = torch.diag(var)
+        s1 = beer.NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
+            mean, var)
+        mean, var = mean.numpy(), var.numpy()
+        s2 = np.c_[mean**2 + var, mean, np.ones_like(mean),
+                   np.ones_like(mean)]
+        self.assertTrue(np.allclose(s1.numpy(), s2, atol=TOL))
+
     def test_exp_llh(self):
         model = beer.NormalDiagonalCovariance.create(self.mean, self.cov,
             self.prior_count)
@@ -105,6 +117,18 @@ class TestNormalFullCovariance:
             X, np.ones(len(X)), np.ones(len(X))]
         s2 = beer.NormalFullCovariance.sufficient_statistics(self.X)
         self.assertTrue(np.allclose(s1, s2.numpy(), atol=TOL))
+
+    def test_sufficient_statistics_from_mean_var(self):
+        mean = self.mean.view(1, -1)
+        var = torch.diag(self.cov).view(1, -1)
+        s1 = beer.NormalFullCovariance.sufficient_statistics_from_mean_var(
+            mean, var)
+        mean, var = mean.numpy(), var.numpy()
+        idxs = np.identity(mean.shape[1]).reshape(-1) == 1
+        XX = (mean[:, :, None] * mean[:, None, :]).reshape(mean.shape[0], -1)
+        XX[:, idxs] += var
+        s2 = np.c_[XX, mean, np.ones(len(mean)), np.ones(len(mean))]
+        self.assertTrue(np.allclose(s1.numpy(), s2, atol=TOL))
 
     def test_exp_llh(self):
         model = beer.NormalFullCovariance.create(self.mean, self.cov,

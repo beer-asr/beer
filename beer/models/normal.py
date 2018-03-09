@@ -192,8 +192,8 @@ class NormalDiagonalCovariance(Normal):
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        return np.c_[mean**2 + var, mean, np.ones_like(mean),
-                     np.ones_like(mean)]
+        return torch.cat([mean ** 2 + var, mean, torch.ones_like(mean),
+                          torch.ones_like(mean)], dim=-1)
 
     def __init__(self, prior, posterior):
         '''Initialize the Bayesian normal distribution.
@@ -288,10 +288,11 @@ class NormalFullCovariance(Normal):
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        idxs = np.identity(mean.shape[1]).reshape(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).reshape(mean.shape[0], -1)
+        idxs = torch.eye(mean.size(1)).view(-1) == 1
+        XX = (mean[:, :, None] * mean[:, None, :]).view(mean.shape[0], -1)
         XX[:, idxs] += var
-        return np.c_[XX, mean, np.ones(len(mean)), np.ones(len(mean))]
+        return torch.cat([XX, mean, torch.ones(len(mean), 1).type(mean.type()),
+            torch.ones(len(mean), 1).type(mean.type())], dim=-1)
 
     def __init__(self, prior, posterior=None):
         self.prior = prior
