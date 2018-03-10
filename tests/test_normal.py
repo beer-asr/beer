@@ -188,34 +188,57 @@ class TestNormalFullCovariance:
         self.assertTrue(np.allclose(Ts1.numpy(), Ts2, atol=TOL))
 
 
-data = torch.randn(20, 2)
-data10 = torch.randn(20, 10)
-tests = [
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float(), 'prior_count': 1., 'X': data.float()}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.ones(2).double(), 'prior_count': 1., 'X': data.double()}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(10).float(), 'cov': torch.ones(10).float(), 'prior_count': 1., 'X': data10.float()}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(10).double(), 'cov': torch.ones(10).double(), 'prior_count': 1., 'X': data10.double()}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1., 'X': data.float()}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1., 'X': data.double()}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float(), 'prior_count': 1e-3, 'X': data.float()}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.ones(2).double(), 'prior_count': 1e-8, 'X': data.double()}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float() * 1e-5, 'prior_count': 1., 'X': data.float()}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.ones(2).double() * 1e-8, 'prior_count': 1., 'X': data.double()}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float() * 1e2, 'prior_count': 1., 'X': data.float()}),
+dataF = {
+    'X': torch.randn(20, 2).float(),
+    'means': torch.randn(20, 2).float(),
+    'vars': torch.randn(20, 2).float() ** 2
+}
 
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1., 'X': data.float()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1., 'X': data.double()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.FloatTensor([[2, -1.2], [-1.2, 10.]]).float(), 'prior_count': 1., 'X': data.float()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.DoubleTensor([[2, -1.2], [-1.2, 10.]]).float(), 'prior_count': 1., 'X': data.float()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(10).float(), 'cov': torch.eye(10).float(), 'prior_count': 1., 'X': data10.float()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(10).double(), 'cov': torch.eye(10).double(), 'prior_count': 1., 'X': data10.double()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1e-3, 'X': data.float()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1e-7, 'X': data.double()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float() * 1e-5, 'prior_count': 1., 'X': data.float()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1., 'X': data.double()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float() * 1e2, 'prior_count': 1., 'X': data.float()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., 'X': data.double()}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., 'X': data.double()}),
+dataD = {
+    'X': torch.randn(20, 2).double(),
+    'means': torch.randn(20, 2).double(),
+    'vars': torch.randn(20, 2).double() ** 2
+}
+
+data10F = {
+    'X': torch.randn(20, 10).float(),
+    'means': torch.randn(20, 10).float(),
+    'vars': torch.randn(20, 10).float() ** 2
+}
+
+data10D = {
+    'X': torch.randn(20, 10).double(),
+    'means': torch.randn(20, 10).double(),
+    'vars': torch.randn(20, 2).double() ** 2
+}
+
+
+tests = [
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float(), 'prior_count': 1., **dataF}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.ones(2).double(), 'prior_count': 1., **dataD}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(10).float(), 'cov': torch.ones(10).float(), 'prior_count': 1., **data10F}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(10).double(), 'cov': torch.ones(10).double(), 'prior_count': 1., **data10D}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1., **dataF}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1., **dataD}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float(), 'prior_count': 1e-3, **dataF}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.ones(2).double(), 'prior_count': 1e-8, **dataD}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float() * 1e-5, 'prior_count': 1., **dataF}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.ones(2).double() * 1e-8, 'prior_count': 1., **dataD}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float() * 1e2, 'prior_count': 1., **dataF}),
+
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1., **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1., **dataD}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.FloatTensor([[2, -1.2], [-1.2, 10.]]).float(), 'prior_count': 1., **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.DoubleTensor([[2, -1.2], [-1.2, 10.]]).float(), 'prior_count': 1., **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(10).float(), 'cov': torch.eye(10).float(), 'prior_count': 1., **data10F}),
+    (TestNormalFullCovariance, {'mean': torch.ones(10).double(), 'cov': torch.eye(10).double(), 'prior_count': 1., **data10D}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1e-3, **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1e-7, **dataD}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float() * 1e-5, 'prior_count': 1., **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1., **dataD}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float() * 1e2, 'prior_count': 1., **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., **dataD}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., **dataD}),
 ]
 
 

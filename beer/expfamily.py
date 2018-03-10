@@ -9,7 +9,6 @@ import torch.autograd as ta
 
 
 def _bregman_divergence(F_p, F_q, grad_F_q, p, q):
-    # (Invalid Argument Name) pylint: disable=C0103
     return F_p - F_q - grad_F_q @ (p - q)
 
 

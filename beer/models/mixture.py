@@ -9,6 +9,13 @@ import torch
 import torch.autograd as ta
 
 
+
+def _logsumexp(tensor):
+    'Equivatent to: scipy.special.logsumexp(tensor, axis=1)'
+    s, _ = torch.max(tensor, dim=1, keepdim=True)
+    return s + (tensor - s).exp().sum(dim=1, keepdim=True).log()
+
+
 class Mixture(ConjugateExponentialModel):
     'Bayesian Mixture Model.'
 
@@ -54,7 +61,7 @@ class Mixture(ConjugateExponentialModel):
         return w / w.sum()
 
     def sufficient_statistics(self, X):
-        """Compute the sufficient statistics of the data.
+        '''Compute the sufficient statistics of the data.
 
         Args:
             X (numpy.ndarray): Data.
@@ -62,7 +69,7 @@ class Mixture(ConjugateExponentialModel):
         Returns:
             (numpy.ndarray): Sufficient statistics of the data.
 
-        """
+        '''
         ones = torch.ones(X.size(0)).type(X.type())
         return torch.cat([self.components[0].sufficient_statistics(X),
                      ones[:, None]], dim=-1)
@@ -80,19 +87,19 @@ class Mixture(ConjugateExponentialModel):
 
         '''
         T = self.components[0].sufficient_statistics_from_mean_var(mean, var)
-        T2 = np.c_[T, np.ones(T.shape[0])]
+        T2 = torch.cat([T, torch.ones(T.size(0), 1).type(mean.type())], dim=-1)
 
         # Inference.
-        per_component_exp_llh = T2 @ self._np_params_matrix.T
-        exp_llh = logsumexp(per_component_exp_llh, axis=1)
-        resps = np.exp(per_component_exp_llh - exp_llh[:, None])
+        per_component_exp_llh = T2 @ self._np_params_matrix.t()
+        exp_llh = _logsumexp(per_component_exp_llh)
+        resps = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
 
         # Build the matrix of expected natural parameters.
-        matrix = np.c_[[component.expected_natural_params(mean, var)[0][0]
-                        for component in self.components]]
+        matrix = torch.cat([component.expected_natural_params(mean, var)[0]
+            for component in self.components], dim=0)
 
         # Accumulate the sufficient statistics.
-        acc_stats = resps.T @ T2[:, :-1], resps.sum(axis=0)
+        acc_stats = resps.t() @ T2[:, :-1], resps.sum(dim=0)
 
         return (resps @ matrix), acc_stats
 
@@ -119,11 +126,7 @@ class Mixture(ConjugateExponentialModel):
         per_component_exp_llh = T @ self._np_params_matrix.t()
 
         # Components' responsibilities.
-        # The following line is equivatent to:
-        #    >>> scipy.special.logsumexp(per_component_exp_llh, axis=1)
-        s, _ = torch.max(per_component_exp_llh, dim=1, keepdim=True)
-        exp_llh = s + (per_component_exp_llh - s).exp().sum(dim=1, keepdim=True).log()
-
+        exp_llh = _logsumexp(per_component_exp_llh)
         resps = torch.exp(per_component_exp_llh - exp_llh)
 
         # Add the log base measure.

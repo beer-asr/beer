@@ -88,13 +88,43 @@ class TestMixture:
         self.assertTrue(np.allclose(model2.posterior_weights.natural_params.numpy(),
             post_np, atol=TOL))
 
+    def test_expected_natural_params(self):
+        model = beer.Mixture.create(self.prior_counts, self.comp_type.create,
+            self.args)
+
+        enp1, Ts1 = model.expected_natural_params(self.means, self.vars)
+        T = model.components[0].sufficient_statistics_from_mean_var(self.means,
+            self.vars).numpy()
+        T2 = np.c_[T, np.ones(T.shape[0])]
+        per_component_exp_llh = T2 @ model._np_params_matrix.numpy().T
+        exp_llh = logsumexp(per_component_exp_llh, axis=1)
+        resps = np.exp(per_component_exp_llh - exp_llh[:, None])
+        matrix = np.c_[[component.expected_natural_params(self.means,
+                        self.vars)[0][0].numpy()
+                        for component in model.components]]
+        acc_stats = resps.T @ T2[:, :-1], resps.sum(axis=0)
+        enp2, Ts2 = resps @ matrix, acc_stats
+
+        self.assertTrue(np.allclose(enp1.numpy(), enp2, atol=TOL))
+        self.assertTrue(np.allclose(Ts1[0].numpy(), Ts2[0], atol=TOL))
+        self.assertTrue(np.allclose(Ts1[1].numpy(), Ts2[1], atol=TOL))
 
 
 torch.manual_seed(10)
-data = torch.randn(20, 2)
+dataF = {
+    'X': torch.randn(20, 2).float(),
+    'means': torch.randn(20, 2).float(),
+    'vars': torch.randn(20, 2).float() ** 2
+}
+
+dataD = {
+    'X': torch.randn(20, 2).double(),
+    'means': torch.randn(20, 2).double(),
+    'vars': torch.randn(20, 2).double() ** 2
+}
 
 gmm_diag1F = {
-    'X': data.float(),
+    **dataF,
     'prior_counts': torch.ones(10).float(),
     'comp_type': beer.NormalDiagonalCovariance,
     'args': {
@@ -106,7 +136,7 @@ gmm_diag1F = {
 }
 
 gmm_diag1D = {
-    'X': data.double(),
+    **dataD,
     'prior_counts': torch.ones(10).double(),
     'comp_type': beer.NormalDiagonalCovariance,
     'args': {
@@ -118,7 +148,7 @@ gmm_diag1D = {
 }
 
 gmm_diag2F = {
-    'X': data.float(),
+    **dataF,
     'prior_counts': torch.ones(1).float(),
     'comp_type': beer.NormalDiagonalCovariance,
     'args': {
@@ -130,7 +160,7 @@ gmm_diag2F = {
 }
 
 gmm_diag2D = {
-    'X': data.double(),
+    **dataD,
     'prior_counts': torch.ones(1).double(),
     'comp_type': beer.NormalDiagonalCovariance,
     'args': {
@@ -142,7 +172,7 @@ gmm_diag2D = {
 }
 
 gmm_diag3F = {
-    'X': data.float(),
+    **dataF,
     'prior_counts': 1,
     'prior_counts': torch.ones(2).float(),
     'comp_type': beer.NormalDiagonalCovariance,
@@ -155,7 +185,7 @@ gmm_diag3F = {
 }
 
 gmm_diag3D = {
-    'X': data.double(),
+    **dataD,
     'prior_counts': torch.ones(2).double(),
     'comp_type': beer.NormalDiagonalCovariance,
     'args': {
@@ -167,7 +197,7 @@ gmm_diag3D = {
 }
 
 gmm_diag4F = {
-    'X': data.float(),
+    **dataF,
     'prior_counts': torch.range(1, 10).float(),
     'comp_type': beer.NormalDiagonalCovariance,
     'args': {
@@ -179,7 +209,7 @@ gmm_diag4F = {
 }
 
 gmm_diag4D = {
-    'X': data.double(),
+    **dataD,
     'prior_counts': torch.range(1, 10).double(),
     'comp_type': beer.NormalDiagonalCovariance,
     'args': {
@@ -192,7 +222,7 @@ gmm_diag4D = {
 
 
 gmm_full1F = {
-    'X': data.float(),
+    **dataF,
     'prior_counts': torch.ones(10).float(),
     'comp_type': beer.NormalFullCovariance,
     'args': {
@@ -204,7 +234,7 @@ gmm_full1F = {
 }
 
 gmm_full1D = {
-    'X': data.double(),
+    **dataD,
     'prior_counts': torch.ones(10).double(),
     'comp_type': beer.NormalFullCovariance,
     'args': {
@@ -216,7 +246,7 @@ gmm_full1D = {
 }
 
 gmm_full2F = {
-    'X': data.float(),
+    **dataF,
     'prior_counts': torch.ones(1).float(),
     'comp_type': beer.NormalFullCovariance,
     'args': {
@@ -228,7 +258,7 @@ gmm_full2F = {
 }
 
 gmm_full2D = {
-    'X': data.double(),
+    **dataD,
     'prior_counts': torch.ones(1).double(),
     'comp_type': beer.NormalFullCovariance,
     'args': {
@@ -240,7 +270,7 @@ gmm_full2D = {
 }
 
 gmm_full3F = {
-    'X': data.float(),
+    **dataF,
     'prior_counts': torch.ones(2).float(),
     'comp_type': beer.NormalFullCovariance,
     'args': {
@@ -252,7 +282,7 @@ gmm_full3F = {
 }
 
 gmm_full3D = {
-    'X': data.double(),
+    **dataD,
     'prior_counts': torch.ones(2).double(),
     'comp_type': beer.NormalFullCovariance,
     'args': {

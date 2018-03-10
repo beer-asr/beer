@@ -35,7 +35,8 @@ def plot_latent_model(fig, latent_model, alpha=1., color='blue'):
     if 'Mixture' in str(type(latent_model)):
         plot_gmm(fig, latent_model, alpha, color)
     elif 'Normal' in str(type(latent_model)):
-        plot_normal(fig, latent_model.mean, latent_model.cov, alpha, color)
+        plot_normal(fig, latent_model.mean.numpy(), 
+                    latent_model.cov.numpy(), alpha, color)
     else:
         raise ValueError
 

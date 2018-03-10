@@ -34,12 +34,13 @@ def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e
 
     optimizer = optim.Adam(model.parameters(), lr=lrate, weight_decay=1e-6)
     data_size = np.prod(data.shape[:-1])
-
     mb_size = mini_batch_size if mini_batch_size > 0 else len(data)
+    dataloader = DataLoader(data, batch_size=mb_size, shuffle=True)
+
     for epoch in range(1, max_epochs + 1):
-        for mini_batch in mini_batches(data, mb_size, seed):
+        for mini_batch in dataloader:
             # Forward the data through the VAE.
-            X = Variable(torch.from_numpy(mini_batch).float())
+            X = Variable(mini_batch)
             state = model(X, sample)
 
             nb_datapoints_in_batch = np.prod(mini_batch.shape[:-1])
@@ -65,13 +66,14 @@ def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e
                 scale=scale, lrate=latent_model_lrate)
 
             # Full elbo (including the KL div. of the latent model).
-            latent_model_kl = model.latent_model.kl_div_posterior_prior() / data_size
-            lower_bound = -loss.data.numpy()[0] - latent_model_kl
-            llh = llh.data.numpy()[0] / nb_datapoints_in_batch
-            kld = kld.data.numpy()[0] / nb_datapoints_in_batch + latent_model_kl
+            latent_model_kl = \
+                model.latent_model.kl_div_posterior_prior() / float(data_size)
+            lower_bound = -loss.data.numpy() - latent_model_kl
+            llh = llh.data.numpy() / nb_datapoints_in_batch
+            kld = kld.data.numpy() / nb_datapoints_in_batch + latent_model_kl
 
             if callback is not None:
-                callback(lower_bound, llh, kld)
+                callback(float(lower_bound), float(llh), float(kld))
 
 def train_loglinear_model(model, data, mini_batch_size=-1, max_epochs=1, seed=None,
         lrate=1., callback=None):
