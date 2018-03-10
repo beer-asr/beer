@@ -1,16 +1,20 @@
 
-"""Bayesian Normal distribution with prior over the mean and
+'''Bayesian Normal distribution with prior over the mean and
 covariance matrix.
 
-"""
+'''
 
 import abc
 import math
-from .model import ConjugateExponentialModel
-from ..expfamily import NormalGammaPrior, NormalWishartPrior, kl_div
+
 import torch
 import torch.autograd as ta
-import math
+
+from .model import ConjugateExponentialModel
+from ..expfamily import NormalGammaPrior
+from ..expfamily import NormalWishartPrior
+from ..expfamily import kl_div
+from ..expfamily import _normalwishart_split_nparams
 
 
 class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
@@ -38,7 +42,7 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
     @staticmethod
     @abc.abstractmethod
     def sufficient_statistics(X):
-        """Compute the sufficient statistics of the data.
+        '''Compute the sufficient statistics of the data.
 
         Args:
             X (Tensor): Data.
@@ -46,13 +50,13 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         Returns:
             (Tensor): Sufficient statistics of the data.
 
-        """
+        '''
         NotImplemented
 
     @staticmethod
     @abc.abstractmethod
     def sufficient_statistics(X):
-        """Compute the sufficient statistics of the data.
+        '''Compute the sufficient statistics of the data.
 
         Args:
             X (Tensor): Data.
@@ -61,13 +65,13 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
             (Tensor): Sufficient statistics of the data.
 
 
-        """
+        '''
         NotImplemented
 
     @staticmethod
     @abc.abstractmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        """Compute the sufficient statistics of the data specified
+        '''Compute the sufficient statistics of the data specified
         in term of a mean and variance for each data point.
 
         Args:
@@ -78,7 +82,7 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         Returns:
             (Tensor): Sufficient statistics of the data.
 
-        """
+        '''
         NotImplemented
 
     @property
@@ -118,16 +122,16 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         NotImplemented
 
     def kl_div_posterior_prior(self):
-        """KL divergence between the posterior and prior distribution.
+        '''KL divergence between the posterior and prior distribution.
 
         Returns:
             float: KL divergence.
 
-        """
+        '''
         return kl_div(self.posterior, self.prior)
 
     def natural_grad_update(self, acc_stats, scale, lrate):
-        """Perform a natural gradient update of the posteriors'
+        '''Perform a natural gradient update of the posteriors'
         parameters.
 
         Args:
@@ -135,7 +139,7 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
             scale (float): Scale of the sufficient statistics.
             lrate (float): Learning rate.
 
-        """
+        '''
         # Compute the natural gradient.
         natural_grad = self.prior.natural_params + scale * acc_stats \
             - self.posterior.natural_params
@@ -224,14 +228,16 @@ class NormalDiagonalCovariance(Normal):
         return float((self.posterior.natural_params[-1] + 1) /  (-4 * np1[-1]))
 
     def expected_natural_params(self, mean, var):
-        # TODO: pytorch version.
         T = self.sufficient_statistics_from_mean_var(mean, var)
-        np1, np2, np3, np4 = self.posterior.grad_lognorm().reshape(4, -1)
-        identity = np.eye(var.shape[1])
-        np1 = (np1[:, None] * identity[None, :, :]).reshape(-1)
-        return np.c_[np1[None], np2[None], np3.sum(axis=-1)[None],
-                     np4.sum(axis=-1)[None]], \
-             T.sum(axis=0)
+        np1, np2, np3, np4 = \
+            self.posterior.expected_sufficient_statistics.view(4, -1)
+        identity = torch.eye(var.size(1)).type(np1.type())
+        np1 = (np1[:, None] * identity[None, :, :]).view(-1)
+        return torch.cat([
+            np1.view(1, -1), np2.view(1, -1),
+            np3.sum(dim=-1).view(1, -1),
+            np4.sum(dim=-1).view(1, -1)], dim=-1), \
+            T.sum(dim=0)
 
     def exp_llh(self, X, accumulate=False):
         T = self.sufficient_statistics(X)
@@ -251,21 +257,6 @@ class NormalDiagonalCovariance(Normal):
 
 class NormalFullCovariance(Normal):
     'Bayesian Normal distribution with diagonal covariance matrix.'
-
-    @staticmethod
-    def __extract_natural_params(natural_params):
-        # TODO: this code is already in the the 'expfamily' module.
-        # We need to retrieve the 4 natural parameters organized as
-        # follows:
-        #   [ np1_1, ..., np1_D^2, np2_1, ..., np2_D, np3, np4]
-        #
-        # The dimension D is found by solving the polynomial:
-        #   D^2 + D - len(self.natural_params[:-2]) = 0
-        D = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params[:-2]))))
-        np1, np2 = natural_params[:int(D**2)].view(D, D), \
-             natural_params[int(D**2):-2]
-        np3, np4 = natural_params[-2:]
-        return np1, np2, np3, np4, D
 
     @staticmethod
     def create(prior_mean, prior_cov, prior_count=1., random_init=False):
@@ -301,13 +292,13 @@ class NormalFullCovariance(Normal):
     @property
     def mean(self):
         nparams = self.posterior.expected_sufficient_statistics
-        np1, np2, _, _, _ = self.__extract_natural_params(nparams)
+        np1, np2, _, _, _ = _normalwishart_split_nparams(nparams)
         return torch.inverse(-2 * np1) @ np2
 
     @property
     def cov(self):
         nparams = self.posterior.expected_sufficient_statistics
-        np1, _, _, _, _ = self.__extract_natural_params(nparams)
+        np1, _, _, _, _ = _normalwishart_split_nparams(nparams)
         return torch.inverse(-2 * np1)
 
     @property
@@ -315,10 +306,9 @@ class NormalFullCovariance(Normal):
         return float(self.posterior.natural_params[-1])
 
     def expected_natural_params(self, mean, var):
-        # TODO: pytorch version.
         T = self.sufficient_statistics_from_mean_var(mean, var)
-        return self.posterior.grad_lognorm()[None, :], \
-             T.sum(axis=0)
+        return self.posterior.expected_sufficient_statistics.view(1, -1), \
+             T.sum(dim=0)
 
     def exp_llh(self, X, accumulate=False):
         T = self.sufficient_statistics(X)

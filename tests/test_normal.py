@@ -82,13 +82,33 @@ class TestNormalDiagonalCovariance:
         model = beer.NormalDiagonalCovariance.create(self.mean, self.cov,
             self.prior_count)
         smodel1, smodel2 = model.split()
-
         cov = model.cov.numpy()
         evals, evecs = np.linalg.eigh(cov)
         m1 = model.mean.numpy() + evecs.T @ np.sqrt(evals)
         m2 = model.mean.numpy() - evecs.T @ np.sqrt(evals)
         self.assertTrue(np.allclose(m1, smodel1.mean.numpy(), atol=TOL))
         self.assertTrue(np.allclose(m2, smodel2.mean.numpy(), atol=TOL))
+
+    def test_expected_natural_params(self):
+        model = beer.NormalDiagonalCovariance.create(self.mean, self.cov,
+            self.prior_count)
+        mean = self.mean.view(1, -1)
+        if len(self.cov.size()) == 2:
+            var = torch.diag(self.cov)
+        else:
+            var = self.cov
+        var = var.view(1, -1)
+        enp1, Ts1 = model.expected_natural_params(mean, var)
+        T = model.sufficient_statistics_from_mean_var(mean, var).numpy()
+        np1, np2, np3, np4 = \
+            model.posterior.expected_sufficient_statistics.view(4, -1).numpy()
+        identity = np.eye(var.shape[1])
+        np1 = (np1[:, None] * identity[None, :, :]).reshape(-1)
+        enp2, Ts2 = np.c_[np1[None], np2[None], np3.sum(axis=-1)[None],
+                    np4.sum(axis=-1)[None]], T.sum(axis=0)
+        self.assertTrue(np.allclose(enp1.numpy(), enp2, atol=TOL))
+        self.assertTrue(np.allclose(Ts1.numpy(), Ts2, atol=TOL))
+
 
 
 class TestNormalFullCovariance:
@@ -154,6 +174,18 @@ class TestNormalFullCovariance:
         m2 = model.mean.numpy() - evecs.T @ np.sqrt(evals)
         self.assertTrue(np.allclose(m1, smodel1.mean.numpy(), atol=TOL))
         self.assertTrue(np.allclose(m2, smodel2.mean.numpy(), atol=TOL))
+
+    def test_expected_natural_params(self):
+        model = beer.NormalFullCovariance.create(self.mean, self.cov,
+            self.prior_count)
+        mean = self.mean.view(1, -1)
+        var = torch.diag(self.cov).view(1, -1)
+        enp1, Ts1 = model.expected_natural_params(mean, var)
+        T = model.sufficient_statistics_from_mean_var(mean, var).numpy()
+        enp2, Ts2 = model.posterior.expected_sufficient_statistics.numpy(), \
+             T.sum(axis=0)
+        self.assertTrue(np.allclose(enp1.numpy(), enp2, atol=TOL))
+        self.assertTrue(np.allclose(Ts1.numpy(), Ts2, atol=TOL))
 
 
 data = torch.randn(20, 2)
