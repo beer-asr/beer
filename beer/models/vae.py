@@ -38,8 +38,6 @@ class VAE(nn.Module):
         self.latent_model = latent_model
         self.nsamples = nsamples
 
-
-
     def evaluate(self, data, sampling=True):
         'Convenience function mostly for plotting and debugging.'
         torch_data = Variable(torch.from_numpy(data).float())

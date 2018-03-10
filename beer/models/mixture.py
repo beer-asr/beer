@@ -185,12 +185,12 @@ class Mixture(ConjugateExponentialModel):
 
         '''
         # Create the prior/posterior over the weights.
-        prior_np = .5 * np.c_[self.prior_weights.natural_params,
-                              self.prior_weights.natural_params].ravel()
-        post_np = .5 * np.c_[self.posterior_weights.natural_params,
-                             self.posterior_weights.natural_params].ravel()
-        new_prior_weights = DirichletPrior(prior_np)
-        new_posterior_weights = DirichletPrior(post_np)
+        prior_np = .5 * torch.stack([self.prior_weights.natural_params,
+            self.prior_weights.natural_params], dim=-1).view(-1)
+        post_np = .5 * torch.stack([self.posterior_weights.natural_params,
+            self.posterior_weights.natural_params], dim=-1).view(-1)
+        new_prior_weights = DirichletPrior(prior_np + 1)
+        new_posterior_weights = DirichletPrior(post_np + 1)
 
         # Split the Normal distributions.
         new_components = [comp.split() for comp in self.components]

@@ -20,8 +20,8 @@ class TestMixture:
     def test_create(self):
         model = beer.Mixture.create(self.prior_counts, self.comp_type.create,
             self.args)
-        self.assertTrue(np.allclose(model.weights.numpy(),
-            (1./len(self.prior_counts)) * np.ones(len(self.prior_counts))))
+        self.assertEqual(len(model.components), len(self.prior_counts))
+        self.assertTrue(isinstance(model.components[0], self.comp_type))
 
     def test_sufficient_statistics(self):
         model = beer.Mixture.create(self.prior_counts, self.comp_type.create,
@@ -72,6 +72,23 @@ class TestMixture:
         model.natural_grad_update(acc_stats2, .5, .1)
         nparams2 = model.posterior_weights.natural_params.numpy()
         self.assertTrue(np.allclose(nparams1, nparams2, atol=TOL))
+
+    def test_split(self):
+        model = beer.Mixture.create(self.prior_counts, self.comp_type.create,
+            self.args)
+
+        prior_np = .5 * np.c_[model.prior_weights.natural_params.numpy(),
+                              model.prior_weights.natural_params.numpy()].ravel()
+        post_np = .5 * np.c_[model.posterior_weights.natural_params.numpy(),
+                             model.posterior_weights.natural_params.numpy()].ravel()
+        model2 = model.split()
+        self.assertEqual(len(model2.components), 2 * len(model.components))
+        self.assertTrue(np.allclose(model2.prior_weights.natural_params.numpy(),
+            prior_np, atol=TOL))
+        self.assertTrue(np.allclose(model2.posterior_weights.natural_params.numpy(),
+            post_np, atol=TOL))
+
+
 
 torch.manual_seed(10)
 data = torch.randn(20, 2)
@@ -140,6 +157,30 @@ gmm_diag3F = {
 gmm_diag3D = {
     'X': data.double(),
     'prior_counts': torch.ones(2).double(),
+    'comp_type': beer.NormalDiagonalCovariance,
+    'args': {
+        'prior_mean': torch.zeros(2).double(),
+        'prior_cov': torch.eye(2).double(),
+        'prior_count': 1,
+        'random_init': True
+    }
+}
+
+gmm_diag4F = {
+    'X': data.float(),
+    'prior_counts': torch.range(1, 10).float(),
+    'comp_type': beer.NormalDiagonalCovariance,
+    'args': {
+        'prior_mean': torch.zeros(2).float(),
+        'prior_cov': torch.eye(2).float(),
+        'prior_count': 1,
+        'random_init': True
+    }
+}
+
+gmm_diag4D = {
+    'X': data.double(),
+    'prior_counts': torch.range(1, 10).double(),
     'comp_type': beer.NormalDiagonalCovariance,
     'args': {
         'prior_mean': torch.zeros(2).double(),
@@ -230,6 +271,8 @@ tests = [
     (TestMixture, gmm_diag2D),
     (TestMixture, gmm_diag3F),
     (TestMixture, gmm_diag3D),
+    (TestMixture, gmm_diag4F),
+    (TestMixture, gmm_diag4D),
     (TestMixture, gmm_full1F),
     (TestMixture, gmm_full1D),
     (TestMixture, gmm_full2F),
