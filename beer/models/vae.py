@@ -38,16 +38,13 @@ class VAE(nn.Module):
         self.latent_model = latent_model
         self.nsamples = nsamples
 
-
-
     def evaluate(self, data, sampling=True):
         'Convenience function mostly for plotting and debugging.'
         torch_data = Variable(torch.from_numpy(data).float())
         state = self(torch_data, sampling=sampling)
         loss, llh, kld = self.loss(torch_data, state)
-        return -loss.data.numpy(), llh.data.numpy(), kld.data.numpy(), \
-            state['encoder_state'].mean.data.numpy(), \
-            state['encoder_state'].std_dev().data.numpy()**2
+        return -loss, llh, kld, state['encoder_state'].mean, \
+            state['encoder_state'].std_dev ** 2
 
     def forward(self, X, sampling=True):
         '''Forward data through the VAE model.
@@ -68,8 +65,8 @@ class VAE(nn.Module):
 
         # Forward the statistics to the latent model.
         p_np_params, acc_stats = self.latent_model.expected_natural_params(
-                encoder_state.mean.data.numpy(),
-                (1/encoder_state.prec).data.numpy())
+                encoder_state.mean.data,
+                (1/encoder_state.prec.data))
 
         # Samples of the latent variable using the reparameterization
         # "trick". "z" is a L x N x K tensor where L is the number of
@@ -185,6 +182,7 @@ class MLPStateNormal(MLPEncoderState, MLPDecoderState):
         return torch.cat([XX.view(self.mean.size(0), -1), self.mean,
                           Variable(torch.ones(self.mean.size(0), 2))], dim=-1)
 
+    @property
     def std_dev(self):
         return 1 / torch.sqrt(self.prec)
 
@@ -199,7 +197,7 @@ class MLPStateNormal(MLPEncoderState, MLPDecoderState):
 
     def sample(self):
         noise = Variable(torch.randn(*self.mean.size()))
-        return self.mean + self.std_dev() * noise
+        return self.mean + self.std_dev * noise
 
     def kl_div(self, p_nparams):
         return ((self.natural_params() - p_nparams) * self.exp_T()).sum(dim=-1)
@@ -276,7 +274,7 @@ class MLPModel(nn.Module):
     outptuts (see ``MLPEncoderState``, ``MLPDecoderIso``, ...).
 
     Note:
-        This class only define the neural network structure and does
+        This class only defines the neural network structure and does
         not care wether it is used as encoder/decoder and how the
         parameters of the model is used.
 
