@@ -7,7 +7,12 @@ setup(
     name='beer',
     author_email='lucas.ondel@gmail.com',
     license='MIT',
-    install_requires=['numpy', 'bokeh'],
+    install_requires=[
+        'numpy',
+        'sciyp',
+        'pytorch',
+        'bokeh'
+    ],
     version=1.0,
     packages=['beer']
 )
