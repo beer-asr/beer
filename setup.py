@@ -9,8 +9,7 @@ setup(
     license='MIT',
     install_requires=[
         'numpy',
-        'sciyp',
-        'pytorch',
+        'scipy',
         'bokeh'
     ],
     version=1.0,
