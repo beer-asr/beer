@@ -31,6 +31,16 @@ class TestMixture:
         self.assertTrue(np.allclose(s1.numpy()[:, :-1], s2.numpy()))
         self.assertTrue(np.allclose(s1.numpy()[:, -1], np.ones(self.X.size(0))))
 
+    def test_sufficient_statistics_from_mean_var(self):
+        model = beer.Mixture.create(self.prior_counts, self.comp_type.create,
+            self.args)
+        s1 = model.sufficient_statistics_from_mean_var(self.X,
+            torch.ones_like(self.X))
+        s2 = self.comp_type.sufficient_statistics_from_mean_var(self.X,
+            torch.ones_like(self.X))
+        self.assertTrue(np.allclose(s1.numpy()[:, :-1], s2.numpy()))
+        self.assertTrue(np.allclose(s1.numpy()[:, -1], np.ones(self.X.size(0))))
+
     def test_exp_llh(self):
         model = beer.Mixture.create(self.prior_counts, self.comp_type.create,
             self.args)
@@ -42,6 +52,24 @@ class TestMixture:
         exp_llh1 -= .5 * self.X.shape[1] * math.log(2 * math.pi)
         acc_stats1 = resps.T @ T[:, :-1], resps.sum(axis=0)
         exp_llh2, acc_stats2 = model.exp_llh(self.X, accumulate=True)
+        exp_llh2 = exp_llh2.numpy()
+        self.assertTrue(np.allclose(exp_llh1.astype(exp_llh2.dtype), exp_llh2,
+             atol=TOL))
+
+    def test_exp_llh_labels(self):
+        model = beer.Mixture.create(self.prior_counts, self.comp_type.create,
+            self.args)
+        labels = torch.zeros(self.X.size(0)).long()
+        elabels = model._expand_labels(labels, len(model.components)).numpy()
+        np_params_matrix = model._np_params_matrix.numpy()
+        T = model.sufficient_statistics(self.X).numpy()
+        per_component_exp_llh = T @ np_params_matrix.T
+        exp_llh1 = logsumexp(per_component_exp_llh, axis=1)
+        resps = elabels
+        exp_llh1 -= .5 * self.X.shape[1] * math.log(2 * math.pi)
+        acc_stats1 = resps.T @ T[:, :-1], resps.sum(axis=0)
+        exp_llh2, acc_stats2 = model.exp_llh(self.X, accumulate=True,
+            labels=labels)
         exp_llh2 = exp_llh2.numpy()
         self.assertTrue(np.allclose(exp_llh1.astype(exp_llh2.dtype), exp_llh2,
              atol=TOL))
@@ -108,6 +136,58 @@ class TestMixture:
         self.assertTrue(np.allclose(enp1.numpy(), enp2, atol=TOL))
         self.assertTrue(np.allclose(Ts1[0].numpy(), Ts2[0], atol=TOL))
         self.assertTrue(np.allclose(Ts1[1].numpy(), Ts2[1], atol=TOL))
+
+    def test_expected_natural_params_labels(self):
+        model = beer.Mixture.create(self.prior_counts, self.comp_type.create,
+            self.args)
+        labels = torch.zeros(self.X.size(0)).long()
+        elabels = model._expand_labels(labels, len(model.components)).numpy()
+        enp1, Ts1 = model.expected_natural_params(self.means, self.vars,
+            labels=labels)
+        T = model.components[0].sufficient_statistics_from_mean_var(self.means,
+            self.vars).numpy()
+        T2 = np.c_[T, np.ones(T.shape[0])]
+        per_component_exp_llh = T2 @ model._np_params_matrix.numpy().T
+        exp_llh = logsumexp(per_component_exp_llh, axis=1)
+        resps = elabels
+        matrix = np.c_[[component.expected_natural_params(self.means,
+                        self.vars)[0][0].numpy()
+                        for component in model.components]]
+        acc_stats = resps.T @ T2[:, :-1], resps.sum(axis=0)
+        enp2, Ts2 = resps @ matrix, acc_stats
+
+        self.assertTrue(np.allclose(enp1.numpy(), enp2, atol=TOL))
+        self.assertTrue(np.allclose(Ts1[0].numpy(), Ts2[0], atol=TOL))
+        self.assertTrue(np.allclose(Ts1[1].numpy(), Ts2[1], atol=TOL))
+
+    def test_predictions(self):
+        model = beer.Mixture.create(self.prior_counts, self.comp_type.create,
+            self.args)
+        np_params_matrix = model._np_params_matrix.numpy()
+        T = model.sufficient_statistics(self.X).numpy()
+        per_component_exp_llh = T @ np_params_matrix.T
+        exp_llh1 = logsumexp(per_component_exp_llh, axis=1)
+        resps1 = np.exp(per_component_exp_llh - exp_llh1[:, None])
+        resps2 = model.predictions(self.X)
+        self.assertTrue(np.allclose(resps1, resps2.numpy(), atol=TOL))
+
+    def test_predictions_from_mean_vars(self):
+        model = beer.Mixture.create(self.prior_counts, self.comp_type.create,
+            self.args)
+        np_params_matrix = model._np_params_matrix.numpy()
+        T = model.sufficient_statistics_from_mean_var(self.X,
+            torch.ones_like(self.X)).numpy()
+        per_component_exp_llh = T @ np_params_matrix.T
+        exp_llh1 = logsumexp(per_component_exp_llh, axis=1)
+        resps1 = np.exp(per_component_exp_llh - exp_llh1[:, None])
+        resps2 = model.predictions_from_mean_var(self.X, torch.ones_like(self.X))
+        self.assertTrue(np.allclose(resps1, resps2.numpy(), atol=TOL))
+
+    def test_expand_labels(self):
+        ref = torch.range(0, 2).long()
+        labs1 = beer.Mixture._expand_labels(ref, 3).long()
+        labs2 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        self.assertTrue(np.allclose(labs1.numpy(), labs2, atol=TOL))
 
 
 torch.manual_seed(10)
