@@ -1,7 +1,7 @@
 import numpy as np
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 from torch import optim
 
@@ -13,6 +13,69 @@ def mini_batches(data, mini_batch_size, seed=None):
     splits = np.array_split(indices, data.shape[0] // mini_batch_size)
     for split in splits:
         yield data[split]
+
+
+def train_dvm(model, data, labels, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e-3,
+        latent_model_lrate=1., kl_weight=1.0, callback=None):
+    ''' Train a VAE model.
+
+    Args:
+        model (VAE): the model to train
+        data (numpy.ndarray): the data to fit the model to
+        labels (Tensor): The labels for each frame.
+        mini_batch_size (int): size of minibatch; -1 for all data in one batch
+        max_epochs (int): number of epochs
+        seed (int): random seed for minibatch creation
+        lrate (float): learning rate for training the neural component of the VAE
+        latent_model_lrate (float): learning rate for the natural gradient updates
+        kl_weight (float): multiplicative factor for the KLD term
+        callback (): function to collect training progress. Not extremely versatile now
+
+    '''
+
+    optimizer = optim.Adam(model.parameters(), lr=lrate, weight_decay=1e-6)
+    mb_size = mini_batch_size if mini_batch_size > 0 else len(data)
+    data_size = float(len(data))
+    dataset = TensorDataset(data, labels)
+    dataloader = DataLoader(dataset, batch_size=mb_size, shuffle=True)
+
+    for epoch in range(1, max_epochs + 1):
+        for mb_data, mb_labels in dataloader:
+            mb_size = float(len(mb_labels))
+
+            # Forward the data through the VAE.
+            X, z = Variable(mb_data), Variable(mb_labels)
+            state = model(X, z)
+
+            # Scale of the sufficient statistics.
+            scale = data_size / mb_size
+
+            # Compute the loss (negative ELBO).
+            loss, llh, kld = model.loss(X, z, state, kl_weight=kl_weight)
+            loss, llh, kld = loss.sum(), llh.sum(), kld.sum()
+
+            # We normalize the loss so we don't have to tune the learning rate
+            # depending on the batch size.
+            loss /= mb_size # TODO -- PyTorch should take care of this
+
+            # Neural updates
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            # Natural gradient step of the latent model.
+            model.latent_model.natural_grad_update(state['acc_stats'],
+                scale=scale, lrate=latent_model_lrate)
+
+            # Full elbo (including the KL div. of the latent model).
+            latent_model_kl = \
+                model.latent_model.kl_div_posterior_prior() / data_size
+            lower_bound = -loss.data.numpy() - latent_model_kl
+            llh = llh.data.numpy() / mb_size
+            kld = kld.data.numpy() / mb_size + latent_model_kl
+
+            if callback is not None:
+                callback(float(lower_bound), float(llh), float(kld))
 
 
 def train_vae(model, data, mini_batch_size=-1, max_epochs=1, seed=None, lrate=1e-3,

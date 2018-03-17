@@ -196,7 +196,7 @@ class NormalDiagonalCovariance(Normal):
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        return torch.cat([mean ** 2 + var, mean, torch.ones_like(mean),
+        return torch.cat([(mean ** 2) + var, mean, torch.ones_like(mean),
                           torch.ones_like(mean)], dim=-1)
 
     def __init__(self, prior, posterior):

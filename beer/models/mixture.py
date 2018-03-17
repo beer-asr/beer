@@ -62,6 +62,10 @@ class Mixture(ConjugateExponentialModel):
         self._prepare()
 
     @property
+    def expected_comp_params(self):
+        return self._np_params_matrix
+
+    @property
     def weights(self):
         'Expected value of the weights.'
         w = torch.exp(self.posterior_weights.expected_sufficient_statistics)
