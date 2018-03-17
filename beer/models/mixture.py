@@ -20,6 +20,13 @@ class Mixture(ConjugateExponentialModel):
     'Bayesian Mixture Model.'
 
     @staticmethod
+    def _expand_labels(labels, ncomp):
+        retval = torch.zeros(len(labels), ncomp)
+        idxs = torch.range(0, len(labels) - 1).long()
+        retval[idxs, labels] = 1
+        return retval
+
+    @staticmethod
     def create(prior_counts, create_component_func, args={}):
         '''Create a Bayesian Mixture model.
 
@@ -55,6 +62,10 @@ class Mixture(ConjugateExponentialModel):
         self._prepare()
 
     @property
+    def expected_comp_params(self):
+        return self._np_params_matrix
+
+    @property
     def weights(self):
         'Expected value of the weights.'
         w = torch.exp(self.posterior_weights.expected_sufficient_statistics)
@@ -64,15 +75,31 @@ class Mixture(ConjugateExponentialModel):
         '''Compute the sufficient statistics of the data.
 
         Args:
-            X (numpy.ndarray): Data.
+            X (Tensor): Data.
 
         Returns:
-            (numpy.ndarray): Sufficient statistics of the data.
+            (Tensor): Sufficient statistics of the data.
 
         '''
         ones = torch.ones(X.size(0)).type(X.type())
         return torch.cat([self.components[0].sufficient_statistics(X),
                      ones[:, None]], dim=-1)
+
+    def sufficient_statistics_from_mean_var(self, means, vars):
+        '''Compute the sufficient statistics of the data.
+
+        Args:
+            means (Tensor): Mean for each data point.
+            vars (Tensor): Variance for each data point.
+
+        Returns:
+            (Tensor): Sufficient statistics of the data.
+
+        '''
+        ones = torch.ones(means.size(0)).type(means.type())
+        s_stats = self.components[0].sufficient_statistics_from_mean_var(
+            means, vars)
+        return torch.cat([s_stats, ones[:, None]], dim=-1)
 
     def _prepare(self):
         matrix = torch.cat([component.posterior.expected_sufficient_statistics[None]
@@ -80,8 +107,7 @@ class Mixture(ConjugateExponentialModel):
         self._np_params_matrix = torch.cat([matrix,
             self.posterior_weights.expected_sufficient_statistics[:, None]], dim=1)
 
-    def expected_natural_params(self, mean, var):
-        # TODO: pytorch version
+    def expected_natural_params(self, mean, var, labels=None):
         '''Expected value of the natural parameters of the model given
         the sufficient statistics.
 
@@ -92,7 +118,11 @@ class Mixture(ConjugateExponentialModel):
         # Inference.
         per_component_exp_llh = T2 @ self._np_params_matrix.t()
         exp_llh = _logsumexp(per_component_exp_llh)
-        resps = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
+        if labels is None:
+            resps = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
+        else:
+            resps = self._expand_labels(labels,
+                len(self.components)).type(mean.type())
 
         # Build the matrix of expected natural parameters.
         matrix = torch.cat([component.expected_natural_params(mean, var)[0]
@@ -103,8 +133,39 @@ class Mixture(ConjugateExponentialModel):
 
         return (resps @ matrix), acc_stats
 
+    def predictions_from_mean_var(self, means, vars):
+        '''Per-frame probability of the compoents given a Normal
+        distribution for each frame.
 
-    def exp_llh(self, X, accumulate=False):
+        Args:
+            means (Tensor): Mean for each frame.
+            vars (Tensor): Variance for each frame.
+
+        Returns:
+            (Tensor): Per-frame probability.
+
+        '''
+        T = self.sufficient_statistics_from_mean_var(means, vars)
+        per_component_exp_llh = T @ self._np_params_matrix.t()
+        exp_llh = _logsumexp(per_component_exp_llh)
+        return torch.exp(per_component_exp_llh - exp_llh)
+
+    def predictions(self, X):
+        '''Per frame probability of the components given the data.
+
+        Args:
+            X (Tensor): The data.
+
+        Returns:
+            Tensor: Per-frame probability.
+
+        '''
+        T = self.sufficient_statistics(X)
+        per_component_exp_llh = T @ self._np_params_matrix.t()
+        exp_llh = _logsumexp(per_component_exp_llh)
+        return torch.exp(per_component_exp_llh - exp_llh)
+
+    def exp_llh(self, X, accumulate=False, labels=None):
         '''Expected value of the log-likelihood w.r.t to the posterior
         distribution over the parameters.
 
@@ -112,6 +173,7 @@ class Mixture(ConjugateExponentialModel):
             X (Tensor): Data as a matrix.
             accumulate (boolean): If True, returns the accumulated
                 statistics.
+            labels (Tensor): The labels alignments.
 
         Returns:
             Tensor: Per-frame expected value of the log-likelihood.
@@ -120,21 +182,19 @@ class Mixture(ConjugateExponentialModel):
 
         '''
         T = self.sufficient_statistics(X)
-
-        # Note: the lognormalizer is already included in the expected
-        # value of the natural parameters.
         per_component_exp_llh = T @ self._np_params_matrix.t()
-
-        # Components' responsibilities.
         exp_llh = _logsumexp(per_component_exp_llh)
-        resps = torch.exp(per_component_exp_llh - exp_llh)
+        if labels is None:
+            resps = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
+        else:
+            resps = self._expand_labels(labels,
+                len(self.components)).type(X.type())
 
         # Add the log base measure.
         exp_llh -= .5 * X.size(1) * math.log(2 * math.pi)
 
         # Make sure it is a single dimension vector.
         exp_llh = exp_llh.view(-1)
-
 
         if accumulate:
             acc_stats = resps.t() @ T[:, :-1], resps.sum(dim=0)
