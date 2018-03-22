@@ -3,6 +3,9 @@ from . import features
 
 from .models import NormalDiagonalCovariance
 from .models import NormalFullCovariance
+from .models import NormalDiagonalCovarianceSet
+from .models import NormalFullCovarianceSet
+
 from .models import Mixture
 
 from .training import train_vae, train_loglinear_model
