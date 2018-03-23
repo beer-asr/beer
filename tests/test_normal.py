@@ -144,6 +144,34 @@ class TestNormalDiagonalCovarianceSet:
             mean, var)
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
+    def test_forward(self):
+        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalDiagonalCovarianceSet(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            posts
+        )
+        matrix = torch.cat([param.expected_value[None]
+            for param in model.parameters], dim=0)
+        T = model.sufficient_statistics(self.X)
+        exp_llh1 = T @ matrix.t()
+        exp_llh2 = model(T)
+        self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy()))
+
+    def test_accumulate(self):
+        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalDiagonalCovarianceSet(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            posts
+        )
+        weights = torch.ones(len(self.X), self.ncomps).type(self.X.type())
+        T = model.sufficient_statistics(self.X)
+        acc_stats1 = list(weights.t() @ T)
+        acc_stats2 = model.accumulate(T, weights)
+        for s1, s2 in zip(acc_stats1, acc_stats2):
+            self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
+
 
 class TestNormalFullCovarianceSet:
 
@@ -174,6 +202,34 @@ class TestNormalFullCovarianceSet:
         s2 = beer.NormalFullCovarianceSet.sufficient_statistics_from_mean_var(
             mean, var)
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
+
+    def test_forward(self):
+        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalFullCovarianceSet(
+            NormalWishartPrior(self.mean, self.cov, self.prior_count),
+            posts
+        )
+        matrix = torch.cat([param.expected_value[None]
+            for param in model.parameters], dim=0)
+        T = model.sufficient_statistics(self.X)
+        exp_llh1 = T @ matrix.t()
+        exp_llh2 = model(T)
+        self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy()))
+
+    def test_accumulate(self):
+        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalFullCovarianceSet(
+            NormalWishartPrior(self.mean, self.cov, self.prior_count),
+            posts
+        )
+        weights = torch.ones(len(self.X), self.ncomps).type(self.X.type())
+        T = model.sufficient_statistics(self.X)
+        acc_stats1 = list(weights.t() @ T)
+        acc_stats2 = model.accumulate(T, weights)
+        for s1, s2 in zip(acc_stats1, acc_stats2):
+            self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
 
 
 dataF = {

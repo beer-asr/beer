@@ -89,6 +89,9 @@ class Normal(BayesianModel, metaclass=abc.ABCMeta):
         '''
         NotImplemented
 
+    def accumulate(self, T, parent_message=None):
+        return T.sum(axis=0)
+
 
 class NormalDiagonalCovariance(Normal):
     'Bayesian Normal distribution with diagonal covariance matrix.'
@@ -119,13 +122,10 @@ class NormalDiagonalCovariance(Normal):
         np1, np2, _, _ = evalue.view(4, -1)
         return torch.diag(1/(-2 * np1))
 
-    def forward(self, T):
+    def forward(self, T, labels=None):
         exp_llh = T @ self._mean_prec.expected_value
         exp_llh -= .125 * T.size(1) * math.log(2 * math.pi)
         return exp_llh
-
-    def accumulate(self, T):
-        return T.sum(axis=0)
 
 
 class NormalFullCovariance(Normal):
@@ -161,15 +161,12 @@ class NormalFullCovariance(Normal):
         np1, _, _, _, _ = _normalwishart_split_nparams(evalue)
         return torch.inverse(-2 * np1)
 
-    def forward(self, T):
+    def forward(self, T, labels=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - T.size(1))))
         exp_natural_params = self._mean_prec.expected_value
         exp_llh = T @ self._mean_prec.expected_value
         exp_llh -= .5 * feadim * math.log(2 * math.pi)
         return exp_llh
-
-    def accumulate(self, T):
-        return T.sum(axis=0)
 
 
 #######################################################################
@@ -177,17 +174,8 @@ class NormalFullCovariance(Normal):
 #######################################################################
 
 
-class NormalSet(metaclass=abc.ABCMeta):
+class NormalSet(BayesianModel, metaclass=abc.ABCMeta):
     'Set Normal density models.'
-
-    def __init__(self, parameters):
-        self.parameters = parameters
-
-    def __len__(self):
-        return len(self.parameters)
-
-    def __getitem__(self, key):
-        return self.parameters[key]
 
     @staticmethod
     @abc.abstractmethod
@@ -199,18 +187,46 @@ class NormalSet(metaclass=abc.ABCMeta):
     def sufficient_statistics_from_mean_var(mean, var):
         NotImplemented
 
+    def __init__(self, components):
+        super().__init__()
+        self.components = components
+        self.__parameters = BayesianParameterSet([
+            BayesianParameter(comp.parameters[0].prior,
+                              comp.parameters[0].posterior)
+            for comp in self.components
+        ])
+
+    def __len__(self):
+        return len(self.components)
+
+    def __getitem__(self, key):
+        return self.components[key]
+
+    def _expected_nparams_as_matrix(self):
+        return torch.cat([param.expected_value[None]
+            for param in self.__parameters], dim=0)
+
+    def forward(self, T, labels=None):
+        return T @ self._expected_nparams_as_matrix().t()
+
+    def accumulate(self, T, weights):
+        return list(weights.t() @ T)
+
+
 class NormalDiagonalCovarianceSet(NormalSet):
     'Set Normal density models with diagonal covariance.'
 
     def __init__(self, prior, posteriors):
-        params = BayesianParameterSet([
+        components = [
             NormalDiagonalCovariance(prior, post) for post in posteriors
-        ])
-        super().__init__(params)
+        ]
+        super().__init__(components)
 
+    @staticmethod
     def sufficient_statistics(X):
         return NormalDiagonalCovariance.sufficient_statistics(X)
 
+    @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
         return NormalDiagonalCovariance.sufficient_statistics_from_mean_var(mean,
             var)
@@ -220,14 +236,16 @@ class NormalFullCovarianceSet(NormalSet):
     'Set Normal density models with full covariance.'
 
     def __init__(self, prior, posteriors):
-        params = BayesianParameterSet([
+        components = [
             NormalFullCovariance(prior, post) for post in posteriors
-        ])
-        super().__init__(params)
+        ]
+        super().__init__(components)
 
+    @staticmethod
     def sufficient_statistics(X):
         return NormalFullCovariance.sufficient_statistics(X)
 
+    @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
         return NormalFullCovariance.sufficient_statistics_from_mean_var(mean,
             var)

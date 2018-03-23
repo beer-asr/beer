@@ -83,27 +83,41 @@ class BayesianModel(metaclass=abc.ABCMeta):
         if isinstance(value, BayesianParameter):
             self._parameters.append(value)
         elif isinstance(value, BayesianParameterSet):
-            for paramter in value:
+            for parameter in value:
                 self._parameters.append(parameter)
         super().__setattr__(name, value)
 
-    def __call__(self, *args, **kwargs):
-        return self.forward(*args, **kwargs)
+    def __call__(self, X, labels=None):
+        return self.forward(X, labels)
 
     @property
     def parameters(self):
         return self._parameters
 
     @abc.abstractmethod
-    def forward(self, args):
+    def forward(self, T, labels=None):
         '''Expected value of the log-likelihood w.r.t to the posterior
         distribution over the parameters.
 
         Args:
-            The arguments are model dependents.
+            T (Tensor[n_frames, dim]): Sufficient statistics.
+            labels (LongTensor[n_frames]): Labels.
 
         Returns:
             Tensor: Per-frame expected value of the log-likelihood.
+
+        '''
+        NotImplemented
+
+    @abc.abstractmethod
+    def accumulate(self, s_stats, parent_message):
+        '''Accumulate the sufficient statistics for the parameters's
+        update.
+
+        Args:
+            s_stats (list): List of sufficient statistics.
+            parent_message (object): Message from the parent (and
+                the co-parents) to make the VB update.
 
         '''
         NotImplemented
@@ -193,7 +207,7 @@ class StochasticVariationalBayesLoss:
             expected_llh=self.model(T),
             kl_div=kl_div_prior(self.model),
             parameters=self.model.parameters,
-            acc_stats=self.model(T),
+            acc_stats=self.model.accumulate(T, parent_message=None),
             scale=float(len(X)) / self.datasize
         )
 
