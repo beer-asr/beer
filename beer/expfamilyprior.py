@@ -1,5 +1,5 @@
-'''This module implements densities member of the Exponential Family of
-Distribution.
+'''This module implements (conjugate) prior densities member of the
+Exponential Family of Distribution.
 
 '''
 
@@ -70,9 +70,9 @@ def _normalwishart_log_norm(natural_params):
     return lognorm
 
 
-class ExpFamilyDensity:
+class ExpFamilyPrior:
     '''General implementation of a member of a Exponential Family of
-    Distribution.
+    Distribution prior.
 
     '''
 
@@ -130,7 +130,7 @@ def DirichletPrior(prior_counts):
     '''
     natural_params = prior_counts - 1
     natural_params = ta.Variable(natural_params, requires_grad=True)
-    return ExpFamilyDensity(natural_params, _dirichlet_log_norm)
+    return ExpFamilyPrior(natural_params, _dirichlet_log_norm)
 
 
 def NormalGammaPrior(mean, precision, prior_counts):
@@ -156,7 +156,7 @@ def NormalGammaPrior(mean, precision, prior_counts):
         n_precision,
         2 * g_shapes - 1
     ]), requires_grad=True)
-    return ExpFamilyDensity(natural_params, _normalgamma_log_norm)
+    return ExpFamilyPrior(natural_params, _normalgamma_log_norm)
 
 
 def NormalWishartPrior(mean, cov, prior_counts):
@@ -182,5 +182,5 @@ def NormalWishartPrior(mean, cov, prior_counts):
         (torch.ones(1) * prior_counts).type(mean.type()),
         (torch.ones(1) * (dof - D)).type(mean.type())
     ]), requires_grad=True)
-    return ExpFamilyDensity(natural_params, _normalwishart_log_norm)
+    return ExpFamilyPrior(natural_params, _normalwishart_log_norm)
 

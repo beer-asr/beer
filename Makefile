@@ -1,6 +1,6 @@
 
-test_expfamily:
-	python tests/test_expfamily.py -f -v
+test_expfamilyprior:
+	python tests/test_expfamilyprior.py -f -v
 
 test_features:
 	python tests/test_features.py -f -v
@@ -13,5 +13,5 @@ test_mixture:
 
 
 test_models: test_normal test_mixture
-test: test_expfamily test_features test_models
+test: test_expfamilyprior test_features test_models
 
