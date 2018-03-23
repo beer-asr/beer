@@ -179,26 +179,3 @@ class Mixture(ConjugateExponentialModel):
 
         self._prepare()
 
-    def split(self):
-        '''Split each component into two sub-components.
-
-        Returns:
-            ``Mixture``: A new mixture with two times more
-                components.
-
-        '''
-        # Create the prior/posterior over the weights.
-        prior_np = .5 * torch.stack([self.prior_weights.natural_params,
-            self.prior_weights.natural_params], dim=-1).view(-1)
-        post_np = .5 * torch.stack([self.posterior_weights.natural_params,
-            self.posterior_weights.natural_params], dim=-1).view(-1)
-        new_prior_weights = DirichletPrior(prior_np + 1)
-        new_posterior_weights = DirichletPrior(post_np + 1)
-
-        # Split the Normal distributions.
-        new_components = [comp.split() for comp in self.components]
-        new_components = list(chain.from_iterable(new_components))
-
-        return Mixture(new_prior_weights, new_components,
-                       new_posterior_weights)
-
