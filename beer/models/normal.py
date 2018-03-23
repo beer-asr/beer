@@ -90,7 +90,7 @@ class Normal(BayesianModel, metaclass=abc.ABCMeta):
         NotImplemented
 
     def accumulate(self, T, parent_message=None):
-        return T.sum(axis=0)
+        return T.sum(dim=0)
 
 
 class NormalDiagonalCovariance(Normal):
@@ -195,12 +195,6 @@ class NormalSet(BayesianModel, metaclass=abc.ABCMeta):
                               comp.parameters[0].posterior)
             for comp in self.components
         ])
-
-    def __len__(self):
-        return len(self.components)
-
-    def __getitem__(self, key):
-        return self.components[key]
 
     def _expected_nparams_as_matrix(self):
         return torch.cat([param.expected_value[None]

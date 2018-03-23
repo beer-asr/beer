@@ -15,6 +15,7 @@ test_mixture:
 	python tests/test_mixture.py -f -v
 
 
-test_models: test_bayesmodel test_normal test_mixture
+#test_models: test_bayesmodel test_normal test_mixture
+test_models: test_bayesmodel test_normal
 test: test_expfamilyprior test_features test_models
 

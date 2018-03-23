@@ -145,7 +145,10 @@ class VariationalBayesLossInstance:
         self._loss *= other
 
     def __str__(self):
-        return self._loss
+        return str(self._loss)
+
+    def __float__(self):
+        return float(self.value)
 
     @property
     def value(self):
@@ -201,11 +204,11 @@ class StochasticVariationalBayesLoss:
         self.model = model
         self.datasize = datasize
 
-    def __call__(self, X):
+    def __call__(self, X, labels=None):
         T = self.model.sufficient_statistics(X)
         return VariationalBayesLossInstance(
-            expected_llh=self.model(T),
-            kl_div=kl_div_prior(self.model),
+            expected_llh=self.model(T, labels),
+            kl_div=kl_div_posterior_prior(self.model.parameters),
             parameters=self.model.parameters,
             acc_stats=self.model.accumulate(T, parent_message=None),
             scale=float(len(X)) / self.datasize

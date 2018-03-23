@@ -123,11 +123,11 @@ class TestNormalDiagonalCovarianceSet:
             NormalGammaPrior(self.mean, self.prec, self.prior_count),
             posts
         )
-        self.assertEqual(len(model), self.ncomps)
+        self.assertEqual(len(model.components), self.ncomps)
         for i in range(self.ncomps):
-            m1, m2 = self.mean.numpy(), model[i].mean.numpy()
+            m1, m2 = self.mean.numpy(), model.components[i].mean.numpy()
             self.assertTrue(np.allclose(m1, m2, atol=TOL))
-            c1, c2 = (1. / self.prec.numpy()), torch.diag(model[i].cov).numpy()
+            c1, c2 = (1. / self.prec.numpy()), torch.diag(model.components[i].cov).numpy()
             self.assertTrue(np.allclose(c1, c2, atol=TOL))
 
     def test_sufficient_statistics(self):
@@ -182,11 +182,11 @@ class TestNormalFullCovarianceSet:
             NormalWishartPrior(self.mean, self.cov, self.prior_count),
             posts
         )
-        self.assertEqual(len(model), self.ncomps)
+        self.assertEqual(len(model.components), self.ncomps)
         for i in range(self.ncomps):
-            m1, m2 = self.mean.numpy(), model[i].mean.numpy()
+            m1, m2 = self.mean.numpy(), model.components[i].mean.numpy()
             self.assertTrue(np.allclose(m1, m2))
-            c1, c2 = self.cov.numpy(), model[i].cov.numpy()
+            c1, c2 = self.cov.numpy(), model.components[i].cov.numpy()
             self.assertTrue(np.allclose(c1, c2, atol=TOL))
 
     def test_sufficient_statistics(self):

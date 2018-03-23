@@ -8,6 +8,7 @@ from .models import NormalDiagonalCovariance
 from .models import NormalFullCovariance
 from .models import NormalDiagonalCovarianceSet
 from .models import NormalFullCovarianceSet
+from .models import StochasticVariationalBayesLoss
 
 #from .models import Mixture
 #from .models import DiscriminativeVariationalModel

@@ -54,9 +54,24 @@ class TestBayesianParameterSet:
         self.assertEqual(len(params), len(param_set))
 
 
+class TestSVBLoss:
+
+    def test_loss(self):
+        loss_fn = beer.StochasticVariationalBayesLoss(self.model, len(self.X))
+        loss1 = loss_fn(self.X)
+        loss2 = self.model(self.model.sufficient_statistics(self.X), self.labels) - \
+            beer.kl_div_posterior_prior(self.model.parameters)
+        loss2 = torch.sum(loss2)
+        self.assertAlmostEqual(float(loss1), float(loss2))
+
+
 dir_prior = beer.DirichletPrior(torch.ones(22))
 ng_prior = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
 nw_prior = beer.NormalWishartPrior(torch.zeros(2), torch.eye(2), 1.)
+
+n1_model = beer.NormalDiagonalCovariance(ng_prior, ng_prior)
+n2_model = beer.NormalFullCovariance(nw_prior, nw_prior)
+
 
 tests = [
     (TestBayesianParameter, {'prior': dir_prior, 'posterior': dir_prior}),
@@ -75,6 +90,15 @@ tests = [
         'nparams': 10}),
     (TestBayesianParameterSet, {'prior': nw_prior, 'posterior': nw_prior,
         'nparams': 10}),
+
+    (TestSVBLoss, {'model': n1_model, 'X': torch.randn(20, 2).float(),
+        'labels': None}),
+    (TestSVBLoss, {'model': n2_model, 'X': torch.randn(20, 2).float(),
+        'labels': None}),
+    (TestSVBLoss, {'model': n1_model, 'X': torch.randn(20, 2).float(),
+        'labels': torch.ones(20).long()}),
+    (TestSVBLoss, {'model': n2_model, 'X': torch.randn(20, 2).float(),
+        'labels': torch.ones(20).long()})
 ]
 
 
