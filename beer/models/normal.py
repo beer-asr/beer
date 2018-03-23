@@ -27,19 +27,20 @@ import math
 import torch
 import torch.autograd as ta
 
-from .model import ConjugateExponentialModel
-from ..expfamily import NormalGammaPrior
-from ..expfamily import NormalWishartPrior
-from ..expfamily import kl_div
-from ..expfamily import _normalwishart_split_nparams
-
+from .bayesmodel import BayesianParameter
+from .bayesmodel import BayesianParameterSet
+from .bayesmodel import BayesianModel
+from ..expfamilyprior import NormalGammaPrior
+from ..expfamilyprior import NormalWishartPrior
+from ..expfamilyprior import kl_div
+from ..expfamilyprior import _normalwishart_split_nparams
 
 
 #######################################################################
 # Normal model
 #######################################################################
 
-class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
+class Normal(BayesianModel, metaclass=abc.ABCMeta):
     'Abstract Base Class for the Normal distribution model.'
 
     @staticmethod
@@ -88,40 +89,6 @@ class Normal(ConjugateExponentialModel, metaclass=abc.ABCMeta):
         '''
         NotImplemented
 
-    @property
-    @abc.abstractmethod
-    def count(self):
-        'Number of data points used to estimate the parameters.'
-        NotImplemented
-
-    def kl_div_posterior_prior(self):
-        '''KL divergence between the posterior and prior distribution.
-
-        Returns:
-            float: KL divergence.
-
-        '''
-        return kl_div(self.posterior, self.prior)
-
-    def natural_grad_update(self, acc_stats, scale, lrate):
-        '''Perform a natural gradient update of the posteriors'
-        parameters.
-
-        Args:
-            acc_stats (dict): Accumulated statistics.
-            scale (float): Scale of the sufficient statistics.
-            lrate (float): Learning rate.
-
-        '''
-        # Compute the natural gradient.
-        natural_grad = self.prior.natural_params + scale * acc_stats \
-            - self.posterior.natural_params
-
-        # Update the posterior distribution.
-        self.posterior.natural_params = ta.Variable(
-            self.posterior.natural_params + lrate * natural_grad,
-            requires_grad=True)
-
 
 class NormalDiagonalCovariance(Normal):
     'Bayesian Normal distribution with diagonal covariance matrix.'
@@ -137,38 +104,28 @@ class NormalDiagonalCovariance(Normal):
                           torch.ones_like(mean)], dim=-1)
 
     def __init__(self, prior, posterior):
-        self.prior = prior
-        self.posterior = posterior
+        super().__init__()
+        self._mean_prec = BayesianParameter(prior, posterior)
 
     @property
     def mean(self):
-        np1, np2, _, _ = self.posterior.expected_sufficient_statistics.view(4, -1)
+        evalue = self._mean_prec.expected_value
+        np1, np2, _, _ = evalue.view(4, -1)
         return np2 / (-2 * np1)
 
     @property
     def cov(self):
-        np1, np2, _, _ = self.posterior.expected_sufficient_statistics.view(4, -1)
+        evalue = self._mean_prec.expected_value
+        np1, np2, _, _ = evalue.view(4, -1)
         return torch.diag(1/(-2 * np1))
 
-    @property
-    def count(self):
-        np1, _, _, np4 = self.posterior.expected_sufficient_statistics.view(4, -1)
-        return float((self.posterior.natural_params[-1] + 1) /  (-4 * np1[-1]))
-
-    def exp_llh(self, X, accumulate=False):
-        T = self.sufficient_statistics(X)
-        exp_natural_params = self.posterior.expected_sufficient_statistics
-
-        # Note: the lognormalizer is already included in the expected
-        # value of the natural parameters.
-        exp_llh = T @ exp_natural_params - \
-            .5 * X.shape[1] * math.log(2 * math.pi)
-
-        if accumulate:
-            acc_stats = T.sum(dim=0)
-            return exp_llh, acc_stats
-
+    def forward(self, T):
+        exp_llh = T @ self._mean_prec.expected_value
+        exp_llh -= .125 * T.size(1) * math.log(2 * math.pi)
         return exp_llh
+
+    def accumulate(self, T):
+        return T.sum(axis=0)
 
 
 class NormalFullCovariance(Normal):
@@ -189,39 +146,30 @@ class NormalFullCovariance(Normal):
             torch.ones(len(mean), 1).type(mean.type())], dim=-1)
 
     def __init__(self, prior, posterior):
-        self.prior = prior
-        self.posterior = posterior
+        super().__init__()
+        self._mean_prec = BayesianParameter(prior, posterior)
 
     @property
     def mean(self):
-        nparams = self.posterior.expected_sufficient_statistics
-        np1, np2, _, _, _ = _normalwishart_split_nparams(nparams)
+        evalue = self._mean_prec.expected_value
+        np1, np2, _, _, _ = _normalwishart_split_nparams(evalue)
         return torch.inverse(-2 * np1) @ np2
 
     @property
     def cov(self):
-        nparams = self.posterior.expected_sufficient_statistics
-        np1, _, _, _, _ = _normalwishart_split_nparams(nparams)
+        evalue = self._mean_prec.expected_value
+        np1, _, _, _, _ = _normalwishart_split_nparams(evalue)
         return torch.inverse(-2 * np1)
 
-    @property
-    def count(self):
-        return float(self.posterior.natural_params[-1])
-
-    def exp_llh(self, X, accumulate=False):
-        T = self.sufficient_statistics(X)
-        exp_natural_params = self.posterior.expected_sufficient_statistics
-
-        # Note: the lognormalizer is already included in the expected
-        # value of the natural parameters.
-        exp_llh = T @ exp_natural_params - \
-            .5 * X.shape[1] * math.log(2 * math.pi)
-
-        if accumulate:
-            acc_stats = T.sum(dim=0)
-            return exp_llh, acc_stats
-
+    def forward(self, T):
+        feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - T.size(1))))
+        exp_natural_params = self._mean_prec.expected_value
+        exp_llh = T @ self._mean_prec.expected_value
+        exp_llh -= .5 * feadim * math.log(2 * math.pi)
         return exp_llh
+
+    def accumulate(self, T):
+        return T.sum(axis=0)
 
 
 #######################################################################
@@ -232,14 +180,14 @@ class NormalFullCovariance(Normal):
 class NormalSet(metaclass=abc.ABCMeta):
     'Set Normal density models.'
 
-    def __init__(self, components):
-        self.components = components
+    def __init__(self, parameters):
+        self.parameters = parameters
 
     def __len__(self):
-        return len(self.components)
+        return len(self.parameters)
 
     def __getitem__(self, key):
-        return self.components[key]
+        return self.parameters[key]
 
     @staticmethod
     @abc.abstractmethod
@@ -250,46 +198,37 @@ class NormalSet(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def sufficient_statistics_from_mean_var(mean, var):
         NotImplemented
-
-    def kl_div_posterior_prior(self):
-        retval = 0
-        for comp in self.components:
-            retval += kl_div(comp.posterior, comp.prior)
-        return retval
-
-    def natural_grad_update(self, acc_stats, scale, lrate):
-        for i, comp in enumerate(self.components):
-            prior, post = comp.prior, comp.posterior
-            natural_grad = prior.natural_params + scale * acc_stats[i] \
-                - post.natural_params
-            post.natural_params = ta.Variable(
-                post.natural_params + lrate * natural_grad, requires_grad=True)
-
 
 class NormalDiagonalCovarianceSet(NormalSet):
     'Set Normal density models with diagonal covariance.'
 
     def __init__(self, prior, posteriors):
-        super().__init__([NormalDiagonalCovariance(prior, post)
-                          for post in posteriors])
-
+        params = BayesianParameterSet([
+            NormalDiagonalCovariance(prior, post) for post in posteriors
+        ])
+        super().__init__(params)
 
     def sufficient_statistics(X):
         return NormalDiagonalCovariance.sufficient_statistics(X)
 
     def sufficient_statistics_from_mean_var(mean, var):
-        return NormalDiagonalCovariance.sufficient_statistics_from_mean_var(mean, var)
+        return NormalDiagonalCovariance.sufficient_statistics_from_mean_var(mean,
+            var)
+
 
 class NormalFullCovarianceSet(NormalSet):
     'Set Normal density models with full covariance.'
 
     def __init__(self, prior, posteriors):
-        super().__init__([NormalFullCovariance(prior, post)
-                          for post in posteriors])
+        params = BayesianParameterSet([
+            NormalFullCovariance(prior, post) for post in posteriors
+        ])
+        super().__init__(params)
 
     def sufficient_statistics(X):
         return NormalFullCovariance.sufficient_statistics(X)
 
     def sufficient_statistics_from_mean_var(mean, var):
-        return NormalFullCovariance.sufficient_statistics_from_mean_var(mean, var)
+        return NormalFullCovariance.sufficient_statistics_from_mean_var(mean,
+            var)
 

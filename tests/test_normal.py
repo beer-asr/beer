@@ -35,8 +35,6 @@ class TestNormalDiagonalCovariance:
         if len(c1.shape) == 1:
             c1 = np.diag(c1)
         self.assertTrue(np.allclose(c1, c2, atol=TOL))
-        self.assertAlmostEqual(self.prior_count, float(model.count),
-                               places=TOLPLACES)
 
     def test_sufficient_statistics(self):
         X =  self.X.numpy()
@@ -58,18 +56,15 @@ class TestNormalDiagonalCovariance:
 
     def test_exp_llh(self):
         model = beer.NormalDiagonalCovariance(
-            NormalGammaPrior(self.mean, self.prec, 1.),
-            NormalGammaPrior(self.mean, self.prec, 1.)
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            NormalGammaPrior(self.mean, self.prec, self.prior_count)
         )
         T = model.sufficient_statistics(self.X)
-        nparams = model.posterior.expected_sufficient_statistics
+        nparams = model._mean_prec.expected_value
         exp_llh1 = T @ nparams
         exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
-        s1 = T.sum(dim=0)
-        exp_llh2, s2 = model.exp_llh(self.X, accumulate=True)
+        exp_llh2 = model(T)
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
-                        atol=TOL))
-        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), rtol=TOL,
                         atol=TOL))
 
 
@@ -85,7 +80,6 @@ class TestNormalFullCovariance:
         self.assertTrue(np.allclose(m1, m2))
         c1, c2 = self.cov.numpy(), model.cov.numpy()
         self.assertTrue(np.allclose(c1, c2, atol=TOL))
-        self.assertAlmostEqual(self.prior_count, model.count, places=TOLPLACES)
 
     def test_sufficient_statistics(self):
         X = self.X.numpy()
@@ -112,14 +106,12 @@ class TestNormalFullCovariance:
             NormalWishartPrior(self.mean, self.cov, self.prior_count)
         )
         T = model.sufficient_statistics(self.X)
-        nparams = model.posterior.expected_sufficient_statistics
+        nparams = model._mean_prec.expected_value
         exp_llh1 = T @ nparams
         exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
-        s1 = T.sum(dim=0)
-        exp_llh2, s2 = model.exp_llh(self.X, accumulate=True)
+        exp_llh2 = model(T)
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
                         atol=TOL))
-        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
 
 class TestNormalDiagonalCovarianceSet:
@@ -137,8 +129,6 @@ class TestNormalDiagonalCovarianceSet:
             self.assertTrue(np.allclose(m1, m2, atol=TOL))
             c1, c2 = (1. / self.prec.numpy()), torch.diag(model[i].cov).numpy()
             self.assertTrue(np.allclose(c1, c2, atol=TOL))
-            self.assertAlmostEqual(self.prior_count, float(model[i].count),
-                                   places=TOLPLACES)
 
     def test_sufficient_statistics(self):
         s1 = beer.NormalDiagonalCovariance.sufficient_statistics(self.X)
@@ -170,8 +160,6 @@ class TestNormalFullCovarianceSet:
             self.assertTrue(np.allclose(m1, m2))
             c1, c2 = self.cov.numpy(), model[i].cov.numpy()
             self.assertTrue(np.allclose(c1, c2, atol=TOL))
-            self.assertAlmostEqual(self.prior_count, model[i].count,
-                places=TOLPLACES)
 
     def test_sufficient_statistics(self):
         s1 = beer.NormalFullCovariance.sufficient_statistics(self.X)
