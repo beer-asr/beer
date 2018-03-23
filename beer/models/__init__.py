@@ -7,6 +7,8 @@ from .normal import NormalFullCovarianceSet
 from .mixture import Mixture
 
 from .vae import VAE
-from .vae import MLPNormalDiag
-from .vae import MLPNormalIso
+from .dbe import DiscriminativeVariationalModel
+
+from .mlpmodel import MLPNormalDiag
+from .mlpmodel import MLPNormalIso
 
