@@ -14,6 +14,7 @@ from .models import NormalDiagonalCovariance
 from .models import NormalFullCovariance
 from .models import NormalDiagonalCovarianceSet
 from .models import NormalFullCovarianceSet
+from .models import Mixture
 from .models import kl_div_posterior_prior
 
 #from .models import Mixture

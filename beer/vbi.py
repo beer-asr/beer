@@ -58,9 +58,9 @@ class VariationalBayesLossInstance:
         parameter of the model.
 
         '''
-        for acc_stat, parameter in zip(self._acc_stats, self._parameters):
+        for acc_stats, parameter in zip(self._acc_stats, self._parameters):
             parameter.natural_grad += parameter.prior.natural_params +  \
-                self._scale * self._acc_stats - \
+                self._scale * acc_stats - \
                 parameter.posterior.natural_params
 
     def backward(self):
@@ -93,7 +93,7 @@ class StochasticVariationalBayesLoss:
             expected_llh=model(T, labels),
             kl_div=kl_div_posterior_prior(model.parameters),
             parameters=model.parameters,
-            acc_stats=model.accumulate(T, parent_message=None),
+            acc_stats=model.accumulate(T),
             scale=float(len(X)) / self.datasize
         )
 

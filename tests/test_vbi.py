@@ -77,8 +77,8 @@ class TestBayesianModelOptimizer:
             previous_loss = loss
 
 
-dir1_prior = beer.DirichletPrior(torch.ones(2))
-dir2_prior = beer.DirichletPrior(torch.ones(2) + 1.)
+dir1_prior = beer.DirichletPrior(torch.ones(10))
+dir2_prior = beer.DirichletPrior(torch.ones(10) + 1.)
 ng1_prior = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
 ng2_prior = beer.NormalGammaPrior(torch.ones(2), torch.ones(2), 1.)
 nw1_prior = beer.NormalWishartPrior(torch.zeros(2), torch.eye(2), 1.)
@@ -86,6 +86,21 @@ nw2_prior = beer.NormalWishartPrior(torch.ones(2), torch.eye(2), 1.)
 
 n1_model = beer.NormalDiagonalCovariance(ng1_prior, ng2_prior)
 n2_model = beer.NormalFullCovariance(nw2_prior, nw2_prior)
+
+posts = [beer.NormalGammaPrior(torch.randn(2),
+                               torch.ones(2),
+                               1.) for _ in range(10)]
+normalset = beer.NormalDiagonalCovarianceSet(
+    beer.NormalGammaPrior(torch.zeros(2),
+    torch.ones(2), 1.), posts)
+m1_model = beer.Mixture(dir1_prior, dir2_prior, normalset)
+
+posts = [beer.NormalWishartPrior(torch.randn(2),
+                               torch.eye(2),
+                               1.) for _ in range(10)]
+normalset = beer.NormalFullCovarianceSet(
+    beer.NormalWishartPrior(torch.zeros(2), torch.eye(2), 1.), posts)
+m2_model = beer.Mixture(dir1_prior, dir2_prior, normalset)
 
 
 tests = [
@@ -99,14 +114,24 @@ tests = [
         'labels': torch.ones(20).long()}),
 
     (TestBayesianModelOptimizer, {'model': n1_model,
-        'X': torch.randn(20, 2).float(), 'labels': None, 'lrate': 1.}),
+        'X': torch.randn(20, 2), 'labels': None, 'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': n2_model,
+        'X': torch.randn(20, 2), 'labels': None, 'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': m1_model,
+        'X': torch.randn(20, 2), 'labels': None, 'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': m2_model,
+        'X': torch.randn(20, 2), 'labels': None, 'lrate': 1.}),
     (TestBayesianModelOptimizer, {'model': n1_model,
-        'X': torch.randn(20, 2).float(), 'labels': None, 'lrate': 1.}),
-    (TestBayesianModelOptimizer, {'model': n1_model,
-        'X': torch.randn(20, 2).float(), 'labels': torch.ones(20),
+        'X': torch.randn(20, 2), 'labels': torch.ones(20),
         'lrate': 1.}),
-    (TestBayesianModelOptimizer, {'model': n1_model,
-        'X': torch.randn(20, 2).float(), 'labels': torch.ones(20),
+    (TestBayesianModelOptimizer, {'model': n2_model,
+        'X': torch.randn(20, 2), 'labels': torch.ones(20),
+        'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': m1_model,
+        'X': torch.randn(20, 2), 'labels': torch.ones(20),
+        'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': m2_model,
+        'X': torch.randn(20, 2), 'labels': torch.ones(20),
         'lrate': 1.}),
 
 ]

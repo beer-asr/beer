@@ -155,6 +155,7 @@ class TestNormalDiagonalCovarianceSet:
             for param in model.parameters], dim=0)
         T = model.sufficient_statistics(self.X)
         exp_llh1 = T @ matrix.t()
+        exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
         exp_llh2 = model(T)
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy()))
 
@@ -214,6 +215,7 @@ class TestNormalFullCovarianceSet:
             for param in model.parameters], dim=0)
         T = model.sufficient_statistics(self.X)
         exp_llh1 = T @ matrix.t()
+        exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
         exp_llh2 = model(T)
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy()))
 

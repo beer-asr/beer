@@ -17,7 +17,6 @@ test_mixture:
 test_vbi:
 	python tests/test_vbi.py -f -v
 
-#test_models: test_bayesmodel test_normal test_mixture
-test_models: test_bayesmodel test_normal
+test_models: test_bayesmodel test_normal test_mixture
 test: test_expfamilyprior test_features test_models test_vbi
 

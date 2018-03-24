@@ -85,6 +85,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
         elif isinstance(value, BayesianParameterSet):
             for parameter in value:
                 self._parameters.append(parameter)
+        elif isinstance(value, BayesianModel):
+            self._parameters += value.parameters
         super().__setattr__(name, value)
 
     def __call__(self, X, labels=None):
@@ -110,7 +112,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
         NotImplemented
 
     @abc.abstractmethod
-    def accumulate(self, s_stats, parent_message):
+    def accumulate(self, s_stats, parent_message=None):
         '''Accumulate the sufficient statistics for the parameters's
         update.
 
@@ -118,6 +120,11 @@ class BayesianModel(metaclass=abc.ABCMeta):
             s_stats (list): List of sufficient statistics.
             parent_message (object): Message from the parent (and
                 the co-parents) to make the VB update.
+
+        Returns:
+            list: List of accumulated statistics for each parameter of
+                the model. The list should be in the same order as the
+                parameters were registered.
 
         '''
         NotImplemented

@@ -90,7 +90,7 @@ class Normal(BayesianModel, metaclass=abc.ABCMeta):
         NotImplemented
 
     def accumulate(self, T, parent_message=None):
-        return T.sum(dim=0)
+        return [T.sum(dim=0)]
 
 
 class NormalDiagonalCovariance(Normal):
@@ -123,8 +123,9 @@ class NormalDiagonalCovariance(Normal):
         return torch.diag(1/(-2 * np1))
 
     def forward(self, T, labels=None):
+        feadim = .25 * T.size(1)
         exp_llh = T @ self._mean_prec.expected_value
-        exp_llh -= .125 * T.size(1) * math.log(2 * math.pi)
+        exp_llh -= .5 * feadim * math.log(2 * math.pi)
         return exp_llh
 
 
@@ -200,9 +201,6 @@ class NormalSet(BayesianModel, metaclass=abc.ABCMeta):
         return torch.cat([param.expected_value[None]
             for param in self.__parameters], dim=0)
 
-    def forward(self, T, labels=None):
-        return T @ self._expected_nparams_as_matrix().t()
-
     def accumulate(self, T, weights):
         return list(weights.t() @ T)
 
@@ -222,8 +220,14 @@ class NormalDiagonalCovarianceSet(NormalSet):
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        return NormalDiagonalCovariance.sufficient_statistics_from_mean_var(mean,
-            var)
+        return NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
+            mean, var)
+
+    def forward(self, T, labels=None):
+        feadim = .25 * T.size(1)
+        retval = T @ self._expected_nparams_as_matrix().t()
+        retval -= .5 * feadim * math.log(2 * math.pi)
+        return retval
 
 
 class NormalFullCovarianceSet(NormalSet):
@@ -243,4 +247,10 @@ class NormalFullCovarianceSet(NormalSet):
     def sufficient_statistics_from_mean_var(mean, var):
         return NormalFullCovariance.sufficient_statistics_from_mean_var(mean,
             var)
+
+    def forward(self, T, labels=None):
+        feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - T.size(1))))
+        retval = T @ self._expected_nparams_as_matrix().t()
+        retval -= .5 * feadim * math.log(2 * math.pi)
+        return retval
 
