@@ -3,7 +3,7 @@
 
 
 import numpy as np
-import torch
+import torch.autograd as ta
 
 from .models import kl_div_posterior_prior
 
@@ -58,12 +58,15 @@ class VariationalBayesLossInstance:
         parameter of the model.
 
         '''
-        for acc_stat, parameter in zip(acc_stats, self._parameters):
+        for acc_stat, parameter in zip(self._acc_stats, self._parameters):
             parameter.natural_grad += parameter.prior.natural_params +  \
-                scale * acc_stats - parameter.posterior.natural_params
+                self._scale * self._acc_stats - \
+                parameter.posterior.natural_params
 
     def backward(self):
-        self._loss.backward()
+        # Pytorch minimizes the loss ! We change the sign of the loss
+        # just before to compute the gradient.
+        (-self._loss).backward()
 
 
 class StochasticVariationalBayesLoss:
@@ -94,4 +97,31 @@ class StochasticVariationalBayesLoss:
             acc_stats=self.model.accumulate(T, parent_message=None),
             scale=float(len(X)) / self.datasize
         )
+
+
+class BayesianModelOptimizer:
+    'Bayesian Model Optimizer.'
+
+    def __init__(self, parameters, lrate=1.):
+        '''Initialize the optimizer.
+
+        Args:
+            parameters (list): List of ``BayesianParameters``.
+            lrate (float): learning rate.
+
+        '''
+        self._parameters = parameters
+        self._lrate = lrate
+
+    def zero_natural_grad(self):
+        for parameter in self._parameters:
+            parameter.zero_natural_grad()
+
+    def step(self):
+        for parameter in self._parameters:
+            parameter.posterior.natural_params = ta.Variable(
+                parameter.posterior.natural_params + \
+                self._lrate * parameter.natural_grad,
+                requires_grad=True
+            )
 

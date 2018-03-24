@@ -54,6 +54,25 @@ class TestSVBLoss:
             float(scale * loss1.exp_llh.sum() - loss1.kl_div))
 
 
+class TestBayesianModelOptimizer:
+
+    def test_optimizer(self):
+        loss_fn = beer.StochasticVariationalBayesLoss(self.model, len(self.X))
+        optimizer = beer.BayesianModelOptimizer(self.model.parameters,
+            lrate=self.lrate)
+
+        previous_loss = -1e5
+        for i in range(10):
+            loss = loss_fn(self.X)
+
+            optimizer.zero_natural_grad()
+            loss.backward_natural_grad()
+            optimizer.step()
+
+            self.assertGreaterEqual(float(loss), float(previous_loss))
+            previous_loss = loss
+
+
 dir1_prior = beer.DirichletPrior(torch.ones(2))
 dir2_prior = beer.DirichletPrior(torch.ones(2) + 1.)
 ng1_prior = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
@@ -73,7 +92,19 @@ tests = [
     (TestSVBLoss, {'model': n1_model, 'X': torch.randn(20, 2).float(),
         'labels': torch.ones(20).long()}),
     (TestSVBLoss, {'model': n2_model, 'X': torch.randn(20, 2).float(),
-        'labels': torch.ones(20).long()})
+        'labels': torch.ones(20).long()}),
+
+    (TestBayesianModelOptimizer, {'model': n1_model,
+        'X': torch.randn(20, 2).float(), 'labels': None, 'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': n1_model,
+        'X': torch.randn(20, 2).float(), 'labels': None, 'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': n1_model,
+        'X': torch.randn(20, 2).float(), 'labels': torch.ones(20),
+        'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': n1_model,
+        'X': torch.randn(20, 2).float(), 'labels': torch.ones(20),
+        'lrate': 1.}),
+
 ]
 
 
