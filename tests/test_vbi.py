@@ -22,8 +22,8 @@ TOL = 10 ** (-TOLPLACES)
 class TestSVBLoss:
 
     def test_loss(self):
-        loss_fn = beer.StochasticVariationalBayesLoss(self.model, len(self.X))
-        loss1 = loss_fn(self.X)
+        loss_fn = beer.StochasticVariationalBayesLoss(len(self.X))
+        loss1 = loss_fn(self.model, self.X, self.labels)
         T = self.model.sufficient_statistics(self.X)
         loss2 = self.model(T, self.labels).sum() - \
             beer.kl_div_posterior_prior(self.model.parameters)
@@ -37,11 +37,15 @@ class TestSVBLoss:
 
     def test_loss_batch(self):
         bsize = 10
+        if self.labels is not None:
+            labels = self.labels[:bsize]
+        else:
+            labels = None
         scale = float(bsize) / float(len(self.X))
-        loss_fn = beer.StochasticVariationalBayesLoss(self.model, len(self.X))
-        loss1 = loss_fn(self.X[:bsize])
+        loss_fn = beer.StochasticVariationalBayesLoss(len(self.X))
+        loss1 = loss_fn(self.model, self.X[:bsize], labels)
         T = self.model.sufficient_statistics(self.X[:bsize])
-        loss2 = scale * self.model(T, self.labels).sum() - \
+        loss2 = scale * self.model(T, labels).sum() - \
             beer.kl_div_posterior_prior(self.model.parameters)
         loss2 = torch.sum(loss2)
         self.assertAlmostEqual(float(loss1), float(loss2))
@@ -57,13 +61,13 @@ class TestSVBLoss:
 class TestBayesianModelOptimizer:
 
     def test_optimizer(self):
-        loss_fn = beer.StochasticVariationalBayesLoss(self.model, len(self.X))
+        loss_fn = beer.StochasticVariationalBayesLoss(len(self.X))
         optimizer = beer.BayesianModelOptimizer(self.model.parameters,
             lrate=self.lrate)
 
         previous_loss = -1e5
         for i in range(10):
-            loss = loss_fn(self.X)
+            loss = loss_fn(self.model, self.X)
 
             optimizer.zero_natural_grad()
             loss.backward_natural_grad()

@@ -76,7 +76,7 @@ class StochasticVariationalBayesLoss:
 
     '''
 
-    def __init__(self, model, datasize):
+    def __init__(self, datasize):
         '''Initialize the loss
 
         Args:
@@ -85,16 +85,15 @@ class StochasticVariationalBayesLoss:
             datasize (int): Number of data point in the data set.
 
         '''
-        self.model = model
         self.datasize = datasize
 
-    def __call__(self, X, labels=None):
-        T = self.model.sufficient_statistics(X)
+    def __call__(self, model, X, labels=None):
+        T = model.sufficient_statistics(X)
         return VariationalBayesLossInstance(
-            expected_llh=self.model(T, labels),
-            kl_div=kl_div_posterior_prior(self.model.parameters),
-            parameters=self.model.parameters,
-            acc_stats=self.model.accumulate(T, parent_message=None),
+            expected_llh=model(T, labels),
+            kl_div=kl_div_posterior_prior(model.parameters),
+            parameters=model.parameters,
+            acc_stats=model.accumulate(T, parent_message=None),
             scale=float(len(X)) / self.datasize
         )
 
