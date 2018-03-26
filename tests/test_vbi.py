@@ -6,6 +6,7 @@ import unittest
 import numpy as np
 import math
 import torch
+import torch.nn as nn
 
 import sys
 sys.path.insert(0, './')
@@ -102,6 +103,17 @@ normalset = beer.NormalFullCovarianceSet(
     beer.NormalWishartPrior(torch.zeros(2), torch.eye(2), 1.), posts)
 m2_model = beer.Mixture(dir1_prior, dir2_prior, normalset)
 
+embedding_dim = 10
+outdim = 5
+data = torch.randn(20, 2)
+labels = torch.zeros(20).long()
+structure = nn.Sequential(nn.Linear(2, 10))
+encoder = beer.MLPNormalDiag(structure, 2)
+bem1_model = beer.BayesianEmbeddingModel(encoder, n1_model)
+bem2_model = beer.BayesianEmbeddingModel(encoder, n2_model)
+bem3_model = beer.BayesianEmbeddingModel(encoder, m1_model)
+bem4_model = beer.BayesianEmbeddingModel(encoder, m2_model)
+
 
 tests = [
     (TestSVBLoss, {'model': n1_model, 'X': torch.randn(20, 2).float(),
@@ -134,6 +146,26 @@ tests = [
         'X': torch.randn(20, 2), 'labels': torch.ones(20),
         'lrate': 1.}),
 
+    (TestBayesianModelOptimizer, {'model': bem1_model,
+        'X': torch.randn(20, 2), 'labels': None, 'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': bem2_model,
+        'X': torch.randn(20, 2), 'labels': None, 'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': bem3_model,
+        'X': torch.randn(20, 2), 'labels': None, 'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': bem4_model,
+        'X': torch.randn(20, 2), 'labels': None, 'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': bem1_model,
+        'X': torch.randn(20, 2), 'labels': torch.ones(20),
+        'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': bem2_model,
+        'X': torch.randn(20, 2), 'labels': torch.ones(20),
+        'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': bem3_model,
+        'X': torch.randn(20, 2), 'labels': torch.ones(20),
+        'lrate': 1.}),
+    (TestBayesianModelOptimizer, {'model': bem4_model,
+        'X': torch.randn(20, 2), 'labels': torch.ones(20),
+        'lrate': 1.}),
 ]
 
 

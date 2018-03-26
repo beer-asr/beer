@@ -44,5 +44,5 @@ class BayesianEmbeddingModel(BayesianModel):
         return retval
 
     def accumulate(self, T, parent_msg=None):
-        return self.bayesian_model.accumulate(T, parent_message)
+        return self.bayesian_model.accumulate(T, parent_msg)
 
