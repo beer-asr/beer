@@ -16,8 +16,8 @@ install:
 
 
 clean:
-	@rm -rf *.egg build dist
-	@find . -type d -name __pycache__ -delete
+	@rm -rf *.egg* build dist
+	@find . -depth -type d -name "__pycache__" -exec rm -fr "{}" \;
 
 
 test:
