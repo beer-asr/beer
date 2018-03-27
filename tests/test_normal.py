@@ -9,8 +9,10 @@ import torch
 
 import sys
 sys.path.insert(0, './')
+
 import beer
-from beer import NormalDiagonalCovariance
+from beer import NormalGammaPrior
+from beer import NormalWishartPrior
 
 
 torch.manual_seed(10)
@@ -23,28 +25,16 @@ TOL = 10 ** (-TOLPLACES)
 class TestNormalDiagonalCovariance:
 
     def test_create(self):
-        model = beer.NormalDiagonalCovariance.create(self.mean, self.cov,
-            prior_count=self.prior_count)
+        model = beer.NormalDiagonalCovariance(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            NormalGammaPrior(self.mean, self.prec, self.prior_count)
+        )
         m1, m2 = self.mean.numpy(), model.mean.numpy()
         self.assertTrue(np.allclose(m1, m2, atol=TOL))
-        c1, c2 = self.cov.numpy(), model.cov.numpy()
+        c1, c2 = (1. / self.prec.numpy()), model.cov.numpy()
         if len(c1.shape) == 1:
             c1 = np.diag(c1)
         self.assertTrue(np.allclose(c1, c2, atol=TOL))
-        self.assertAlmostEqual(self.prior_count, float(model.count),
-                               places=TOLPLACES)
-
-    def test_create_random(self):
-        model = beer.NormalDiagonalCovariance.create(self.mean, self.cov,
-            prior_count=self.prior_count, random_init=True)
-        m1, m2 = self.mean.numpy(), model.mean.numpy()
-        self.assertFalse(np.allclose(m1, m2))
-        c1, c2 = self.cov.numpy(), model.cov.numpy()
-        if len(c1.shape) == 1:
-            c1 = np.diag(c1)
-        self.assertTrue(np.allclose(c1, c2, atol=TOL))
-        self.assertAlmostEqual(self.prior_count, float(model.count),
-            places=TOLPLACES)
 
     def test_sufficient_statistics(self):
         X =  self.X.numpy()
@@ -54,7 +44,7 @@ class TestNormalDiagonalCovariance:
 
     def test_sufficient_statistics_from_mean_var(self):
         mean = self.mean.view(1, -1)
-        var = self.cov.view(1, -1)
+        var = (1. / self.prec.view(1, -1))
         if len(var.size()) == 2:
             var = torch.diag(var)
         s1 = beer.NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
@@ -65,71 +55,31 @@ class TestNormalDiagonalCovariance:
         self.assertTrue(np.allclose(s1.numpy(), s2, atol=TOL))
 
     def test_exp_llh(self):
-        model = beer.NormalDiagonalCovariance.create(self.mean, self.cov,
-            self.prior_count)
+        model = beer.NormalDiagonalCovariance(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            NormalGammaPrior(self.mean, self.prec, self.prior_count)
+        )
         T = model.sufficient_statistics(self.X)
-        nparams = model.posterior.expected_sufficient_statistics
+        nparams = model._mean_prec.expected_value
         exp_llh1 = T @ nparams
         exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
-        s1 = T.sum(dim=0)
-        exp_llh2, s2 = model.exp_llh(self.X, accumulate=True)
+        exp_llh2 = model(T)
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
                         atol=TOL))
-        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), rtol=TOL,
-                        atol=TOL))
-
-    def test_split(self):
-        model = beer.NormalDiagonalCovariance.create(self.mean, self.cov,
-            self.prior_count)
-        smodel1, smodel2 = model.split()
-        cov = model.cov.numpy()
-        evals, evecs = np.linalg.eigh(cov)
-        m1 = model.mean.numpy() + evecs.T @ np.sqrt(evals)
-        m2 = model.mean.numpy() - evecs.T @ np.sqrt(evals)
-        self.assertTrue(np.allclose(m1, smodel1.mean.numpy(), atol=TOL))
-        self.assertTrue(np.allclose(m2, smodel2.mean.numpy(), atol=TOL))
-
-    def test_expected_natural_params(self):
-        model = beer.NormalDiagonalCovariance.create(self.mean, self.cov,
-            self.prior_count)
-        mean = self.mean.view(1, -1)
-        if len(self.cov.size()) == 2:
-            var = torch.diag(self.cov)
-        else:
-            var = self.cov
-        var = var.view(1, -1)
-        enp1, Ts1 = model.expected_natural_params(mean, var)
-        T = model.sufficient_statistics_from_mean_var(mean, var).numpy()
-        np1, np2, np3, np4 = \
-            model.posterior.expected_sufficient_statistics.view(4, -1).numpy()
-        identity = np.eye(var.shape[1])
-        np1 = (np1[:, None] * identity[None, :, :]).reshape(-1)
-        enp2, Ts2 = np.c_[np1[None], np2[None], np3.sum(axis=-1)[None],
-                    np4.sum(axis=-1)[None]], T.sum(axis=0)
-        self.assertTrue(np.allclose(enp1.numpy(), enp2, atol=TOL))
-        self.assertTrue(np.allclose(Ts1.numpy(), Ts2, atol=TOL))
 
 
 
 class TestNormalFullCovariance:
 
     def test_create(self):
-        model = beer.NormalFullCovariance.create(self.mean, self.cov,
-            self.prior_count)
+        model = beer.NormalFullCovariance(
+            NormalWishartPrior(self.mean, self.cov, self.prior_count),
+            NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        )
         m1, m2 = self.mean.numpy(), model.mean.numpy()
         self.assertTrue(np.allclose(m1, m2))
         c1, c2 = self.cov.numpy(), model.cov.numpy()
         self.assertTrue(np.allclose(c1, c2, atol=TOL))
-        self.assertAlmostEqual(self.prior_count, model.count, places=TOLPLACES)
-
-    def test_create_random(self):
-        model = beer.NormalFullCovariance.create(self.mean, self.cov,
-            self.prior_count, random_init=True)
-        m1, m2 = self.mean.numpy(), model.mean.numpy()
-        self.assertFalse(np.allclose(m1, m2))
-        c1, c2 = self.cov.numpy(), model.cov.numpy()
-        self.assertTrue(np.allclose(c1, c2, atol=TOL))
-        self.assertAlmostEqual(self.prior_count, model.count, places=TOLPLACES)
 
     def test_sufficient_statistics(self):
         X = self.X.numpy()
@@ -151,41 +101,137 @@ class TestNormalFullCovariance:
         self.assertTrue(np.allclose(s1.numpy(), s2, atol=TOL))
 
     def test_exp_llh(self):
-        model = beer.NormalFullCovariance.create(self.mean, self.cov,
-            self.prior_count)
+        model = beer.NormalFullCovariance(
+            NormalWishartPrior(self.mean, self.cov, self.prior_count),
+            NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        )
         T = model.sufficient_statistics(self.X)
-        nparams = model.posterior.expected_sufficient_statistics
+        nparams = model._mean_prec.expected_value
         exp_llh1 = T @ nparams
         exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
-        s1 = T.sum(dim=0)
-        exp_llh2, s2 = model.exp_llh(self.X, accumulate=True)
+        exp_llh2 = model(T)
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
                         atol=TOL))
+
+
+class TestNormalDiagonalCovarianceSet:
+
+    def test_create(self):
+        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalDiagonalCovarianceSet(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            posts
+        )
+        self.assertEqual(len(model.components), self.ncomps)
+        for i in range(self.ncomps):
+            m1, m2 = self.mean.numpy(), model.components[i].mean.numpy()
+            self.assertTrue(np.allclose(m1, m2, atol=TOL))
+            c1, c2 = (1. / self.prec.numpy()), torch.diag(model.components[i].cov).numpy()
+            self.assertTrue(np.allclose(c1, c2, atol=TOL))
+
+    def test_sufficient_statistics(self):
+        s1 = beer.NormalDiagonalCovariance.sufficient_statistics(self.X)
+        s2 = beer.NormalDiagonalCovarianceSet.sufficient_statistics(self.X)
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
-    def test_split(self):
-        model = beer.NormalFullCovariance.create(self.mean, self.cov,
-            self.prior_count)
-        smodel1, smodel2 = model.split()
+    def test_sufficient_statistics_from_mean_var(self):
+        mean = self.mean.view(1, -1)
+        var = (1. / self.prec.view(1, -1))
+        s1 = beer.NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
+            mean, var)
+        s2 = beer.NormalDiagonalCovarianceSet.sufficient_statistics_from_mean_var(
+            mean, var)
+        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
-        cov = model.cov.numpy()
-        evals, evecs = np.linalg.eigh(cov)
-        m1 = model.mean.numpy() + evecs.T @ np.sqrt(evals)
-        m2 = model.mean.numpy() - evecs.T @ np.sqrt(evals)
-        self.assertTrue(np.allclose(m1, smodel1.mean.numpy(), atol=TOL))
-        self.assertTrue(np.allclose(m2, smodel2.mean.numpy(), atol=TOL))
+    def test_forward(self):
+        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalDiagonalCovarianceSet(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            posts
+        )
+        matrix = torch.cat([param.expected_value[None]
+            for param in model.parameters], dim=0)
+        T = model.sufficient_statistics(self.X)
+        exp_llh1 = T @ matrix.t()
+        exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
+        exp_llh2 = model(T)
+        self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy()))
 
-    def test_expected_natural_params(self):
-        model = beer.NormalFullCovariance.create(self.mean, self.cov,
-            self.prior_count)
+    def test_accumulate(self):
+        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalDiagonalCovarianceSet(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            posts
+        )
+        weights = torch.ones(len(self.X), self.ncomps).type(self.X.type())
+        T = model.sufficient_statistics(self.X)
+        acc_stats1 = list(weights.t() @ T)
+        acc_stats2 = model.accumulate(T, weights)
+        for s1, s2 in zip(acc_stats1, acc_stats2):
+            self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
+
+
+class TestNormalFullCovarianceSet:
+
+    def test_create(self):
+        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalFullCovarianceSet(
+            NormalWishartPrior(self.mean, self.cov, self.prior_count),
+            posts
+        )
+        self.assertEqual(len(model.components), self.ncomps)
+        for i in range(self.ncomps):
+            m1, m2 = self.mean.numpy(), model.components[i].mean.numpy()
+            self.assertTrue(np.allclose(m1, m2))
+            c1, c2 = self.cov.numpy(), model.components[i].cov.numpy()
+            self.assertTrue(np.allclose(c1, c2, atol=TOL))
+
+    def test_sufficient_statistics(self):
+        s1 = beer.NormalFullCovariance.sufficient_statistics(self.X)
+        s2 = beer.NormalFullCovarianceSet.sufficient_statistics(self.X)
+        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
+
+    def test_sufficient_statistics_from_mean_var(self):
         mean = self.mean.view(1, -1)
         var = torch.diag(self.cov).view(1, -1)
-        enp1, Ts1 = model.expected_natural_params(mean, var)
-        T = model.sufficient_statistics_from_mean_var(mean, var).numpy()
-        enp2, Ts2 = model.posterior.expected_sufficient_statistics.numpy(), \
-             T.sum(axis=0)
-        self.assertTrue(np.allclose(enp1.numpy(), enp2, atol=TOL))
-        self.assertTrue(np.allclose(Ts1.numpy(), Ts2, atol=TOL))
+        s1 = beer.NormalFullCovariance.sufficient_statistics_from_mean_var(
+            mean, var)
+        s2 = beer.NormalFullCovarianceSet.sufficient_statistics_from_mean_var(
+            mean, var)
+        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
+
+    def test_forward(self):
+        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalFullCovarianceSet(
+            NormalWishartPrior(self.mean, self.cov, self.prior_count),
+            posts
+        )
+        matrix = torch.cat([param.expected_value[None]
+            for param in model.parameters], dim=0)
+        T = model.sufficient_statistics(self.X)
+        exp_llh1 = T @ matrix.t()
+        exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
+        exp_llh2 = model(T)
+        self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy()))
+
+    def test_accumulate(self):
+        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalFullCovarianceSet(
+            NormalWishartPrior(self.mean, self.cov, self.prior_count),
+            posts
+        )
+        weights = torch.ones(len(self.X), self.ncomps).type(self.X.type())
+        T = model.sufficient_statistics(self.X)
+        acc_stats1 = list(weights.t() @ T)
+        acc_stats2 = model.accumulate(T, weights)
+        for s1, s2 in zip(acc_stats1, acc_stats2):
+            self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
 
 
 dataF = {
@@ -214,31 +260,101 @@ data10D = {
 
 
 tests = [
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float(), 'prior_count': 1., **dataF}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.ones(2).double(), 'prior_count': 1., **dataD}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(10).float(), 'cov': torch.ones(10).float(), 'prior_count': 1., **data10F}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(10).double(), 'cov': torch.ones(10).double(), 'prior_count': 1., **data10D}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1., **dataF}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1., **dataD}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float(), 'prior_count': 1e-3, **dataF}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.ones(2).double(), 'prior_count': 1e-8, **dataD}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float() * 1e-5, 'prior_count': 1., **dataF}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'cov': torch.ones(2).double() * 1e-8, 'prior_count': 1., **dataD}),
-    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'cov': torch.ones(2).float() * 1e2, 'prior_count': 1., **dataF}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(),
+        'prec': torch.ones(2).float(), 'prior_count': 1., **dataF}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(),
+        'prec': torch.ones(2).double(), 'prior_count': 1., **dataD}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(10).float(), 'prec':
+        torch.ones(10).float(), 'prior_count': 1., **data10F}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(10).double(), 'prec':
+         torch.ones(10).double(), 'prior_count': 1., **data10D}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'prec':
+         torch.ones(2).float(), 'prior_count': 1e-3, **dataF}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'prec':
+         torch.ones(2).double(), 'prior_count': 1e-8, **dataD}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'prec':
+         torch.ones(2).float() * 1e-2, 'prior_count': 1., **dataF}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).double(), 'prec':
+         torch.ones(2).double() * 1e-8, 'prior_count': 1., **dataD}),
+    (TestNormalDiagonalCovariance, {'mean': torch.ones(2).float(), 'prec':
+         torch.ones(2).float() * 1e2, 'prior_count': 1., **dataF}),
 
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1., **dataF}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1., **dataD}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.FloatTensor([[2, -1.2], [-1.2, 10.]]).float(), 'prior_count': 1., **dataF}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.DoubleTensor([[2, -1.2], [-1.2, 10.]]).float(), 'prior_count': 1., **dataF}),
-    (TestNormalFullCovariance, {'mean': torch.ones(10).float(), 'cov': torch.eye(10).float(), 'prior_count': 1., **data10F}),
-    (TestNormalFullCovariance, {'mean': torch.ones(10).double(), 'cov': torch.eye(10).double(), 'prior_count': 1., **data10D}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1e-3, **dataF}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1e-7, **dataD}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float() * 1e-5, 'prior_count': 1., **dataF}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1., **dataD}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).float(), 'cov': torch.eye(2).float() * 1e2, 'prior_count': 1., **dataF}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., **dataD}),
-    (TestNormalFullCovariance, {'mean': torch.ones(2).double(), 'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., **dataD}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(),
+        'cov': torch.eye(2).float(), 'prior_count': 1., **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).double(),
+        'cov': torch.eye(2).double(), 'prior_count': 1., **dataD}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(),
+        'cov': torch.FloatTensor([[2, -1.2], [-1.2, 10.]]).float(),
+        'prior_count': 1., **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(),
+        'cov': torch.DoubleTensor([[2, -1.2], [-1.2, 10.]]).float(),
+        'prior_count': 1., **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(10).float(),
+        'cov': torch.eye(10).float(), 'prior_count': 1., **data10F}),
+    (TestNormalFullCovariance, {'mean': torch.ones(10).double(),
+        'cov': torch.eye(10).double(), 'prior_count': 1., **data10D}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(),
+        'cov': torch.eye(2).float(), 'prior_count': 1e-3, **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).double(),
+        'cov': torch.eye(2).double(), 'prior_count': 1e-7, **dataD}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(),
+        'cov': torch.eye(2).float() * 1e-5, 'prior_count': 1., **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).double(),
+        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1., **dataD}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).float(),
+        'cov': torch.eye(2).float() * 1e2, 'prior_count': 1., **dataF}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).double(),
+        'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., **dataD}),
+    (TestNormalFullCovariance, {'mean': torch.ones(2).double(),
+        'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., **dataD}),
+
+    (TestNormalDiagonalCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).float(),
+        'prec': torch.ones(2).float(), 'prior_count': 1., **dataF}),
+    (TestNormalDiagonalCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).double(),
+        'prec': torch.ones(2).double(), 'prior_count': 1., **dataD}),
+    (TestNormalDiagonalCovarianceSet, {'ncomps': 13, 'mean': torch.ones(10).float(), 'prec':
+        torch.ones(10).float(), 'prior_count': 1., **data10F}),
+    (TestNormalDiagonalCovarianceSet, {'ncomps': 13, 'mean': torch.ones(10).double(), 'prec':
+         torch.ones(10).double(), 'prior_count': 1., **data10D}),
+    (TestNormalDiagonalCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).float(), 'prec':
+         torch.ones(2).float(), 'prior_count': 1e-3, **dataF}),
+    (TestNormalDiagonalCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).double(), 'prec':
+         torch.ones(2).double(), 'prior_count': 1e-8, **dataD}),
+    (TestNormalDiagonalCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).float(), 'prec':
+         torch.ones(2).float() * 1e-2, 'prior_count': 1., **dataF}),
+    (TestNormalDiagonalCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).double(), 'prec':
+         torch.ones(2).double() * 1e-8, 'prior_count': 1., **dataD}),
+    (TestNormalDiagonalCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).float(), 'prec':
+         torch.ones(2).float() * 1e2, 'prior_count': 1., **dataF}),
+
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).float(),
+        'cov': torch.eye(2).float(), 'prior_count': 1., **dataF}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).double(),
+        'cov': torch.eye(2).double(), 'prior_count': 1., **dataD}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).float(),
+        'cov': torch.FloatTensor([[2, -1.2], [-1.2, 10.]]).float(),
+        'prior_count': 1., **dataF}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).float(),
+        'cov': torch.DoubleTensor([[2, -1.2], [-1.2, 10.]]).float(),
+        'prior_count': 1., **dataF}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(10).float(),
+        'cov': torch.eye(10).float(), 'prior_count': 1., **data10F}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(10).double(),
+        'cov': torch.eye(10).double(), 'prior_count': 1., **data10D}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).float(),
+        'cov': torch.eye(2).float(), 'prior_count': 1e-3, **dataF}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).double(),
+        'cov': torch.eye(2).double(), 'prior_count': 1e-7, **dataD}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).float(),
+        'cov': torch.eye(2).float() * 1e-5, 'prior_count': 1., **dataF}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).double(),
+        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1., **dataD}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).float(),
+        'cov': torch.eye(2).float() * 1e2, 'prior_count': 1., **dataF}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).double(),
+        'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., **dataD}),
+    (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).double(),
+        'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., **dataD}),
 ]
 
 

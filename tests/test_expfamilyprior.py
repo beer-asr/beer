@@ -90,7 +90,7 @@ class TestDirichletPrior:
 
     def test_create(self):
         model = beer.DirichletPrior(self.prior_counts)
-        self.assertTrue(isinstance(model, beer.ExpFamilyDensity))
+        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
         self.assertTrue(np.allclose(model.natural_params.numpy(),
             self.prior_counts.numpy() - 1, rtol=TOL, atol=TOL))
 
@@ -120,7 +120,7 @@ class TestNormalGammaPrior:
     def test_create(self):
         model = beer.NormalGammaPrior(self.mean, self.precision,
                                       self.prior_count)
-        self.assertTrue(isinstance(model, beer.ExpFamilyDensity))
+        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
 
     def test_exp_sufficient_statistics(self):
         model = beer.NormalGammaPrior(self.mean, self.precision,
@@ -151,7 +151,7 @@ class TestNormalWishartPrior:
 
     def test_create(self):
         model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        self.assertTrue(isinstance(model, beer.ExpFamilyDensity))
+        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
 
     def test_exp_sufficient_statistics(self):
         model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
