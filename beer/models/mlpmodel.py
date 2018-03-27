@@ -131,3 +131,14 @@ class MLPStateNormalDiagonalCovariance:
             self.mean, self.var)
         return - (nparams * exp_T).sum(dim=-1)
 
+    def kl_div(self, nparams_other):
+        nparams = _normal_diag_natural_params(self.mean, self.var)
+        exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
+            self.mean, self.var)
+        return ((nparams - nparams_other) * exp_T).sum(dim=-1)
+
+    def sample(self):
+        noise = Variable(torch.randn(*self.mean.size()))
+        return self.mean + noise * torch.sqrt(self.var)
+
+

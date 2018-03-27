@@ -7,11 +7,13 @@ import numpy as np
 import math
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 
 import sys
 sys.path.insert(0, './')
 
 import beer
+from beer.models.mixture import _expand_labels
 
 
 torch.manual_seed(10)
@@ -31,7 +33,7 @@ class TestBayesianEmbeddingModel:
 
     def test_sufficient_ststatistics(self):
         model = beer.BayesianEmbeddingModel(self.encoder, self.bayesmodel)
-        T1 = model.sufficient_statistics(self.X)
+        T1 = model.sufficient_statistics(self.X)[1]
         state = self.encoder(self.X)
         T2 = self.bayesmodel.sufficient_statistics_from_mean_var(state.mean,
             state.var)
@@ -40,10 +42,19 @@ class TestBayesianEmbeddingModel:
     def test_forward(self):
         model = beer.BayesianEmbeddingModel(self.encoder, self.bayesmodel)
         T = model.sufficient_statistics(self.X)
-        exp_llh1 = model(T, self.labels)
-        state = self.encoder(self.X)
-        exp_llh2 = self.bayesmodel(T, self.labels) + state.entropy()
-        self.assertTrue(np.allclose(exp_llh1.data, exp_llh2.data))
+        obj_f1 = model(T, self.labels)
+        T_s, T = T
+        log_pred = model.bayesian_model.log_predictions(T_s).view(
+            model.nsamples, T.size(0), -1)
+        log_pred = log_pred.mean(dim=0)
+        onehot_labels = _expand_labels(labels,
+            len(model.bayesian_model.components)).type(T.type())
+        log_p_labels = (onehot_labels * log_pred).sum(dim=-1)
+        preds = torch.exp(model.bayesian_model.log_predictions(T))
+        nparams = model.bayesian_model._components._expected_nparams_as_matrix().data
+        nparams = Variable(onehot_labels @ nparams)
+        obj_f2 = log_p_labels - model._state.kl_div(nparams)
+        self.assertTrue(np.allclose(obj_f1.data, obj_f2.data))
 
 
 indim = 2
@@ -53,87 +64,33 @@ data = torch.randn(20, indim)
 labels = torch.zeros(20).long()
 
 structure = nn.Sequential(nn.Linear(indim, embedding_dim))
-encoder1 = beer.MLPNormalDiag(structure, outdim)
-encoder2 = beer.MLPNormalIso(structure, outdim)
+encoder1 = beer.MLPNormalDiag(structure, embedding_dim)
+encoder2 = beer.MLPNormalIso(structure, embedding_dim)
 
-model1 = beer.NormalDiagonalCovariance(
-    beer.NormalGammaPrior(torch.zeros(outdim), torch.ones(outdim), 1.),
-    beer.NormalGammaPrior(torch.zeros(outdim), torch.ones(outdim), 1.),
-)
-model2 = beer.NormalFullCovariance(
-    beer.NormalWishartPrior(torch.zeros(outdim), torch.eye(outdim), 1.),
-    beer.NormalWishartPrior(torch.zeros(outdim), torch.eye(outdim), 1.),
-)
-
-prior_w = beer.DirichletPrior(torch.ones(24))
-post_w = beer.DirichletPrior(torch.ones(24))
-prior = beer.NormalGammaPrior(torch.zeros(outdim), torch.ones(outdim), 1.)
-posts = [beer.NormalGammaPrior(torch.randn(2), torch.ones(2), 1.)
-         for _ in range(10)]
+prior_w = beer.DirichletPrior(torch.ones(outdim))
+post_w = beer.DirichletPrior(torch.ones(outdim))
+prior = beer.NormalGammaPrior(torch.zeros(embedding_dim),
+    torch.ones(embedding_dim), 1.)
+posts = [beer.NormalGammaPrior(torch.randn(embedding_dim),
+                               torch.ones(embedding_dim), 1.)
+         for _ in range(outdim)]
 nset = beer.NormalDiagonalCovarianceSet(prior, posts)
-model3 = beer.Mixture(prior_w, post_w, nset)
-
-
-prior_w = beer.DirichletPrior(torch.ones(24))
-post_w = beer.DirichletPrior(torch.ones(24))
-prior = beer.NormalWishartPrior(torch.zeros(outdim), torch.eye(outdim), 1.)
-earosts = [beer.NormalWishartPrior(torch.randn(2), torch.eye(2), 1.)
-         for _ in range(10)]
-nset = beer.NormalFullCovarianceSet(prior, posts)
-model4 = beer.Mixture(prior_w, post_w, nset)
+model1 = beer.Mixture(prior_w, post_w, nset)
 
 
 tests = [
-    # Model: Normal (diag. cov.).
-    (TestBayesianEmbeddingModel, {
-            'encoder': encoder1,
-            'bayesmodel': model1,
-            'X': data,
-            'labels': labels
-    }),
-    (TestBayesianEmbeddingModel, {
-            'encoder': encoder1,
-            'bayesmodel': model1,
-            'X': data,
-            'labels': None
-    }),
-    (TestBayesianEmbeddingModel, {
-            'encoder': encoder2,
-            'bayesmodel': model1,
-            'X': data,
-            'labels': labels
-    }),
-    (TestBayesianEmbeddingModel, {
-            'encoder': encoder2,
-            'bayesmodel': model1,
-            'X': data,
-            'labels': None
-    }),
-
     # Model: Normal (full. cov.).
     (TestBayesianEmbeddingModel, {
             'encoder': encoder1,
-            'bayesmodel': model2,
-            'X': data,
-            'labels': labels
-    }),
-    (TestBayesianEmbeddingModel, {
-            'encoder': encoder1,
-            'bayesmodel': model2,
-            'X': data,
-            'labels': None
-    }),
-    (TestBayesianEmbeddingModel, {
-            'encoder': encoder2,
-            'bayesmodel': model2,
+            'bayesmodel': model1,
             'X': data,
             'labels': labels
     }),
     (TestBayesianEmbeddingModel, {
             'encoder': encoder2,
-            'bayesmodel': model2,
+            'bayesmodel': model1,
             'X': data,
-            'labels': None
+            'labels': labels
     }),
 ]
 

@@ -66,7 +66,7 @@ class VariationalBayesLossInstance:
     def backward(self):
         # Pytorch minimizes the loss ! We change the sign of the loss
         # just before to compute the gradient.
-        (-self._loss).backward()
+        (-self._exp_llh).backward()
 
 
 class StochasticVariationalBayesLoss:
@@ -101,22 +101,30 @@ class StochasticVariationalBayesLoss:
 class BayesianModelOptimizer:
     'Bayesian Model Optimizer.'
 
-    def __init__(self, parameters, lrate=1.):
+    def __init__(self, parameters, lrate=1., std_optim=None):
         '''Initialize the optimizer.
 
         Args:
             parameters (list): List of ``BayesianParameters``.
             lrate (float): learning rate.
+            std_optim (``torch.optim.Optimizer``): Optimizer for
+                non-Bayesian parameters (i.e. parameters that don't
+                have a distribution).
 
         '''
         self._parameters = parameters
         self._lrate = lrate
+        self._std_optim = std_optim
 
-    def zero_natural_grad(self):
+    def zero_grad(self):
+        if self._std_optim is not None:
+            self._std_optim.zero_grad()
         for parameter in self._parameters:
             parameter.zero_natural_grad()
 
     def step(self):
+        if self._std_optim is not None:
+            self._std_optim.step()
         for parameter in self._parameters:
             parameter.posterior.natural_params = ta.Variable(
                 parameter.posterior.natural_params + \
