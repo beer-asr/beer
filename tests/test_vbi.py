@@ -16,7 +16,7 @@ import beer
 torch.manual_seed(10)
 
 
-TOLPLACES = 5
+TOLPLACES = 3
 TOL = 10 ** (-TOLPLACES)
 
 
@@ -74,7 +74,8 @@ class TestBayesianModelOptimizer:
             loss.backward_natural_grad()
             optimizer.step()
 
-            self.assertGreaterEqual(float(loss), float(previous_loss) - TOL)
+            self.assertGreaterEqual(round(float(loss), TOLPLACES),
+                round(float(previous_loss), TOLPLACES))
             previous_loss = loss
 
 

@@ -13,7 +13,7 @@ setup(
         'bokeh'
     ],
     version=1.0,
-    packages=['beer']
+    packages=['beer', 'beer.models']
 )
 
 

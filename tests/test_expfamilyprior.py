@@ -11,7 +11,7 @@ sys.path.insert(0, './')
 import beer
 
 
-TOLPLACES = 5
+TOLPLACES = 4
 TOL = 10 ** (-TOLPLACES)
 
 
@@ -105,14 +105,14 @@ class TestDirichletPrior:
         model1 = beer.DirichletPrior(self.prior_counts)
         model2 = beer.DirichletPrior(self.prior_counts)
         div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0.)
+        self.assertAlmostEqual(div, 0., places=TOLPLACES)
 
     def test_log_norm(self):
         model = beer.DirichletPrior(self.prior_counts)
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = dirichlet_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
 
 class TestNormalGammaPrior:
@@ -136,7 +136,7 @@ class TestNormalGammaPrior:
         model2 = beer.NormalGammaPrior(self.mean, self.precision,
                                        self.prior_count)
         div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0.)
+        self.assertAlmostEqual(div, 0., places=TOLPLACES)
 
     def test_log_norm(self):
         model = beer.NormalGammaPrior(self.mean, self.precision,
@@ -144,7 +144,7 @@ class TestNormalGammaPrior:
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = normalgamma_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
 
 class TestNormalWishartPrior:
@@ -164,14 +164,14 @@ class TestNormalWishartPrior:
         model1 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
         model2 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
         div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0.)
+        self.assertAlmostEqual(div, 0., places=TOLPLACES)
 
     def test_log_norm(self):
         model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = normalwishart_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=4)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
 
 #######################################################################
