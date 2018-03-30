@@ -28,8 +28,8 @@ In a terminal type.
 ```
 
 This will install ``beer`` and eventually ``numpy`` and ``sicpy``
-if there are not install yet. Please, note that it will not 
-automatically install ``pytorch``. Please refer to the
+if there are not install yet. Note that it will not 
+automatically install ``pytorch``. Preferlease  to the
 [pytorch documentation](https://github.com/pytorch/pytorch) 
 to install it.
 
