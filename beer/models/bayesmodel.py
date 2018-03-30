@@ -21,7 +21,9 @@ class BayesianParameter:
 
     def __init__(self, prior, posterior):
         self.prior, self.posterior = prior, posterior
-        self.natural_grad = torch.zeros_like(self.prior.natural_params)
+        tensor_type = self.prior.natural_params.type()
+        self.natural_grad = \
+            torch.zeros_like(self.prior.natural_params).type(tensor_type)
 
     @property
     def expected_value(self):
