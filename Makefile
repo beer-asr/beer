@@ -1,29 +1,34 @@
 
-test_expfamilyprior:
-	python tests/test_expfamilyprior.py -f -v
+PACKAGE_NAME = beer
 
-test_bayesmodel:
-	python tests/test_bayesmodel.py -f -v
 
-test_bayesembedding:
-	python tests/test_bayesembedding.py -f -v
+default:
+	@echo 'Makefile for $(PACKAGE_NAME)'
+	@echo
+	@echo 'Usage:'
+	@echo '  make install    install the package in a new virtual environment'
+	@echo '  make test       run the test suite'
+	@echo '  make clean      clean up temporary files'
 
-test_features:
-	python tests/test_features.py -f -v
 
-test_normal:
-	python tests/test_normal.py -f -v
+install:
+	@python setup.py install
 
-test_mixture:
-	python tests/test_mixture.py -f -v
 
-test_mlpmodel:
-	python tests/test_mlpmodel.py -f -v
+clean:
+	@rm -rf *.egg* build dist
+	@find . -depth -type d -name "__pycache__" -exec rm -fr "{}" \;
 
-test_vbi:
-	python tests/test_vbi.py -f -v
 
-test_models: test_bayesmodel test_normal test_mixture test_mlpmodel \
-    test_bayesembedding
-test: test_expfamilyprior test_features test_models test_vbi
+test:
+	@python tests/test_expfamilyprior.py -f -v
+	@python tests/test_bayesmodel.py -f -v
+	@python tests/test_bayesembedding.py -f -v
+	@python tests/test_features.py -f -v
+	@python tests/test_normal.py -f -v
+	@python tests/test_mixture.py -f -v
+	@python tests/test_mlpmodel.py -f -v
+	@python tests/test_vbi.py -f -v
 
+
+.PHONY: clean test
