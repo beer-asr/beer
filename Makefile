@@ -12,7 +12,7 @@ default:
 
 
 install:
-	@./install.sh
+	@python setup.py install
 
 
 clean:

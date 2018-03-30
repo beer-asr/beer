@@ -10,7 +10,6 @@ setup(
     install_requires=[
         'numpy',
         'scipy',
-        'bokeh'
     ],
     version=1.0,
     packages=['beer', 'beer.models']
