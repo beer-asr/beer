@@ -25,6 +25,9 @@ class BayesianParameter:
         self.natural_grad = \
             torch.zeros_like(self.prior.natural_params).type(tensor_type)
 
+    def __hash__(self):
+        return hash(repr(self))
+
     @property
     def expected_value(self):
         '''Expected value of the parameter w.r.t. the posterior

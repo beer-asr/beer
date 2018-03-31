@@ -60,7 +60,7 @@ class TestNormalDiagonalCovariance:
             NormalGammaPrior(self.mean, self.prec, self.prior_count)
         )
         T = model.sufficient_statistics(self.X)
-        nparams = model._mean_prec.expected_value
+        nparams = model.parameters[0].expected_value
         exp_llh1 = T @ nparams
         exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
         exp_llh2 = model(T)
@@ -106,7 +106,7 @@ class TestNormalFullCovariance:
             NormalWishartPrior(self.mean, self.cov, self.prior_count)
         )
         T = model.sufficient_statistics(self.X)
-        nparams = model._mean_prec.expected_value
+        nparams = model.parameters[0].expected_value
         exp_llh1 = T @ nparams
         exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
         exp_llh2 = model(T)
@@ -169,7 +169,7 @@ class TestNormalDiagonalCovarianceSet:
         weights = torch.ones(len(self.X), self.ncomps).type(self.X.type())
         T = model.sufficient_statistics(self.X)
         acc_stats1 = list(weights.t() @ T)
-        acc_stats2 = model.accumulate(T, weights)
+        acc_stats2 = [value for key, value in model.accumulate(T, weights).items()]
         for s1, s2 in zip(acc_stats1, acc_stats2):
             self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
 
@@ -229,7 +229,7 @@ class TestNormalFullCovarianceSet:
         weights = torch.ones(len(self.X), self.ncomps).type(self.X.type())
         T = model.sufficient_statistics(self.X)
         acc_stats1 = list(weights.t() @ T)
-        acc_stats2 = model.accumulate(T, weights)
+        acc_stats2 = [value for key, value in model.accumulate(T, weights).items()]
         for s1, s2 in zip(acc_stats1, acc_stats2):
             self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
 

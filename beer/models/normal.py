@@ -89,9 +89,6 @@ class Normal(BayesianModel, metaclass=abc.ABCMeta):
         '''
         NotImplemented
 
-    def accumulate(self, T, parent_message=None):
-        return [T.sum(dim=0)]
-
 
 class NormalDiagonalCovariance(Normal):
     'Bayesian Normal distribution with diagonal covariance matrix.'
@@ -108,25 +105,28 @@ class NormalDiagonalCovariance(Normal):
 
     def __init__(self, prior, posterior):
         super().__init__()
-        self._mean_prec = BayesianParameter(prior, posterior)
+        self.mean_prec_param = BayesianParameter(prior, posterior)
 
     @property
     def mean(self):
-        evalue = self._mean_prec.expected_value
+        evalue = self.mean_prec_param.expected_value
         np1, np2, _, _ = evalue.view(4, -1)
         return np2 / (-2 * np1)
 
     @property
     def cov(self):
-        evalue = self._mean_prec.expected_value
+        evalue = self.mean_prec_param.expected_value
         np1, np2, _, _ = evalue.view(4, -1)
         return torch.diag(1/(-2 * np1))
 
     def forward(self, T, labels=None):
         feadim = .25 * T.size(1)
-        exp_llh = T @ self._mean_prec.expected_value
+        exp_llh = T @ self.mean_prec_param.expected_value
         exp_llh -= .5 * feadim * math.log(2 * math.pi)
         return exp_llh
+
+    def accumulate(self, T, parent_message=None):
+        return {self.mean_prec_param: T.sum(dim=0)}
 
 
 class NormalFullCovariance(Normal):
@@ -148,26 +148,29 @@ class NormalFullCovariance(Normal):
 
     def __init__(self, prior, posterior):
         super().__init__()
-        self._mean_prec = BayesianParameter(prior, posterior)
+        self.mean_prec_param = BayesianParameter(prior, posterior)
 
     @property
     def mean(self):
-        evalue = self._mean_prec.expected_value
+        evalue = self.mean_prec_param.expected_value
         np1, np2, _, _, _ = _normalwishart_split_nparams(evalue)
         return torch.inverse(-2 * np1) @ np2
 
     @property
     def cov(self):
-        evalue = self._mean_prec.expected_value
+        evalue = self.mean_prec_param.expected_value
         np1, _, _, _, _ = _normalwishart_split_nparams(evalue)
         return torch.inverse(-2 * np1)
 
     def forward(self, T, labels=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - T.size(1))))
-        exp_natural_params = self._mean_prec.expected_value
-        exp_llh = T @ self._mean_prec.expected_value
+        exp_natural_params = self.mean_prec_param.expected_value
+        exp_llh = T @ self.mean_prec_param.expected_value
         exp_llh -= .5 * feadim * math.log(2 * math.pi)
         return exp_llh
+
+    def accumulate(self, T, parent_message=None):
+        return {self.mean_prec_param: T.sum(dim=0)}
 
 
 #######################################################################
@@ -202,7 +205,7 @@ class NormalSet(BayesianModel, metaclass=abc.ABCMeta):
             for param in self.__parameters], dim=0)
 
     def accumulate(self, T, weights):
-        return list(weights.t() @ T)
+        return dict(zip(self.parameters, weights.t() @ T))
 
 
 class NormalDiagonalCovarianceSet(NormalSet):

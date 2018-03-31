@@ -58,7 +58,8 @@ class VariationalBayesLossInstance:
         parameter of the model.
 
         '''
-        for acc_stats, parameter in zip(self._acc_stats, self._parameters):
+        for parameter in self._parameters:
+            acc_stats = self._acc_stats[parameter]
             parameter.natural_grad += parameter.prior.natural_params +  \
                 self._scale * acc_stats - \
                 parameter.posterior.natural_params

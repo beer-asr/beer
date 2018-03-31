@@ -38,14 +38,14 @@ class Mixture(BayesianModel):
 
         '''
         super().__init__()
-        self._weights = BayesianParameter(prior_weights, posterior_weights)
+        self.weights_params = BayesianParameter(prior_weights, posterior_weights)
         self._components = normalset
         self._resps = None
 
     @property
     def weights(self):
         'Expected value of the weights.'
-        w = torch.exp(self._weights.expected_value)
+        w = torch.exp(self.weights_params.expected_value)
         return w / w.sum()
 
     @property
@@ -71,13 +71,13 @@ class Mixture(BayesianModel):
 
         '''
         per_component_exp_llh = self._components(T)
-        per_component_exp_llh += self._weights.expected_value.view(1, -1)
+        per_component_exp_llh += self.weights_params.expected_value.view(1, -1)
         exp_llh = _logsumexp(per_component_exp_llh).view(-1)
         return per_component_exp_llh - exp_llh.view(-1, 1)
 
     def forward(self, T, labels=None):
         per_component_exp_llh = self._components(T)
-        per_component_exp_llh += self._weights.expected_value.view(1, -1)
+        per_component_exp_llh += self.weights_params.expected_value.view(1, -1)
         if labels is not None:
             onehot_labels = _expand_labels(labels,
                 len(self.components)).type(T.type())
@@ -94,8 +94,10 @@ class Mixture(BayesianModel):
             resps = given_resps
         else:
             resps = self._resps
-        retval = [resps.sum(dim=0)]
-        retval += self._components.accumulate(T, resps)
+        retval = {
+            self.weights_params: resps.sum(dim=0),
+            **self._components.accumulate(T, resps)
+        }
         self._resps = None
         return retval
 
