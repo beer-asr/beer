@@ -6,6 +6,8 @@ from .bayesmodel import kl_div_posterior_prior
 
 from .bayesembedding import BayesianEmbeddingModel
 
+from .vae import VAE
+
 from .normal import NormalDiagonalCovariance
 from .normal import NormalFullCovariance
 from .normal import NormalDiagonalCovarianceSet

@@ -19,6 +19,7 @@ from .models import NormalFullCovarianceSet
 from .models import Mixture
 from .models import MLPNormalDiag
 from .models import MLPNormalIso
+from .models import VAE
 from .models import kl_div_posterior_prior
 
 #from .models import Mixture
