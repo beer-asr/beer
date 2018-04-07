@@ -17,7 +17,10 @@ from .mlpmodel import MLPNormalDiag
 from .mlpmodel import MLPNormalIso
 
 
-#from .vae import VAE
+from .vae import VAE
+
+from .mlpmodel import _normal_diag_natural_params
+
 #from .dbe import DiscriminativeVariationalModel
 #
 #from .mlpmodel import MLPNormalDiag

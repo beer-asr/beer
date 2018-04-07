@@ -141,4 +141,8 @@ class MLPStateNormalDiagonalCovariance:
         noise = Variable(torch.randn(*self.mean.size()))
         return self.mean + noise * torch.sqrt(self.var)
 
-
+    def log_likelihood(self, X, nb_samples):
+        distance_term = 0.5*(X-self.mean).pow(2) / self.var
+        precision_term = 0.5*self.var.log()
+        return (-distance_term - precision_term).sum(dim=-1)
+         

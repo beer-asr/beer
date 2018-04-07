@@ -60,8 +60,9 @@ class VAE(nn.Module):
 
         # Forward the statistics to the latent model.
         p_np_params, acc_stats = self.latent_model.expected_natural_params(
-                encoder_state.mean.data,
-                (1/encoder_state.prec.data))
+            encoder_state.mean.data,
+            encoder_state.var.data
+        )
 
         # Samples of the latent variable using the reparameterization
         # "trick". "z" is a L x N x K tensor where L is the number of
@@ -72,7 +73,7 @@ class VAE(nn.Module):
             samples = []
             for i in range(self.nsamples):
                 samples.append(encoder_state.sample())
-            samples = torch.stack(samples).view(self.nsamples * X.size(0), -1)
+            samples = torch.stack(samples)#.view(self.nsamples * X.size(0), -1)
             decoder_state = self.decoder(samples)
         else:
             nsamples = 1
