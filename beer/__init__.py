@@ -5,6 +5,7 @@ from .expfamilyprior import ExpFamilyPrior
 from .expfamilyprior import DirichletPrior
 from .expfamilyprior import NormalGammaPrior
 from .expfamilyprior import NormalWishartPrior
+from .expfamilyprior import NormalPrior
 from .expfamilyprior import kl_div
 
 # Bayesian models.

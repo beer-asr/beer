@@ -63,10 +63,8 @@ def normalwishart_log_norm(natural_params):
     lognorm += np.sum(gammaln(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
     return lognorm
 
-
 def normalwishart_grad_log_norm(natural_params):
     np1, np2, np3, np4, D = normalwishart_split_np(natural_params)
-
     outer = np.outer(np2, np2) / np3
     matrix = (np1 - outer)
     sign, logdet = np.linalg.slogdet(matrix)
@@ -75,10 +73,32 @@ def normalwishart_grad_log_norm(natural_params):
     grad1 = -.5 * (np4 + D) * inv_matrix
     grad2 = (np4 + D) * inv_matrix @ (np2 / np3)
     grad3 = - D / (2 * np3) - .5 * (np4 + D) \
-        * np.trace(inv_matrix @ (outer / np3))
+    * np.trace(inv_matrix @ (outer / np3))
     grad4 = .5 * np.sum(psi(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
     grad4 += -.5 * sign * logdet + .5 * D * np.log(2)
     return np.hstack([grad1.reshape(-1), grad2, grad3, grad4])
+
+
+def normal_fc_split_np(natural_params):
+    D = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params))))
+    np1, np2 = natural_params[:int(D**2)].reshape(D, D), \
+         natural_params[int(D**2):]
+    return np1, np2, D
+
+
+def normal_fc_log_norm(natural_params):
+    np1, np2, D = normal_fc_split_np(natural_params)
+    inv_np1 = np.linalg.inv(np1)
+    sign, logdet = np.linalg.slogdet(-2 * np1)
+    lognorm = -.5 * sign * logdet - .25 * (np2[None, :] @ inv_np1) @ np2
+    return lognorm
+
+
+def normal_fc_grad_log_norm(natural_params):
+    np1, np2, D = normal_fc_split_np(natural_params)
+    cov = np.linalg.inv(-2 * np1)
+    mean = cov @ np2
+    return np.hstack([(cov + np.outer(mean, mean)).reshape(-1), mean])
 
 
 #######################################################################
@@ -174,6 +194,34 @@ class TestNormalWishartPrior:
         self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
 
+class TestNormalPrior:
+
+    def test_create(self):
+        model = beer.NormalPrior(self.mean, self.cov)
+        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.NormalPrior(self.mean, self.cov)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = normal_fc_grad_log_norm(natural_params)
+        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
+
+    def test_kl_divergence(self):
+        model1 = beer.NormalPrior(self.mean, self.cov)
+        model2 = beer.NormalPrior(self.mean, self.cov)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=TOLPLACES)
+
+    def test_log_norm(self):
+        model = beer.NormalPrior(self.mean, self.cov)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = normal_fc_log_norm(natural_params)[0]
+        print(model_log_norm, log_norm)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
+
+
 #######################################################################
 # Testing condition.
 #######################################################################
@@ -210,6 +258,17 @@ tests = [
     (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e-8}),
     (TestNormalWishartPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e2}),
     (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8}),
+
+    (TestNormalPrior, {'mean': torch.zeros(2).float(), 'cov': torch.eye(2).float()}),
+    (TestNormalPrior, {'mean': torch.zeros(2).double(), 'cov': torch.eye(2).double()}),
+    (TestNormalPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float()}),
+    (TestNormalPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double()}),
+    (TestNormalPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4}),
+    (TestNormalPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8}),
+    (TestNormalPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4}),
+    (TestNormalPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8}),
+    (TestNormalPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4}),
+    (TestNormalPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8}),
 ]
 
 

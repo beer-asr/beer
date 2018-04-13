@@ -20,6 +20,16 @@ def _exp_stats_and_log_norm(natural_params, log_norm_fn):
     return natural_params.grad, log_norm
 
 
+# The following code compute the log of the determinant of a
+# positive definite matrix. This is equivalent to:
+#   >>> torch.log(torch.det(tmp))
+# Note: the hook is necessary to correct the gradient as pytorch
+# will return upper triangular gradient.
+def _logdet(A):
+    A.register_hook(lambda grad: .5 * (grad + grad.t()))
+    return 2 * torch.log(torch.diag(torch.potrf(A))).sum()
+
+
 ########################################################################
 ## Densities log-normalizer functions.
 ########################################################################
@@ -51,20 +61,29 @@ def _normalwishart_split_nparams(natural_params):
     return np1, np2, np3, np4, D
 
 
+def _normal_fc_split_nparams(natural_params):
+    # We need to retrieve the 2 natural parameters organized as
+    # follows:
+    #   [ np1_1, ..., np1_D^2, np2_1, ..., np2_D]
+    #
+    # The dimension D is found by solving the polynomial:
+    #   D^2 + D - len(self.natural_params) = 0
+    D = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params))))
+    np1, np2 = natural_params[:int(D**2)].view(D, D), \
+         natural_params[int(D**2):]
+    return np1, np2, D
+
+
+def _normal_fc_log_norm(natural_params):
+    np1, np2, D = _normal_fc_split_nparams(natural_params)
+    inv_np1 = torch.inverse(np1)
+    return -.5 * _logdet(-2 * np1) - .25 * ((np2[None, :] @ inv_np1) @ np2)[0]
+
+
 def _normalwishart_log_norm(natural_params):
     np1, np2, np3, np4, D = _normalwishart_split_nparams(natural_params)
     lognorm = .5 * ((np4 + D) * D * math.log(2) - D * torch.log(np3))
-    tmp = np1 - torch.ger(np2, np2) /np3
-
-    # The following code compute the log of the determinant of a
-    # positive definite matrix. This is equivalent to:
-    #   >>> torch.log(torch.det(tmp))
-    # Note: the hook is necessary to correct the gradient as pytorch
-    # will return upper triangular gradient.
-    tmp.register_hook(lambda grad: .5 * (grad + grad.t()))
-    logdet = 2 * torch.log(torch.diag(torch.potrf(tmp))).sum()
-
-    lognorm += -.5 * (np4 + D) * logdet
+    lognorm += -.5 * (np4 + D) * _logdet(np1 - torch.ger(np2, np2)/np3)
     seq = ta.Variable(torch.arange(1, D + 1, 1).type(natural_params.type()))
     lognorm += torch.lgamma(.5 * (np4 + D + 1 - seq)).sum()
     return lognorm
@@ -183,4 +202,24 @@ def NormalWishartPrior(mean, cov, prior_counts):
         (torch.ones(1) * (dof - D)).type(mean.type())
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _normalwishart_log_norm)
+
+
+def NormalPrior(mean, cov):
+    '''Create a Normal density prior.
+
+    Args:
+        mean (Tensor): Expected mean.
+        cov (Tensor): Expected covariance of the mean.
+
+    Returns:
+        ``NormalPrior``: A Normal density.
+
+    '''
+    if len(cov.size()) != 2: raise ValueError('Expect a (D x D) matrix')
+
+    natural_params = ta.Variable(torch.cat([
+        -.5 * cov.view(-1),
+        cov @ mean,
+    ]), requires_grad=True)
+    return ExpFamilyPrior(natural_params, _normal_fc_log_norm)
 

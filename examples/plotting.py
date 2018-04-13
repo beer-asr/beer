@@ -12,16 +12,17 @@ def plot_normal(fig, mean, cov, alpha=1., color='blue'):
 
     # Angle of the rotation.
     angle =  - np.arccos(sign * abs(evecs[0, 0]))
+    evals = np.diag(cov)
 
     fig.ellipse(x=mean[0], y=mean[1],
             width=4 * np.sqrt(evals[0]),
             height=4 * np.sqrt(evals[1]),
-            angle=angle, alpha=.5 * alpha, color=color)
+            angle=0, alpha=.5 * alpha, color=color)
     fig.cross(mean[0], mean[1], color=color, alpha=alpha)
     fig.ellipse(x=mean[0], y=mean[1],
             width=2 * np.sqrt(evals[0]),
             height=2 * np.sqrt(evals[1]),
-            angle=angle, alpha=alpha, color=color)
+            angle=0, alpha=alpha, color=color)
 
 
 def plot_gmm(fig, gmm, alpha=1., color='blue'):
