@@ -12,17 +12,17 @@ def _bregman_divergence(F_p, F_q, grad_F_q, p, q):
     return F_p - F_q - grad_F_q @ (p - q)
 
 
-def _exp_stats_and_log_norm(natural_params, log_norm_fn):
+def _exp_stats_and_log_norm(natural_params, log_norm_fn, args):
     if natural_params.grad is not None:
         natural_params.grad.zero_()
-    log_norm = log_norm_fn(natural_params)
+    log_norm = log_norm_fn(natural_params, **args)
     ta.backward(log_norm)
     return natural_params.grad, log_norm
 
 
 # The following code compute the log of the determinant of a
 # positive definite matrix. This is equivalent to:
-#   >>> torch.log(torch.det(tmp))
+#   >>> torch.log(torch.det(A))
 # Note: the hook is necessary to correct the gradient as pytorch
 # will return upper triangular gradient.
 def _logdet(A):
@@ -60,6 +60,21 @@ def _normalwishart_split_nparams(natural_params):
     np3, np4 = natural_params[-2:]
     return np1, np2, np3, np4, D
 
+def _jointnormalwishart_split_nparams(natural_params, ncomp=1):
+    # We need to retrieve the 4 natural parameters organized as
+    # follows:
+    #   [ np1_1, ..., np1_D^2, np2_1_1, ..., np2_k_D, np3_1, ...,
+    #     np3_k, np4]
+    #
+    # The dimension D is found by solving the polynomial:
+    #   D^2 + ncomp * D - len(self.natural_params[:-(ncomp + 1]) = 0
+    D = int(.5 * (-ncomp + math.sqrt(ncomp**2 + 4 * len(natural_params[:-(ncomp + 1)]))))
+    np1, np2s = natural_params[:int(D**2)].view(D, D), \
+         natural_params[int(D**2):-(ncomp + 1)].view(ncomp, D)
+    np3s = natural_params[-(ncomp + 1):-1]
+    np4 = natural_params[-1]
+    return np1, np2s, np3s, np4, D
+
 
 def _normal_fc_split_nparams(natural_params):
     # We need to retrieve the 2 natural parameters organized as
@@ -89,18 +104,30 @@ def _normalwishart_log_norm(natural_params):
     return lognorm
 
 
+def _jointnormalwishart_log_norm(natural_params, ncomp):
+    np1, np2s, np3s, np4, D = _jointnormalwishart_split_nparams(natural_params,
+        ncomp=ncomp)
+    lognorm = .5 * ((np4 + D) * D * math.log(2) - D * torch.log(np3s).sum())
+    quad_exp = ((np2s[:, None, :] * np2s[:, :, None]) / np3s[:, None, None]).sum(dim=0)
+    lognorm += -.5 * (np4 + D) * _logdet(np1 - quad_exp)
+    seq = ta.Variable(torch.arange(1, D + 1, 1).type(natural_params.type()))
+    lognorm += torch.lgamma(.5 * (np4 + D + 1 - seq)).sum()
+    return lognorm
+
+
 class ExpFamilyPrior:
     '''General implementation of a member of a Exponential Family of
     Distribution prior.
 
     '''
 
-    def __init__(self, natural_params, log_norm_fn):
+    def __init__(self, natural_params, log_norm_fn, args={}):
         # This will be initialized when setting the natural params
         # property.
         self._log_norm = None
         self._expected_sufficient_statistics = None
         self._natural_params = None
+        self._args = args
 
         self._log_norm_fn = log_norm_fn
         self.natural_params = natural_params
@@ -123,7 +150,7 @@ class ExpFamilyPrior:
     @natural_params.setter
     def natural_params(self, value):
         self._expected_sufficient_statistics, self._log_norm = \
-            _exp_stats_and_log_norm(value, self._log_norm_fn)
+            _exp_stats_and_log_norm(value, self._log_norm_fn, self._args)
         self._natural_params = value
 
 
@@ -202,6 +229,40 @@ def NormalWishartPrior(mean, cov, prior_counts):
         (torch.ones(1) * (dof - D)).type(mean.type())
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _normalwishart_log_norm)
+
+
+def JointNormalWishartPrior(means, cov, prior_counts):
+    '''Create a JointNormalWishart density function.
+
+    Note:
+        By "joint" normal-wishart density we mean a set of independent
+        Normal density sharing the same covariance matrix (up to a
+        multiplicative constant) and the probability over the
+        covariance matrix is given by a Wishart distribution.
+
+    Args:
+        means (Tensor): Expected mean of the Normal densities.
+        cov (Tensor): Expected covariance matrix.
+        prior_counts (float): Strength of the prior.
+
+    Returns:
+        ``JointNormalWishartPrior``
+
+    '''
+    if len(cov.size()) != 2: raise ValueError('Expect a (D x D) matrix')
+
+    D = means.size(1)
+    dof = prior_counts + D
+    V = dof * cov
+    mmT = (means[:, None, :] * means[:, :, None]).sum(dim=0)
+    natural_params = ta.Variable(torch.cat([
+        (prior_counts * mmT + V).view(-1),
+        prior_counts * means.view(-1),
+        (torch.ones(means.size(0)) * prior_counts).type(means.type()),
+        (torch.ones(1) * (dof - D)).type(means.type())
+    ]), requires_grad=True)
+    return ExpFamilyPrior(natural_params, _jointnormalwishart_log_norm,
+                          args={'ncomp': means.size(0)})
 
 
 def NormalPrior(mean, cov):

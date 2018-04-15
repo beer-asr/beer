@@ -63,6 +63,7 @@ def normalwishart_log_norm(natural_params):
     lognorm += np.sum(gammaln(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
     return lognorm
 
+
 def normalwishart_grad_log_norm(natural_params):
     np1, np2, np3, np4, D = normalwishart_split_np(natural_params)
     outer = np.outer(np2, np2) / np3
@@ -77,6 +78,25 @@ def normalwishart_grad_log_norm(natural_params):
     grad4 = .5 * np.sum(psi(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
     grad4 += -.5 * sign * logdet + .5 * D * np.log(2)
     return np.hstack([grad1.reshape(-1), grad2, grad3, grad4])
+
+
+def jointnormalwishart_split_np(natural_params, ncomp=1):
+    D = int(.5 * (-ncomp + np.sqrt(ncomp**2 + 4 * len(natural_params[:-(ncomp + 1)]))))
+    np1, np2s = natural_params[:int(D**2)].reshape(D, D), \
+         natural_params[int(D**2):-(ncomp+1)].reshape(ncomp, D)
+    np3s = natural_params[-(ncomp+1): -1]
+    np4 = natural_params[-1]
+    return np1, np2s, np3s, np4, D
+
+
+def jointnormalwishart_log_norm(natural_params, ncomp):
+    np1, np2s, np3s, np4, D = jointnormalwishart_split_np(natural_params, ncomp)
+    lognorm = .5 * ((np4 + D) * D * np.log(2) - D * np.log(np3s).sum())
+    quad_exp = ((np2s[:, None, :] * np2s[:, :, None]) / np3s[:, None, None]).sum(axis=0)
+    sign, logdet = np.linalg.slogdet(np1 - quad_exp)
+    lognorm += -.5 * (np4 + D) * sign * logdet
+    lognorm += np.sum(gammaln(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
+    return lognorm
 
 
 def normal_fc_split_np(natural_params):
@@ -194,6 +214,26 @@ class TestNormalWishartPrior:
         self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
 
+class TestJointNormalWishartPrior:
+
+    def test_create(self):
+        model = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
+        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
+
+    def test_kl_divergence(self):
+        model1 = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
+        model2 = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=TOLPLACES)
+
+    def test_log_norm(self):
+        model = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = jointnormalwishart_log_norm(natural_params, ncomp=self.ncomp)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
+
+
 class TestNormalPrior:
 
     def test_create(self):
@@ -218,7 +258,6 @@ class TestNormalPrior:
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = normal_fc_log_norm(natural_params)[0]
-        print(model_log_norm, log_norm)
         self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
 
@@ -258,6 +297,27 @@ tests = [
     (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e-8}),
     (TestNormalWishartPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e2}),
     (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8}),
+
+    (TestJointNormalWishartPrior, {'means': torch.zeros(3, 2).float(),
+        'cov': torch.eye(2).float(), 'prior_count': 1., 'ncomp': 3}),
+    (TestJointNormalWishartPrior, {'means': torch.zeros(3, 2).double(),
+        'cov': torch.eye(2).double(), 'prior_count': 1., 'ncomp': 3}),
+    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
+        'cov': torch.eye(2).float(), 'prior_count': 1., 'ncomp': 3}),
+    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
+        'cov': torch.eye(2).double(), 'prior_count': 1., 'ncomp': 3}),
+    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
+        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1., 'ncomp': 3}),
+    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
+        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1., 'ncomp': 3}),
+    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
+        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e-3, 'ncomp': 3}),
+    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
+        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e-8, 'ncomp': 3}),
+    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
+        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e2, 'ncomp': 3}),
+    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
+        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8, 'ncomp': 3}),
 
     (TestNormalPrior, {'mean': torch.zeros(2).float(), 'cov': torch.eye(2).float()}),
     (TestNormalPrior, {'mean': torch.zeros(2).double(), 'cov': torch.eye(2).double()}),
