@@ -252,14 +252,15 @@ def JointNormalWishartPrior(means, cov, prior_counts):
     if len(cov.size()) != 2: raise ValueError('Expect a (D x D) matrix')
 
     D = means.size(1)
-    dof = prior_counts + D
+    ncomp = len(means)
+    dof = prior_counts + D + ncomp
     V = dof * cov
     mmT = (means[:, None, :] * means[:, :, None]).sum(dim=0)
     natural_params = ta.Variable(torch.cat([
         (prior_counts * mmT + V).view(-1),
         prior_counts * means.view(-1),
         (torch.ones(means.size(0)) * prior_counts).type(means.type()),
-        (torch.ones(1) * (dof - D)).type(means.type())
+        (torch.ones(1) * (dof - (D + ncomp))).type(means.type())
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _jointnormalwishart_log_norm,
                           args={'ncomp': means.size(0)})
