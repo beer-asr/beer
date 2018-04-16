@@ -330,6 +330,26 @@ class TestNormalSetSharedFullCovariance:
         self.assertTrue(np.allclose(s1[0].numpy(), s2[0], atol=TOL))
         self.assertTrue(np.allclose(s1[1].numpy(), s2[1], atol=TOL))
 
+    def test_forward(self):
+        prior = beer.JointNormalWishartPrior(self.prior_means,
+            self.cov, self.prior_count)
+        posterior = beer.JointNormalWishartPrior(self.posterior_means,
+            self.cov, self.prior_count)
+        model = beer.NormalSetSharedFullCovariance(prior, posterior, self.ncomps)
+
+        matrix = torch.cat([param.expected_value[None]
+            for param in model.parameters], dim=0)
+        T1, T2 = model.sufficient_statistics(self.X)
+        params = model._expected_nparams()
+        exp_llh1 = model((T1, T2))
+        self.assertEqual(exp_llh1.size(0), self.X.size(0))
+        self.assertEqual(exp_llh1.size(1), self.ncomps)
+
+        exp_llh2 = (T1 @ params[0])[:, None] + T2 @ params[1].t() + params[2]
+        exp_llh2 -= .5 * self.X.size(1) * math.log(2 * math.pi)
+        self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
+            atol=TOL))
+
 
 dataF = {
     'X': torch.randn(20, 2).float(),

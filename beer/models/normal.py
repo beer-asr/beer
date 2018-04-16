@@ -290,20 +290,15 @@ class NormalSetSharedCovariance(BayesianModel, metaclass=abc.ABCMeta):
     def __getitem__(self, key):
         if not isinstance(key, int):
             raise TypeError('expected integer key')
-        s_stats = self.means_prec_param.posterior.expected_sufficient_statistics
-        stats1, stats2, stats3, stats4, D = _jointnormalwishart_split_nparams(
-            s_stats, self._ncomp)
-        cov = torch.inverse(-2 * stats1)
-        mean = cov @ stats2[key]
+        exp_param = self.means_prec_param.expected_value
+        param1, param2, param3, param4, D = _jointnormalwishart_split_nparams(
+            exp_param, self._ncomp)
+        cov = torch.inverse(-2 * param1)
+        mean = cov @ param2[key]
         return NormalSetElement(mean=mean, cov=cov)
 
     def __len__(self):
         return self._ncomp
-
-    def _expected_nparams_as_matrix(self):
-        pass
-        return torch.cat([param.expected_value[None]
-            for param in self.__parameters], dim=0)
 
     def accumulate(self, T, weights):
         return dict(zip(self.parameters, weights.t() @ T))
@@ -314,9 +309,6 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
     covariance matrix.
 
     '''
-
-    def __init__(self, prior, posterior, ncomp):
-        super().__init__(prior, posterior, ncomp)
 
     @staticmethod
     def sufficient_statistics(X):
@@ -333,10 +325,18 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
         return XX, torch.cat([mean, torch.ones(len(mean), 1).type(mean.type())],
             dim=-1)
 
+    def _expected_nparams(self):
+        exp_param = self.means_prec_param.expected_value
+        param1, param2, param3, param4, D = _jointnormalwishart_split_nparams(
+            exp_param, self._ncomp)
+        return param1.view(-1), \
+            torch.cat([param2, param3[:, None]], dim=1), param4
+
     def forward(self, T, labels=None):
         T1, T2 = T
-        feadim = int(math.sqrt(T1.size(0)))
-        retval = T2 @ self._expected_nparams_as_matrix().t()
+        feadim = int(math.sqrt(T1.size(1)))
+        params = self._expected_nparams()
+        retval = (T1 @ params[0])[:, None] + T2 @ params[1].t() + params[2]
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
 
