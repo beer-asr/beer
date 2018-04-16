@@ -11,6 +11,8 @@ sys.path.insert(0, './')
 import beer
 
 
+torch.manual_seed(10)
+
 TOLPLACES = 4
 TOL = 10 ** (-TOLPLACES)
 
