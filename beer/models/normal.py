@@ -300,9 +300,6 @@ class NormalSetSharedCovariance(BayesianModel, metaclass=abc.ABCMeta):
     def __len__(self):
         return self._ncomp
 
-    def accumulate(self, T, weights):
-        return dict(zip(self.parameters, weights.t() @ T))
-
 
 class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
     '''Set of Normal density models with a globale shared full
@@ -339,4 +336,15 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
         retval = (T1 @ params[0])[:, None] + T2 @ params[1].t() + params[2]
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
+
+    def accumulate(self, T, weights):
+        T1, T2 = T
+        feadim = int(math.sqrt(T1.size(1)))
+        acc_stats = torch.cat([
+            T1.sum(dim=0),
+            (weights.t() @ T2[:, :feadim]).view(-1),
+            weights.sum(dim=0),
+            len(weights) * torch.ones(1).type(weights.type())
+        ])
+        return {self.means_prec_param: acc_stats}
 

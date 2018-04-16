@@ -350,6 +350,24 @@ class TestNormalSetSharedFullCovariance:
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
             atol=TOL))
 
+    def test_accumulate(self):
+        prior = beer.JointNormalWishartPrior(self.prior_means,
+            self.cov, self.prior_count)
+        posterior = beer.JointNormalWishartPrior(self.posterior_means,
+            self.cov, self.prior_count)
+        model = beer.NormalSetSharedFullCovariance(prior, posterior, self.ncomps)
+        weights = torch.ones(len(self.X), self.ncomps).type(self.X.type())
+
+        T = model.sufficient_statistics(self.X)
+        acc_stats1 = model.accumulate(T, weights)[model.means_prec_param]
+        self.assertEqual(len(acc_stats1),
+            len(model.means_prec_param.posterior.natural_params))
+        acc_stats2 = torch.cat([T[0].sum(dim=0), (weights.t() @ self.X).view(-1),
+            weights.sum(dim=0),
+            len(self.X) * torch.ones(1).type(self.X.type())])
+        self.assertTrue(np.allclose(acc_stats1.numpy(), acc_stats2.numpy(),
+            atol=TOL))
+
 
 dataF = {
     'X': torch.randn(20, 2).float(),
