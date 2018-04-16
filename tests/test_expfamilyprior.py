@@ -76,7 +76,7 @@ def normalwishart_grad_log_norm(natural_params):
     grad1 = -.5 * (np4 + D) * inv_matrix
     grad2 = (np4 + D) * inv_matrix @ (np2 / np3)
     grad3 = - D / (2 * np3) - .5 * (np4 + D) \
-    * np.trace(inv_matrix @ (outer / np3))
+        * np.trace(inv_matrix @ (outer / np3))
     grad4 = .5 * np.sum(psi(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
     grad4 += -.5 * sign * logdet + .5 * D * np.log(2)
     return np.hstack([grad1.reshape(-1), grad2, grad3, grad4])
@@ -235,6 +235,12 @@ class TestJointNormalWishartPrior:
         log_norm = jointnormalwishart_log_norm(natural_params, ncomp=self.ncomp)
         self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
+    # We don't test the automatic differentiation of the
+    # log-normalizer. As long as the log-normlizer is correct, then
+    # pytorch should gives us the right gradient.
+    #def test_exp_sufficient_statistics(self):
+    #   pass
+
 
 class TestNormalPrior:
 
@@ -278,27 +284,47 @@ tests = [
     (TestDirichletPrior, {'prior_counts': torch.FloatTensor([1, 2, 3, 4, 5])}),
     (TestDirichletPrior, {'prior_counts': torch.DoubleTensor([1, 2, 3, 4, 5])}),
 
-    (TestNormalGammaPrior, {'mean': torch.zeros(2).float(), 'precision': torch.ones(2).float(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.zeros(2).double(), 'precision': torch.ones(2).double(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'precision': torch.ones(2).float(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'precision': torch.ones(2).double(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e-3}),
-    (TestNormalGammaPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e-8}),
-    (TestNormalGammaPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e4}),
-    (TestNormalGammaPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e8}),
+    (TestNormalGammaPrior, {'mean': torch.zeros(2).float(),
+        'precision': torch.ones(2).float(), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.zeros(2).double(),
+        'precision': torch.ones(2).double(), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
+        'precision': torch.ones(2).float(), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
+        'precision': torch.ones(2).double(), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
+        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
+        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1.}),
+    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
+        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e-3}),
+    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
+        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e-8}),
+    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
+        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e4}),
+    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
+        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e8}),
 
-    (TestNormalWishartPrior, {'mean': torch.zeros(2).float(), 'cov': torch.eye(2).float(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.zeros(2).double(), 'cov': torch.eye(2).double(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e-3}),
-    (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e-8}),
-    (TestNormalWishartPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e2}),
-    (TestNormalWishartPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8}),
+    (TestNormalWishartPrior, {'mean': torch.zeros(2).float(),
+        'cov': torch.eye(2).float(), 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.zeros(2).double(),
+        'cov': torch.eye(2).double(), 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
+        'cov': torch.eye(2).float(), 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
+        'cov': torch.eye(2).double(), 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
+        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
+        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1.}),
+    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
+        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e-3}),
+    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
+        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e-8}),
+    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
+        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e2}),
+    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
+        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8}),
 
     (TestJointNormalWishartPrior, {'means': torch.zeros(3, 2).float(),
         'cov': torch.eye(2).float(), 'prior_count': 1., 'ncomp': 3}),
@@ -321,16 +347,26 @@ tests = [
     (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
         'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8, 'ncomp': 3}),
 
-    (TestNormalPrior, {'mean': torch.zeros(2).float(), 'cov': torch.eye(2).float()}),
-    (TestNormalPrior, {'mean': torch.zeros(2).double(), 'cov': torch.eye(2).double()}),
-    (TestNormalPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float()}),
-    (TestNormalPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double()}),
-    (TestNormalPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4}),
-    (TestNormalPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8}),
-    (TestNormalPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4}),
-    (TestNormalPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8}),
-    (TestNormalPrior, {'mean': torch.FloatTensor([-1.5, 1.5]), 'cov': torch.eye(2).float() * 1e-4}),
-    (TestNormalPrior, {'mean': torch.DoubleTensor([-1.5, 1.5]), 'cov': torch.eye(2).double() * 1e-8}),
+    (TestNormalPrior, {'mean': torch.randn(2).float(),
+        'cov': torch.eye(2).float()}),
+    (TestNormalPrior, {'mean': torch.randn(2).double(),
+        'cov': torch.eye(2).double()}),
+    (TestNormalPrior, {'mean': torch.randn(2).float(),
+        'cov': torch.eye(2).float()}),
+    (TestNormalPrior, {'mean': torch.randn(2).double(),
+        'cov': torch.eye(2).double()}),
+    (TestNormalPrior, {'mean': torch.randn(2).float(),
+        'cov': torch.eye(2).float() * 1e-4}),
+    (TestNormalPrior, {'mean': torch.randn(2).double(),
+        'cov': torch.eye(2).double() * 1e-8}),
+    (TestNormalPrior, {'mean': torch.randn(2).float(),
+        'cov': torch.eye(2).float() * 1e-4}),
+    (TestNormalPrior, {'mean': torch.randn(2).double(),
+        'cov': torch.eye(2).double() * 1e-8}),
+    (TestNormalPrior, {'mean': torch.randn(2).float(),
+        'cov': torch.eye(2).float() * 1e-4}),
+    (TestNormalPrior, {'mean': torch.randn(2).double(),
+        'cov': torch.eye(2).double() * 1e-8}),
 ]
 
 
