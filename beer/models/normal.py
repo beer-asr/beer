@@ -318,7 +318,8 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
     def __init__(self, prior, posterior, ncomp):
         super().__init__(prior, posterior, ncomp)
 
-    def sufficient_statistics(self, X):
+    @staticmethod
+    def sufficient_statistics(X):
         T1 = (X[:, :, None] * X[:, None, :]).view(len(X), -1)
         T2 = torch.cat([X, torch.ones(X.size(0), 1).type(X.type())],
             dim=1)
@@ -327,12 +328,10 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
         idxs = torch.eye(mean.size(1)).view(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).view(mean.shape[0], -1)
+        XX = (mean[:, :, None] * mean[:, None, :]).view(len(mean), -1)
         XX[:, idxs] += var
-        return torch.cat([XX, mean, torch.ones(len(mean), 1).type(mean.type()),
-            torch.ones(len(mean), 1).type(mean.type())], dim=-1)
-        return NormalFullCovariance.sufficient_statistics_from_mean_var(mean,
-            var)
+        return XX, torch.cat([mean, torch.ones(len(mean), 1).type(mean.type())],
+            dim=-1)
 
     def forward(self, T, labels=None):
         T1, T2 = T
