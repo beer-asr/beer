@@ -12,7 +12,7 @@ covariance matrix.
 
 
 NormalSet
---------
+---------
    The ``NormalSet`` object is not a model but rather a component of
    more comple model (e.g. GMM). It allows to have a set of Normal
    densities to have a shared prior distribution.
@@ -34,6 +34,7 @@ from ..expfamilyprior import NormalGammaPrior
 from ..expfamilyprior import NormalWishartPrior
 from ..expfamilyprior import kl_div
 from ..expfamilyprior import _normalwishart_split_nparams
+from ..expfamilyprior import _jointnormalwishart_split_nparams
 
 
 #######################################################################
@@ -178,6 +179,9 @@ class NormalFullCovariance(Normal):
 #######################################################################
 
 
+NormalSetElement = namedtuple('NormalSetElement', ['mean', 'cov'])
+
+
 class NormalSet(BayesianModel, metaclass=abc.ABCMeta):
     'Set Normal density models.'
 
@@ -254,6 +258,86 @@ class NormalFullCovarianceSet(NormalSet):
     def forward(self, T, labels=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - T.size(1))))
         retval = T @ self._expected_nparams_as_matrix().t()
+        retval -= .5 * feadim * math.log(2 * math.pi)
+        return retval
+
+
+#######################################################################
+# NormalSet model with shared covariance.
+#######################################################################
+
+class NormalSetSharedCovariance(BayesianModel, metaclass=abc.ABCMeta):
+    '''Set of Normal density models with a globale shared covariance
+    matrix.
+
+    '''
+
+    @staticmethod
+    @abc.abstractmethod
+    def sufficient_statistics(X):
+        NotImplemented
+
+    @staticmethod
+    @abc.abstractmethod
+    def sufficient_statistics_from_mean_var(mean, var):
+        NotImplemented
+
+    def __init__(self, prior, posterior, ncomp):
+        super().__init__()
+        self._ncomp = ncomp
+        self.means_prec_param = BayesianParameter(prior, posterior)
+
+    def __getitem__(self, key):
+        if not isinstance(key, int):
+            raise TypeError('expected integer key')
+        s_stats = self.means_prec_param.posterior.expected_sufficient_statistics
+        stats1, stats2, stats3, stats4, D = _jointnormalwishart_split_nparams(
+            s_stats, self._ncomp)
+        cov = torch.inverse(-2 * stats1)
+        mean = cov @ stats2[key]
+        return NormalSetElement(mean=mean, cov=cov)
+
+    def __len__(self):
+        return self._ncomp
+
+    def _expected_nparams_as_matrix(self):
+        pass
+        return torch.cat([param.expected_value[None]
+            for param in self.__parameters], dim=0)
+
+    def accumulate(self, T, weights):
+        return dict(zip(self.parameters, weights.t() @ T))
+
+
+class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
+    '''Set of Normal density models with a globale shared full
+    covariance matrix.
+
+    '''
+
+    def __init__(self, prior, posterior, ncomp):
+        super().__init__(prior, posterior, ncomp)
+
+    def sufficient_statistics(self, X):
+        T1 = (X[:, :, None] * X[:, None, :]).view(len(X), -1)
+        T2 = torch.cat([X, torch.ones(X.size(0), 1).type(X.type())],
+            dim=1)
+        return T1, T2
+
+    @staticmethod
+    def sufficient_statistics_from_mean_var(mean, var):
+        idxs = torch.eye(mean.size(1)).view(-1) == 1
+        XX = (mean[:, :, None] * mean[:, None, :]).view(mean.shape[0], -1)
+        XX[:, idxs] += var
+        return torch.cat([XX, mean, torch.ones(len(mean), 1).type(mean.type()),
+            torch.ones(len(mean), 1).type(mean.type())], dim=-1)
+        return NormalFullCovariance.sufficient_statistics_from_mean_var(mean,
+            var)
+
+    def forward(self, T, labels=None):
+        T1, T2 = T
+        feadim = int(math.sqrt(T1.size(0)))
+        retval = T2 @ self._expected_nparams_as_matrix().t()
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
 

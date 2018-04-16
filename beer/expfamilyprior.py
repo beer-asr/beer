@@ -60,7 +60,7 @@ def _normalwishart_split_nparams(natural_params):
     np3, np4 = natural_params[-2:]
     return np1, np2, np3, np4, D
 
-def _jointnormalwishart_split_nparams(natural_params, ncomp=1):
+def _jointnormalwishart_split_nparams(natural_params, ncomp):
     # We need to retrieve the 4 natural parameters organized as
     # follows:
     #   [ np1_1, ..., np1_D^2, np2_1_1, ..., np2_k_D, np3_1, ...,
@@ -253,14 +253,14 @@ def JointNormalWishartPrior(means, cov, prior_counts):
 
     D = means.size(1)
     ncomp = len(means)
-    dof = prior_counts + D + ncomp
+    dof = prior_counts + D
     V = dof * cov
     mmT = (means[:, None, :] * means[:, :, None]).sum(dim=0)
     natural_params = ta.Variable(torch.cat([
         (prior_counts * mmT + V).view(-1),
         prior_counts * means.view(-1),
         (torch.ones(means.size(0)) * prior_counts).type(means.type()),
-        (torch.ones(1) * (dof - (D + ncomp))).type(means.type())
+        (torch.ones(1) * (dof - (D))).type(means.type())
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _jointnormalwishart_log_norm,
                           args={'ncomp': means.size(0)})
