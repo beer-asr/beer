@@ -56,7 +56,7 @@ class VAE(BayesianModel):
 
     def forward(self, T, labels=None):
         self.latent_model(T[1].data, labels.data)
-        nparams = self.latent_model._components._expected_nparams_as_matrix().data
+        nparams = self.latent_model.components._expected_nparams_as_matrix().data
         nparams = Variable(self.latent_model._resps.data @ nparams)
         retval = self._state.log_likelihood(T[0]).mean(dim=0)
         retval -= self._state.kl_div(nparams)

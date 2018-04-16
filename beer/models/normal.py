@@ -197,16 +197,25 @@ class NormalSet(BayesianModel, metaclass=abc.ABCMeta):
 
     def __init__(self, components):
         super().__init__()
-        self.components = components
-        self.__parameters = BayesianParameterSet([
+        self._components = components
+        self._parameters = BayesianParameterSet([
             BayesianParameter(comp.parameters[0].prior,
                               comp.parameters[0].posterior)
-            for comp in self.components
+            for comp in self._components
         ])
+
+    def __getitem__(self, key):
+        if not isinstance(key, int):
+            raise TypeError('expected integer key')
+        return NormalSetElement(mean=self._components[key].mean,
+            cov=self._components[key].cov)
+
+    def __len__(self):
+        return len(self._components)
 
     def _expected_nparams_as_matrix(self):
         return torch.cat([param.expected_value[None]
-            for param in self.__parameters], dim=0)
+            for param in self._parameters], dim=0)
 
     def accumulate(self, T, weights):
         return dict(zip(self.parameters, weights.t() @ T))

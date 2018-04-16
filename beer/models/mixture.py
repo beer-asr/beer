@@ -39,7 +39,7 @@ class Mixture(BayesianModel):
         '''
         super().__init__()
         self.weights_params = BayesianParameter(prior_weights, posterior_weights)
-        self._components = normalset
+        self.components = normalset
         self._resps = None
 
     @property
@@ -48,16 +48,11 @@ class Mixture(BayesianModel):
         w = torch.exp(self.weights_params.expected_value)
         return w / w.sum()
 
-    @property
-    def components(self):
-        'Component of the mixture.'
-        return self._components.components
-
     def sufficient_statistics(self, X):
-        return self._components.sufficient_statistics(X)
+        return self.components.sufficient_statistics(X)
 
     def sufficient_statistics_from_mean_var(self, mean, var):
-        return self._components.sufficient_statistics_from_mean_var(mean, var)
+        return self.components.sufficient_statistics_from_mean_var(mean, var)
 
     def log_predictions(self, T):
         '''Compute the probability of the discrete components given the
@@ -70,13 +65,13 @@ class Mixture(BayesianModel):
             (Tensor): Per-frame probability of each components.
 
         '''
-        per_component_exp_llh = self._components(T)
+        per_component_exp_llh = self.components(T)
         per_component_exp_llh += self.weights_params.expected_value.view(1, -1)
         exp_llh = _logsumexp(per_component_exp_llh).view(-1)
         return per_component_exp_llh - exp_llh.view(-1, 1)
 
     def forward(self, T, labels=None):
-        per_component_exp_llh = self._components(T)
+        per_component_exp_llh = self.components(T)
         per_component_exp_llh += self.weights_params.expected_value.view(1, -1)
         if labels is not None:
             onehot_labels = _expand_labels(labels,
@@ -96,7 +91,7 @@ class Mixture(BayesianModel):
             resps = self._resps
         retval = {
             self.weights_params: resps.sum(dim=0),
-            **self._components.accumulate(T, resps)
+            **self.components.accumulate(T, resps)
         }
         self._resps = None
         return retval

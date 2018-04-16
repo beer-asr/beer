@@ -57,7 +57,7 @@ class BayesianEmbeddingModel(BayesianModel):
 
         # Per-frame Max. Entropy distribution.
         preds = torch.exp(self.bayesian_model.log_predictions(T))
-        nparams = self.bayesian_model._components._expected_nparams_as_matrix().data
+        nparams = self.bayesian_model.components._expected_nparams_as_matrix().data
         nparams = Variable(onehot_labels @ nparams)
 
         retval = log_p_labels - self._state.kl_div(nparams)

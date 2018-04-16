@@ -51,7 +51,7 @@ class TestBayesianEmbeddingModel:
             len(model.bayesian_model.components)).type(T.type())
         log_p_labels = (onehot_labels * log_pred).sum(dim=-1)
         preds = torch.exp(model.bayesian_model.log_predictions(T))
-        nparams = model.bayesian_model._components._expected_nparams_as_matrix().data
+        nparams = model.bayesian_model.components._expected_nparams_as_matrix().data
         nparams = Variable(onehot_labels @ nparams)
         obj_f2 = log_p_labels - model._state.kl_div(nparams)
         self.assertTrue(np.allclose(obj_f1.data, obj_f2.data))

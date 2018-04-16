@@ -36,7 +36,7 @@ class TestMixture:
             self.normalset
         )
         s1 = model.sufficient_statistics(self.X)
-        s2 = model._components.sufficient_statistics(self.X)
+        s2 = model.components.sufficient_statistics(self.X)
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
 
     def test_sufficient_statistics_from_mean_var(self):
@@ -47,7 +47,7 @@ class TestMixture:
         )
         s1 = model.sufficient_statistics_from_mean_var(self.X,
             torch.ones_like(self.X))
-        s2 = model._components.sufficient_statistics_from_mean_var(self.X,
+        s2 = model.components.sufficient_statistics_from_mean_var(self.X,
             torch.ones_like(self.X))
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
 
@@ -58,7 +58,7 @@ class TestMixture:
             self.normalset
         )
         T = model.sufficient_statistics(self.X)
-        pc_exp_llh = (model._components(T) + \
+        pc_exp_llh = (model.components(T) + \
             prior.expected_sufficient_statistics.view(1, -1)).numpy()
         exp_llh1 = logsumexp(pc_exp_llh, axis=1)
         exp_llh2  = model(T).numpy()
@@ -76,7 +76,7 @@ class TestMixture:
         mask = torch.log(elabels).numpy()
         elabels = elabels.numpy()
         T = model.sufficient_statistics(self.X)
-        pc_exp_llh = (model._components(T) + \
+        pc_exp_llh = (model.components(T) + \
             prior.expected_sufficient_statistics.view(1, -1)).numpy()
         pc_exp_llh += mask
         exp_llh1 = logsumexp(pc_exp_llh, axis=1)
