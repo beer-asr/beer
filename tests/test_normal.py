@@ -304,13 +304,23 @@ class TestNormalSetSharedFullCovariance:
         self.assertEqual(len(model), self.ncomps)
         for i, comp in enumerate(model):
             m1, m2 = self.posterior_means[i].numpy(), comp.mean.numpy()
-            if not np.allclose(m1, m2, atol=TOL):
-                print(m1, m2)
             self.assertTrue(np.allclose(m1, m2, atol=TOL))
             c1, c2 = self.cov.numpy(), comp.cov.numpy()
-            if not np.allclose(c1, c2, atol=TOL):
-                print(c1, c2)
             self.assertTrue(np.allclose(c1, c2, atol=TOL))
+
+    def test_sufficient_statistics(self):
+        prior = beer.JointNormalWishartPrior(self.prior_means,
+            self.cov, self.prior_count)
+        posterior = beer.JointNormalWishartPrior(self.posterior_means,
+            self.cov, self.prior_count)
+        model = beer.NormalSetSharedFullCovariance(prior, posterior, self.ncomps)
+        s1 = model.sufficient_statistics(self.X)
+
+        X = self.X.numpy()
+        s2 = (X[:, :, None] * X[:, None, :]).reshape(len(X), -1), \
+            np.c_[X, np.ones(len(X))]
+        self.assertTrue(np.allclose(s1[0].numpy(), s2[0], atol=TOL))
+        self.assertTrue(np.allclose(s1[1].numpy(), s2[1], atol=TOL))
 
 
 dataF = {
