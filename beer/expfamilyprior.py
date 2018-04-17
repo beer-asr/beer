@@ -47,6 +47,30 @@ def _normalgamma_log_norm(natural_params):
     return torch.sum(lognorm)
 
 
+def _jointnormalgamma_split_nparams(natural_params, ncomp):
+    # Retrieve the 4 natural parameters organized as
+    # follows:
+    #   [ np1_1, ..., np1_D, np2_1_1, ..., np2_k_D, np3_1, ..., np3_1_D,
+    #     np3_k_D, np4]
+    dim = len(natural_params) // (2 + 2 * ncomp)
+    np1 = natural_params[:dim]
+    np2s = natural_params[dim: dim + dim * ncomp]
+    np3s = natural_params[dim + dim * ncomp: dim + 2 * dim * ncomp]
+    np4 = natural_params[dim + 2 * dim * ncomp:]
+    return np1, np2s, np3s, np4, dim
+
+
+def _jointnormalgamma_log_norm(natural_params, ncomp):
+    np1, np2s, np3s, np4, dim = _jointnormalgamma_split_nparams(natural_params,
+        ncomp)
+    lognorm = torch.lgamma(.5 * (np4 + 1)).sum()
+    lognorm += -.5 * torch.log(np3s).sum()
+    tmp = ((np2s ** 2) / np3s).view(ncomp, dim)
+    lognorm += torch.sum(-.5 * (np4 + 1) * \
+        torch.log(.5 * (np1 - tmp.sum(dim=0))))
+    return lognorm
+
+
 def _normalwishart_split_nparams(natural_params):
     # We need to retrieve the 4 natural parameters organized as
     # follows:
@@ -204,6 +228,36 @@ def NormalGammaPrior(mean, precision, prior_counts):
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _normalgamma_log_norm)
 
+
+def JointNormalGammaPrior(means, prec, prior_counts):
+    '''Create a joint Normal-Gamma density function.
+
+    Note:
+        By "joint" normal-gamma density we mean a set of independent
+        Normal density sharing the same diagonal covariance matrix
+        (up to a multiplicative constant) and the probability over the
+        diagonal of the covariance matrix is given by a D indenpendent
+        Gamma distributions.
+
+    Args:
+        means (Tensor): Expected mean of the Normal densities.
+        prec (Tensor): Expected precision for each dimension.
+        prior_counts (float): Strength of the prior.
+
+    Returns:
+        ``JointNormalGammaPrior``
+
+    '''
+    dim = means.size(1)
+    ncomp = len(means)
+    natural_params = ta.Variable(torch.cat([
+        (prior_counts * (means**2).sum(dim=0) + 2 * prior_counts).view(-1),
+        (prior_counts * means).view(-1),
+        (torch.ones(ncomp, dim) * prior_counts).type(means.type()).view(-1),
+        2 * prec * prior_counts
+    ]), requires_grad=True)
+    return ExpFamilyPrior(natural_params, _jointnormalgamma_log_norm,
+                          args={'ncomp': means.size(0)})
 
 def NormalWishartPrior(mean, cov, prior_counts):
     '''Create a NormalWishart density function.

@@ -4,6 +4,7 @@
 from .expfamilyprior import ExpFamilyPrior
 from .expfamilyprior import DirichletPrior
 from .expfamilyprior import NormalGammaPrior
+from .expfamilyprior import JointNormalGammaPrior
 from .expfamilyprior import NormalWishartPrior
 from .expfamilyprior import JointNormalWishartPrior
 from .expfamilyprior import NormalPrior
