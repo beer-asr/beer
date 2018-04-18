@@ -51,7 +51,7 @@ def _jointnormalgamma_split_nparams(natural_params, ncomp):
     # Retrieve the 4 natural parameters organized as
     # follows:
     #   [ np1_1, ..., np1_D, np2_1_1, ..., np2_k_D, np3_1, ..., np3_1_D,
-    #     np3_k_D, np4]
+    #     np3_k_D, np4_1, ..., np4_D]
     dim = len(natural_params) // (2 + 2 * ncomp)
     np1 = natural_params[:dim]
     np2s = natural_params[dim: dim + dim * ncomp]

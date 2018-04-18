@@ -294,7 +294,7 @@ class NormalSetSharedCovariance(BayesianModel, metaclass=abc.ABCMeta):
     def __init__(self, prior, posterior, ncomp):
         super().__init__()
         self._ncomp = ncomp
-        self.means_prec_param = BayesianParameter(prior, posterior)
+        self.means_prec_param = BayesianParhjjkameter(prior, posterior)
 
     def __getitem__(self, key):
         if not isinstance(key, int):
@@ -318,30 +318,28 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
 
     @staticmethod
     def sufficient_statistics(X):
-        T1 = torch.cat([X**2, torch.ones(X.size(0), 1).type(X.type())], dim=1)
-        T2 = torch.cat([X, torch.ones(X.size(0), 1).type(X.type())], dim=1)
+        T1 = torch.cat([X**2, torch.ones_like(X), dim=1)
+        T2 = torch.cat([X, torch.ones_like(X), dim=1)
         return T1, T2
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        idxs = torch.eye(mean.size(1)).view(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).view(len(mean), -1)
-        XX[:, idxs] += var
-        return XX, torch.cat([mean, torch.ones(len(mean), 1).type(mean.type())],
-            dim=-1)
+        T1 = torch.cat([mean ** 2 + var, torch.ones_like(mean), dim=1])
+        T2 = torch.cat([mean, torch.ones_like(mean)], dim=1)
+        return T1, T2
 
     def _expected_nparams(self):
         exp_param = self.means_prec_param.expected_value
-        param1, param2, param3, param4, D = _jointnormalwishart_split_nparams(
+        param1, param2, param3, param4, D = _jointnormalgamma_split_nparams(
             exp_param, self._ncomp)
-        return param1.view(-1), \
-            torch.cat([param2, param3[:, None]], dim=1), param4
+        return torch.cat([param1.view(-1), param4.view(-1)]) \
+            torch.cat([param2, param3[:, None]], dim=1)
 
     def forward(self, T, labels=None):
         T1, T2 = T
-        feadim = int(math.sqrt(T1.size(1)))
+        feadim = T1.size(1) // 2
         params = self._expected_nparams()
-        retval = (T1 @ params[0])[:, None] + T2 @ params[1].t() + params[2]
+        retval = (T1 @ params[0])[:, None] + T2 @ params[1].t()
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
 
@@ -349,10 +347,10 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
         T1, T2 = T
         feadim = int(math.sqrt(T1.size(1)))
         acc_stats = torch.cat([
-            T1.sum(dim=0),
+            T1[:, :feadim].sum(dim=0),
             (weights.t() @ T2[:, :feadim]).view(-1),
             weights.sum(dim=0),
-            len(weights) * torch.ones(1).type(weights.type())
+            len(T1) * torch.ones(feadim).type(T1.type())
         ])
         return {self.means_prec_param: acc_stats}
 
