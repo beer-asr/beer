@@ -10,9 +10,9 @@ Requirements
 ------------
 
 Beer is built upon the [pytorch](http://pytorch.org)
-library. Note that we need pytorch to be installed from the master
-branch as some features are not yet present in the Anaconda package. 
-Beside, it also requires [numpy](http://www.numpy.org) and
+library. Note that we need pytorch to be installed from the source
+master branch as some features are not yet present in the Anaconda
+package.  Beside, it also requires [numpy](http://www.numpy.org) and
 [scipy](https://www.scipy.org/scipylib/index.html).  Finally, the
 examples use [bokeh](https://bokeh.pydata.org/en/latest/) for
 visualization.
@@ -25,13 +25,13 @@ In a terminal type.
 
 ```
   $ python setup.py install
-  
+
 ```
 
 This will install ``beer`` and eventually ``numpy`` and ``sicpy``
-if there are not install yet. Note that it will not 
-automatically install ``pytorch``. Preferlease  to the
-[pytorch documentation](https://github.com/pytorch/pytorch) 
+if there are not install yet. Note that it will not
+automatically install ``pytorch``. Please refer to the
+[pytorch documentation](https://github.com/pytorch/pytorch)
 to install it.
 
 
