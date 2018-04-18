@@ -123,13 +123,13 @@ class MLPStateNormalDiagonalCovariance:
     def __init__(self, mean, var):
         self.mean = mean
         self.var = var
+        self._nparams = _normal_diag_natural_params(self.mean, self.var)
 
     def entropy(self):
         'Compute the per-frame entropy of the posterior distribution.'
-        nparams = _normal_diag_natural_params(self.mean, self.var)
         exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
             self.mean, self.var)
-        return - (nparams * exp_T).sum(dim=-1)
+        return - (self._nparams * exp_T).sum(dim=-1)
 
     def kl_div(self, nparams_other):
         nparams = _normal_diag_natural_params(self.mean, self.var)
@@ -141,4 +141,8 @@ class MLPStateNormalDiagonalCovariance:
         noise = Variable(torch.randn(*self.mean.size()))
         return self.mean + noise * torch.sqrt(self.var)
 
+    def log_likelihood(self, T):
+        dim0, dim1 = self._nparams.size()
+        return torch.sum(T * self._nparams.view(1, dim0, dim1) , dim=-1) - \
+            .5 * self.mean.size(0) * math.log(2 * math.pi)
 
