@@ -57,7 +57,7 @@ def _jointnormalgamma_split_nparams(natural_params, ncomp):
     np2s = natural_params[dim: dim + dim * ncomp]
     np3s = natural_params[dim + dim * ncomp: dim + 2 * dim * ncomp]
     np4 = natural_params[dim + 2 * dim * ncomp:]
-    return np1, np2s, np3s, np4, dim
+    return np1, np2s.view(ncomp, dim), np3s.view(ncomp, dim), np4, dim
 
 
 def _jointnormalgamma_log_norm(natural_params, ncomp):
@@ -254,7 +254,7 @@ def JointNormalGammaPrior(means, prec, prior_counts):
         (prior_counts * (means**2).sum(dim=0) + 2 * prior_counts).view(-1),
         (prior_counts * means).view(-1),
         (torch.ones(ncomp, dim) * prior_counts).type(means.type()).view(-1),
-        2 * prec * prior_counts
+        2 * prec * prior_counts - 1
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _jointnormalgamma_log_norm,
                           args={'ncomp': means.size(0)})

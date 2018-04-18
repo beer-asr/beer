@@ -18,7 +18,7 @@ from beer import NormalWishartPrior
 torch.manual_seed(10)
 
 
-TOLPLACES = 5
+TOLPLACES = 4
 TOL = 10 ** (-TOLPLACES)
 
 
@@ -293,6 +293,87 @@ class TestNormalFullCovarianceSet:
             self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
 
 
+class TestNormalSetSharedDiagonalCovariance:
+
+    def test_create(self):
+        prior = beer.JointNormalGammaPrior(self.prior_means,
+            self.prec, self.prior_count)
+        posterior = beer.JointNormalGammaPrior(self.posterior_means,
+            self.prec, self.prior_count)
+        model = beer.NormalSetSharedDiagonalCovariance(prior, posterior,
+            self.ncomps)
+        self.assertEqual(len(model), self.ncomps)
+        for i, comp in enumerate(model):
+            m1, m2 = self.posterior_means[i].numpy(), comp.mean.numpy()
+            self.assertTrue(np.allclose(m1, m2, atol=TOL))
+            c1, c2 = np.diag(1/self.prec.numpy()), comp.cov.numpy()
+            if not np.allclose(c1, c2, atol=TOL):
+                print(c1, c2)
+            self.assertTrue(np.allclose(c1, c2, atol=TOL))
+
+    def test_sufficient_statistics(self):
+        s1 = beer.NormalSetSharedDiagonalCovariance.sufficient_statistics(self.X)
+        X = self.X.numpy()
+        s2 = np.c_[X**2, np.ones_like(X)], \
+            np.c_[X, np.ones_like(X)]
+        self.assertTrue(np.allclose(s1[0].numpy(), s2[0], atol=TOL))
+        self.assertTrue(np.allclose(s1[1].numpy(), s2[1], atol=TOL))
+
+    def test_sufficient_statistics_from_mean_var(self):
+        mean = self.means
+        var = self.vars
+        s1 = beer.NormalSetSharedDiagonalCovariance.sufficient_statistics_from_mean_var(
+            mean, var)
+        mean, var = mean.numpy(), var.numpy()
+        s2 = np.c_[mean**2 + var, np.ones_like(mean)], \
+            np.c_[mean, np.ones_like(mean)]
+        self.assertTrue(np.allclose(s1[0].numpy(), s2[0], atol=TOL))
+        self.assertTrue(np.allclose(s1[1].numpy(), s2[1], atol=TOL))
+
+    def test_forward(self):
+        prior = beer.JointNormalGammaPrior(self.prior_means,
+            self.prec, self.prior_count)
+        posterior = beer.JointNormalGammaPrior(self.posterior_means,
+            self.prec, self.prior_count)
+        model = beer.NormalSetSharedDiagonalCovariance(prior, posterior,
+            self.ncomps)
+
+        matrix = torch.cat([param.expected_value[None]
+            for param in model.parameters], dim=0)
+        T1, T2 = model.sufficient_statistics(self.X)
+        params = model._expected_nparams()
+        exp_llh1 = model((T1, T2))
+        self.assertEqual(exp_llh1.size(0), self.X.size(0))
+        self.assertEqual(exp_llh1.size(1), self.ncomps)
+
+        exp_llh2 = (T1 @ params[0])[:, None] + T2 @ params[1].t()
+        exp_llh2 -= .5 * self.X.size(1) * math.log(2 * math.pi)
+        self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
+            atol=TOL))
+
+    def test_accumulate(self):
+        prior = beer.JointNormalGammaPrior(self.prior_means,
+            self.prec, self.prior_count)
+        posterior = beer.JointNormalGammaPrior(self.posterior_means,
+            self.prec, self.prior_count)
+        model = beer.NormalSetSharedDiagonalCovariance(prior, posterior,
+            self.ncomps)
+
+        weights = torch.ones(len(self.X), self.ncomps).type(self.X.type())
+        feadim = self.X.size(1)
+        T = model.sufficient_statistics(self.X)
+        acc_stats1 = model.accumulate(T, weights)[model.means_prec_param]
+        self.assertEqual(len(acc_stats1),
+            len(model.means_prec_param.posterior.natural_params))
+        acc_stats2 = torch.cat([T[0][:, :feadim].sum(dim=0), \
+            (weights.t() @ T[1][:, :feadim]).view(-1),
+            (weights.t() @ T[1][:, feadim:]).view(-1),
+            len(self.X) * torch.ones(feadim).type(self.X.type())])
+        self.assertTrue(np.allclose(acc_stats1.numpy(), acc_stats2.numpy(),
+            atol=TOL))
+
+
+
 class TestNormalSetSharedFullCovariance:
 
     def test_create(self):
@@ -337,14 +418,12 @@ class TestNormalSetSharedFullCovariance:
             self.cov, self.prior_count)
         model = beer.NormalSetSharedFullCovariance(prior, posterior, self.ncomps)
 
-        matrix = torch.cat([param.expected_value[None]
-            for param in model.parameters], dim=0)
         T1, T2 = model.sufficient_statistics(self.X)
-        params = model._expected_nparams()
         exp_llh1 = model((T1, T2))
         self.assertEqual(exp_llh1.size(0), self.X.size(0))
         self.assertEqual(exp_llh1.size(1), self.ncomps)
 
+        params = model._expected_nparams()
         exp_llh2 = (T1 @ params[0])[:, None] + T2 @ params[1].t() + params[2]
         exp_llh2 -= .5 * self.X.size(1) * math.log(2 * math.pi)
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
@@ -490,6 +569,66 @@ tests = [
         'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., **dataD}),
     (TestNormalFullCovarianceSet, {'ncomps': 13, 'mean': torch.ones(2).double(),
         'cov': torch.eye(2).double() * 1e8, 'prior_count': 1., **dataD}),
+
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 2).float(),
+        'posterior_means': torch.randn(13, 2).float(),
+        'prec': (torch.randn(2)**2).float(),
+        'prior_count': 1., **dataF}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 2).double(),
+        'posterior_means': torch.randn(13, 2).double(),
+        'prec': (torch.randn(2)**2).double(),
+        'prior_count': 1., **dataD}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 2).float(),
+        'posterior_means': torch.randn(13, 2).float(),
+        'prec': (torch.randn(2)**2).float(),
+        'prior_count': 1., **dataF}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 2).double(),
+        'posterior_means': torch.randn(13, 2).double(),
+        'prec': (torch.randn(2)**2).double(),
+        'prior_count': 1., **dataD}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 10).float(),
+        'posterior_means': torch.randn(13, 10).float(),
+        'prec': (torch.randn(10)**2).float(), 'prior_count': 1., **data10F}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 10).double(),
+        'posterior_means': torch.randn(13, 10).double(),
+        'prec': (torch.randn(10)**2).double(),
+        'prior_count': 1., **data10D}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 2).float(),
+        'posterior_means': torch.randn(13, 2).float(),
+        'prec': (torch.randn(2)**2).float(),
+        'prior_count': 1e-3, **dataF}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 2).double(),
+        'posterior_means': torch.randn(13, 2).double(),
+        'prec': (torch.randn(2)**2).double(),
+        'prior_count': 1e-7, **dataD}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 2).float(),
+        'posterior_means': torch.randn(13, 2).float(),
+        'prec': (torch.randn(2)**2).float(),
+        'prior_count': 1., **dataF}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 2).double(),
+        'posterior_means': torch.randn(13, 2).double(),
+        'prec': (torch.randn(2)**2).double(),
+        'prior_count': 1., **dataD}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 2).float(),
+        'posterior_means': torch.randn(13, 2).float(),
+        'prec': (1 + torch.randn(2)**2).float(),
+        'prior_count': 1., **dataF}),
+    (TestNormalSetSharedDiagonalCovariance, {'ncomps': 13,
+        'prior_means': torch.randn(13, 2).double(),
+        'posterior_means': torch.randn(13, 2).double(),
+        'prec': (torch.randn(2)**2).double(),
+        'prior_count': 1., **dataD}),
 
     (TestNormalSetSharedFullCovariance, {'ncomps': 13,
         'prior_means': torch.randn(13, 2).float(),

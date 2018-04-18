@@ -35,6 +35,7 @@ from ..expfamilyprior import NormalWishartPrior
 from ..expfamilyprior import kl_div
 from ..expfamilyprior import _normalwishart_split_nparams
 from ..expfamilyprior import _jointnormalwishart_split_nparams
+from ..expfamilyprior import _jointnormalgamma_split_nparams
 
 
 #######################################################################
@@ -294,17 +295,7 @@ class NormalSetSharedCovariance(BayesianModel, metaclass=abc.ABCMeta):
     def __init__(self, prior, posterior, ncomp):
         super().__init__()
         self._ncomp = ncomp
-        self.means_prec_param = BayesianParhjjkameter(prior, posterior)
-
-    def __getitem__(self, key):
-        if not isinstance(key, int):
-            raise TypeError('expected integer key')
-        exp_param = self.means_prec_param.expected_value
-        param1, param2, param3, param4, D = _jointnormalwishart_split_nparams(
-            exp_param, self._ncomp)
-        cov = torch.inverse(-2 * param1)
-        mean = cov @ param2[key]
-        return NormalSetElement(mean=mean, cov=cov)
+        self.means_prec_param = BayesianParameter(prior, posterior)
 
     def __len__(self):
         return self._ncomp
@@ -318,22 +309,32 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
 
     @staticmethod
     def sufficient_statistics(X):
-        T1 = torch.cat([X**2, torch.ones_like(X), dim=1)
-        T2 = torch.cat([X, torch.ones_like(X), dim=1)
+        T1 = torch.cat([X**2, torch.ones_like(X)], dim=1)
+        T2 = torch.cat([X, torch.ones_like(X)], dim=1)
         return T1, T2
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        T1 = torch.cat([mean ** 2 + var, torch.ones_like(mean), dim=1])
+        T1 = torch.cat([mean ** 2 + var, torch.ones_like(mean)], dim=1)
         T2 = torch.cat([mean, torch.ones_like(mean)], dim=1)
         return T1, T2
+
+    def __getitem__(self, key):
+        if not isinstance(key, int):
+            raise TypeError('expected integer key')
+        exp_param = self.means_prec_param.expected_value
+        param1, param2, param3, param4, D = _jointnormalgamma_split_nparams(
+            exp_param, self._ncomp)
+        cov = 1 / (-2 * param1)
+        mean = cov * param2[key]
+        return NormalSetElement(mean=mean, cov=torch.diag(cov))
 
     def _expected_nparams(self):
         exp_param = self.means_prec_param.expected_value
         param1, param2, param3, param4, D = _jointnormalgamma_split_nparams(
             exp_param, self._ncomp)
-        return torch.cat([param1.view(-1), param4.view(-1)]) \
-            torch.cat([param2, param3[:, None]], dim=1)
+        return torch.cat([param1.view(-1), param4.view(-1)]), \
+            torch.cat([param2, param3], dim=1)
 
     def forward(self, T, labels=None):
         T1, T2 = T
@@ -345,11 +346,11 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
 
     def accumulate(self, T, weights):
         T1, T2 = T
-        feadim = int(math.sqrt(T1.size(1)))
+        feadim = T1.size(1) // 2
         acc_stats = torch.cat([
             T1[:, :feadim].sum(dim=0),
             (weights.t() @ T2[:, :feadim]).view(-1),
-            weights.sum(dim=0),
+            (weights.t() @ T2[:, feadim:]).view(-1),
             len(T1) * torch.ones(feadim).type(T1.type())
         ])
         return {self.means_prec_param: acc_stats}
@@ -375,6 +376,16 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
         XX[:, idxs] += var
         return XX, torch.cat([mean, torch.ones(len(mean), 1).type(mean.type())],
             dim=-1)
+
+    def __getitem__(self, key):
+        if not isinstance(key, int):
+            raise TypeError('expected integer key')
+        exp_param = self.means_prec_param.expected_value
+        param1, param2, param3, param4, D = _jointnormalwishart_split_nparams(
+            exp_param, self._ncomp)
+        cov = torch.inverse(-2 * param1)
+        mean = cov @ param2[key]
+        return NormalSetElement(mean=mean, cov=cov)
 
     def _expected_nparams(self):
         exp_param = self.means_prec_param.expected_value

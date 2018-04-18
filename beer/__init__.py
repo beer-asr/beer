@@ -19,6 +19,7 @@ from .models import NormalDiagonalCovariance
 from .models import NormalFullCovariance
 from .models import NormalDiagonalCovarianceSet
 from .models import NormalFullCovarianceSet
+from .models import NormalSetSharedDiagonalCovariance
 from .models import NormalSetSharedFullCovariance
 from .models import Mixture
 from .models import MLPNormalDiag
