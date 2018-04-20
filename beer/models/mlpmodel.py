@@ -13,22 +13,7 @@ from torch import nn
 from torch.autograd import Variable
 
 from .normal import NormalDiagonalCovariance
-
-
-def _normal_diag_natural_params(mean, var):
-    '''Transform the standard parameters of a Normal (diag. cov.) into
-    their canonical forms.
-
-    Note:
-        The (negative) log normalizer is appended to it.
-
-    '''
-    return torch.cat([
-        -1. / (2 * var),
-        mean / var,
-        -(mean ** 2) / (2 * var),
-        -.5 * torch.log(var)
-    ], dim=-1)
+from .normal import normal_diag_natural_params
 
 
 def _structure_output_dim(structure):
@@ -126,13 +111,13 @@ class MLPStateNormalDiagonalCovariance:
 
     def entropy(self):
         'Compute the per-frame entropy of the posterior distribution.'
-        nparams = _normal_diag_natural_params(self.mean, self.var)
+        nparams = normal_diag_natural_params(self.mean, self.var)
         exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
             self.mean, self.var)
         return - (nparams * exp_T).sum(dim=-1)
 
     def kl_div(self, nparams_other):
-        nparams = _normal_diag_natural_params(self.mean, self.var)
+        nparams = normal_diag_natural_params(self.mean, self.var)
         exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
             self.mean, self.var)
         return ((nparams - nparams_other) * exp_T).sum(dim=-1)

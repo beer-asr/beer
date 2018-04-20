@@ -35,8 +35,6 @@ from ..expfamilyprior import NormalWishartPrior
 from ..expfamilyprior import kl_div
 from ..expfamilyprior import _normalwishart_split_nparams
 
-from .mlpmodel import _normal_diag_natural_params
-
 
 #######################################################################
 # Normal model
@@ -257,11 +255,27 @@ class NormalFullCovarianceSet(NormalSet):
         return retval
 
 
+def normal_diag_natural_params(mean, var):
+    '''Transform the standard parameters of a Normal (diag. cov.) into
+    their canonical forms.
+
+    Note:
+        The (negative) log normalizer is appended to it.
+
+    '''
+    return torch.cat([
+        -1. / (2 * var),
+        mean / var,
+        -(mean ** 2) / (2 * var),
+        -.5 * torch.log(var)
+    ], dim=-1)
+
+
 class FixedIsotropicGaussian:
     def __init__(self, dim):
         mean = torch.ones(dim)
         var = torch.ones(dim)
-        self._np = _normal_diag_natural_params(mean, var)
+        self._np = normal_diag_natural_params(mean, var)
         
     def expected_natural_params(self, mean, var):
         return self._np, None
