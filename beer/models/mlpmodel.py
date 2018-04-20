@@ -10,6 +10,7 @@ import abc
 import math
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.autograd import Variable
 
 from .normal import NormalDiagonalCovariance
@@ -130,4 +131,41 @@ class MLPStateNormalDiagonalCovariance:
         distance_term = 0.5*(X-self.mean).pow(2) / self.var
         precision_term = 0.5*self.var.log()
         return (-distance_term - precision_term).sum(dim=-1)
+
+
+class MLPBernoulli(MLPModel):
+    '''Neural-Network ending with a linear projection
+    providing the mean of a Bernoulli distribution.
+
+    '''
+
+    def __init__(self, structure, dim):
+        '''Initialize a ``MLPBernoulli`` object.
+
+        Args:
+            structure (``torch.Sequential``): Sequence linear/
+                non-linear operations.
+            dim (int): Desired dimension of the modeled random
+                variable.
+
+        '''
+        super().__init__(structure, [dim])
+
+    def forward(self, X):
+        mu = super().forward(X)[0]
+        return BernoulliState(F.sigmoid(mu))
          
+
+class BernoulliState:
+    ''' Bernoulli distribution, to be an output of a MLP.
+
+    TODO -- as follows from the difference between the first line and the name
+    of the class, something smells here. A lot.
+    '''
+    def __init__(self, mu):
+        self.mu = mu
+
+    def log_likelihood(self, X, nb_samples):
+        per_pixel_bce = X * self.mu.log() + (1.0 - X) * (1 - self.mu).log()
+        return per_pixel_bce.sum(dim=-1)
+    

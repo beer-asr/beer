@@ -16,6 +16,7 @@ from .mixture import Mixture
 
 from .mlpmodel import MLPNormalDiag
 from .mlpmodel import MLPNormalIso
+from .mlpmodel import MLPBernoulli
 
 from .vae import VAE
 
