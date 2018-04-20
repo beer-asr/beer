@@ -112,4 +112,3 @@ class VAE(nn.Module):
         kl *= kl_weight
 
         return -(llh - kl[:, None]), llh, kl
-

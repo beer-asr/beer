@@ -35,6 +35,8 @@ from ..expfamilyprior import NormalWishartPrior
 from ..expfamilyprior import kl_div
 from ..expfamilyprior import _normalwishart_split_nparams
 
+from .mlpmodel import _normal_diag_natural_params
+
 
 #######################################################################
 # Normal model
@@ -253,4 +255,14 @@ class NormalFullCovarianceSet(NormalSet):
         retval = T @ self._expected_nparams_as_matrix().t()
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
+
+
+class FixedIsotropicGaussian:
+    def __init__(self, dim):
+        mean = torch.ones(dim)
+        var = torch.ones(dim)
+        self._np = _normal_diag_natural_params(mean, var)
+        
+    def expected_natural_params(self, mean, var):
+        return self._np, None
 

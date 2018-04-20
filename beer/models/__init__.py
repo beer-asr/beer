@@ -10,6 +10,7 @@ from .normal import NormalDiagonalCovariance
 from .normal import NormalFullCovariance
 from .normal import NormalDiagonalCovarianceSet
 from .normal import NormalFullCovarianceSet
+from .normal import FixedIsotropicGaussian
 
 from .mixture import Mixture
 
