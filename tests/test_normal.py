@@ -368,19 +368,6 @@ class TestNormalSetSharedFullCovariance:
         self.assertTrue(np.allclose(s1[0].numpy(), s2[0], atol=TOL))
         self.assertTrue(np.allclose(s1[1].numpy(), s2[1], atol=TOL))
 
-    def test_sufficient_statistics_from_mean_var(self):
-        mean = self.means
-        var = self.vars
-        s1 = beer.NormalSetSharedFullCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
-        mean, var = mean.numpy(), var.numpy()
-        idxs = np.identity(mean.shape[1]).reshape(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).reshape(mean.shape[0], -1)
-        XX[:, idxs] += var
-        s2 = XX, np.c_[mean, np.ones(len(mean))]
-        self.assertTrue(np.allclose(s1[0].numpy(), s2[0], atol=TOL))
-        self.assertTrue(np.allclose(s1[1].numpy(), s2[1], atol=TOL))
-
     def test_expected_natural_params_as_matrix(self):
         prior = beer.JointNormalWishartPrior(self.prior_means,
             self.cov, self.prior_count)

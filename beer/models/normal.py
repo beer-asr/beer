@@ -415,11 +415,7 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        idxs = torch.eye(mean.size(1)).view(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).view(len(mean), -1)
-        XX[:, idxs] += var
-        return XX, torch.cat([mean, torch.ones(len(mean), 1).type(mean.type())],
-            dim=-1)
+        raise NotImplementedError()
 
     def __getitem__(self, key):
         if not isinstance(key, int):
