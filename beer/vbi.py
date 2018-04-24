@@ -24,14 +24,14 @@ class VariationalBayesLossInstance:
         self._acc_stats = acc_stats
         self._scale = scale
 
-    def __imul__(self, other):
-        self._loss *= other
-
     def __str__(self):
         return str(self._loss)
 
     def __float__(self):
         return float(self.value)
+
+    def scale(self, scale):
+        self._loss *= scale
 
     @property
     def value(self):
@@ -58,7 +58,8 @@ class VariationalBayesLossInstance:
         parameter of the model.
 
         '''
-        for acc_stats, parameter in zip(self._acc_stats, self._parameters):
+        for parameter in self._parameters:
+            acc_stats = self._acc_stats[parameter]
             parameter.natural_grad += parameter.prior.natural_params +  \
                 self._scale * acc_stats - \
                 parameter.posterior.natural_params

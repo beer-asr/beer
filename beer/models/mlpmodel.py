@@ -109,13 +109,14 @@ class MLPStateNormalDiagonalCovariance:
     def __init__(self, mean, var):
         self.mean = mean
         self.var = var
+        self._nparams = normal_diag_natural_params(self.mean, self.var)
 
     def entropy(self):
         'Compute the per-frame entropy of the posterior distribution.'
         nparams = normal_diag_natural_params(self.mean, self.var)
         exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
             self.mean, self.var)
-        return - (nparams * exp_T).sum(dim=-1)
+        return - (self._nparams * exp_T).sum(dim=-1)
 
     def kl_div(self, nparams_other):
         nparams = normal_diag_natural_params(self.mean, self.var)
@@ -154,7 +155,7 @@ class MLPBernoulli(MLPModel):
     def forward(self, X):
         mu = super().forward(X)[0]
         return BernoulliState(F.sigmoid(mu))
-         
+
 
 class BernoulliState:
     ''' Bernoulli distribution, to be an output of a MLP.
@@ -165,7 +166,12 @@ class BernoulliState:
     def __init__(self, mu):
         self.mu = mu
 
+    def log_likelihood(self, T):
+        dim0, dim1 = self._nparams.size()
+        return torch.sum(T * self._nparams.view(1, dim0, dim1) , dim=-1) - \
+            .5 * self.mean.size(0) * math.log(2 * math.pi)
+
     def log_likelihood(self, X, nb_samples):
         per_pixel_bce = X * self.mu.log() + (1.0 - X) * (1 - self.mu).log()
         return per_pixel_bce.sum(dim=-1)
-    
+

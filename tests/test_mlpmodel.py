@@ -12,7 +12,7 @@ import sys
 sys.path.insert(0, './')
 
 import beer
-from beer.models.mlpmodel import _normal_diag_natural_params
+from beer.models.mlpmodel import normal_diag_natural_params
 from beer.models.mlpmodel import _structure_output_dim
 
 
@@ -26,7 +26,7 @@ TOL = 10 ** (-TOLPLACES)
 class TestMLPModelFunctions:
 
     def test_normal_diag_nparams(self):
-        nparams1 = _normal_diag_natural_params(self.mean, self.var)
+        nparams1 = normal_diag_natural_params(self.mean, self.var)
         nparams2 = torch.cat([
             - 1. / (2 * self.var),
             self.mean / self.var,
