@@ -142,11 +142,7 @@ class NormalFullCovariance(Normal):
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        idxs = torch.eye(mean.size(1)).view(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).view(mean.shape[0], -1)
-        XX[:, idxs] += var
-        return torch.cat([XX, mean, torch.ones(len(mean), 1).type(mean.type()),
-            torch.ones(len(mean), 1).type(mean.type())], dim=-1)
+        raise NotImplementedError
 
     def __init__(self, prior, posterior):
         super().__init__()

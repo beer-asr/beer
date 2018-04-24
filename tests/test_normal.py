@@ -43,13 +43,9 @@ class TestNormalDiagonalCovariance:
         self.assertTrue(np.allclose(s1, s2.numpy(), atol=TOL))
 
     def test_sufficient_statistics_from_mean_var(self):
-        mean = self.mean.view(1, -1)
-        var = (1. / self.prec.view(1, -1))
-        if len(var.size()) == 2:
-            var = torch.diag(var)
         s1 = beer.NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
-        mean, var = mean.numpy(), var.numpy()
+            self.means, self.vars)
+        mean, var = self.means.numpy(), self.vars.numpy()
         s2 = np.c_[mean**2 + var, mean, np.ones_like(mean),
                    np.ones_like(mean)]
         self.assertTrue(np.allclose(s1.numpy(), s2, atol=TOL))
@@ -66,6 +62,12 @@ class TestNormalDiagonalCovariance:
         exp_llh2 = model(T)
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
                         atol=TOL))
+
+    #def test_expected_natural_params(self):
+    #    model = beer.NormalDiagonalCovariance(
+    #        NormalGammaPrior(self.mean, self.prec, self.prior_count),
+    #        NormalGammaPrior(self.mean, self.prec, self.prior_count)
+    #    )
 
 
 
@@ -87,18 +89,6 @@ class TestNormalFullCovariance:
             X, np.ones(len(X)), np.ones(len(X))]
         s2 = beer.NormalFullCovariance.sufficient_statistics(self.X)
         self.assertTrue(np.allclose(s1, s2.numpy(), atol=TOL))
-
-    def test_sufficient_statistics_from_mean_var(self):
-        mean = self.mean.view(1, -1)
-        var = torch.diag(self.cov).view(1, -1)
-        s1 = beer.NormalFullCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
-        mean, var = mean.numpy(), var.numpy()
-        idxs = np.identity(mean.shape[1]).reshape(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).reshape(mean.shape[0], -1)
-        XX[:, idxs] += var
-        s2 = np.c_[XX, mean, np.ones(len(mean)), np.ones(len(mean))]
-        self.assertTrue(np.allclose(s1.numpy(), s2, atol=TOL))
 
     def test_exp_llh(self):
         model = beer.NormalFullCovariance(
@@ -136,12 +126,10 @@ class TestNormalDiagonalCovarianceSet:
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
     def test_sufficient_statistics_from_mean_var(self):
-        mean = self.mean.view(1, -1)
-        var = (1. / self.prec.view(1, -1))
         s1 = beer.NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
+            self.means, self.vars)
         s2 = beer.NormalDiagonalCovarianceSet.sufficient_statistics_from_mean_var(
-            mean, var)
+            self.means, self.vars)
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
     def test_forward(self):
@@ -195,15 +183,6 @@ class TestNormalFullCovarianceSet:
         s2 = beer.NormalFullCovarianceSet.sufficient_statistics(self.X)
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
-    def test_sufficient_statistics_from_mean_var(self):
-        mean = self.mean.view(1, -1)
-        var = torch.diag(self.cov).view(1, -1)
-        s1 = beer.NormalFullCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
-        s2 = beer.NormalFullCovarianceSet.sufficient_statistics_from_mean_var(
-            mean, var)
-        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
-
     def test_forward(self):
         posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
                  for _ in range(self.ncomps)]
@@ -252,15 +231,6 @@ class TestNormalFullCovarianceSet:
     def test_sufficient_statistics(self):
         s1 = beer.NormalFullCovariance.sufficient_statistics(self.X)
         s2 = beer.NormalFullCovarianceSet.sufficient_statistics(self.X)
-        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
-
-    def test_sufficient_statistics_from_mean_var(self):
-        mean = self.mean.view(1, -1)
-        var = torch.diag(self.cov).view(1, -1)
-        s1 = beer.NormalFullCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
-        s2 = beer.NormalFullCovarianceSet.sufficient_statistics_from_mean_var(
-            mean, var)
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
     def test_forward(self):
