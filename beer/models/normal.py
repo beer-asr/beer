@@ -121,6 +121,21 @@ class NormalDiagonalCovariance(Normal):
         np1, np2, _, _ = evalue.view(4, -1)
         return torch.diag(1/(-2 * np1))
 
+    def expected_natural_params(self, means, vars):
+        '''Interface for the VAE model. Returns the expected value of the
+        natural params of the latent model given the per-frame means
+        and variances.
+
+        Args:
+            means (Tensor): Per-frame means.
+            vars (Tensor): Per-frame variances.
+
+        Returns:
+            (Tensor): Expected value of the natural parameters.
+
+        '''
+        return self.mean_prec_param.expected_value
+
     def forward(self, T, labels=None):
         feadim = .25 * T.size(1)
         exp_llh = T @ self.mean_prec_param.expected_value

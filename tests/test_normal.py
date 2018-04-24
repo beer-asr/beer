@@ -63,12 +63,14 @@ class TestNormalDiagonalCovariance:
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
                         atol=TOL))
 
-    #def test_expected_natural_params(self):
-    #    model = beer.NormalDiagonalCovariance(
-    #        NormalGammaPrior(self.mean, self.prec, self.prior_count),
-    #        NormalGammaPrior(self.mean, self.prec, self.prior_count)
-    #    )
-
+    def test_expected_natural_params(self):
+        model = beer.NormalDiagonalCovariance(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            NormalGammaPrior(self.mean, self.prec, self.prior_count)
+        )
+        np1 = model.expected_natural_params(self.means, self.vars).numpy()
+        np2 = model.parameters[0].expected_value.numpy()
+        self.assertTrue(np.allclose(np1, np2, atol=TOL))
 
 
 class TestNormalFullCovariance:
