@@ -134,6 +134,19 @@ class TestNormalDiagonalCovarianceSet:
             self.means, self.vars)
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
+    def test_expected_natural_params_as_matrix(self):
+        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalDiagonalCovarianceSet(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            posts
+        )
+        matrix1 = model.expected_natural_params_as_matrix()
+        matrix2 = torch.cat([param.expected_value[None]
+            for param in model.parameters])
+        self.assertTrue(np.allclose(matrix1.numpy(), matrix2.numpy(),
+            atol=TOL))
+
     def test_forward(self):
         posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
                  for _ in range(self.ncomps)]

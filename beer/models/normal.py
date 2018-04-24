@@ -225,7 +225,7 @@ class NormalSet(BayesianModel, metaclass=abc.ABCMeta):
     def __len__(self):
         return len(self._components)
 
-    def _expected_nparams_as_matrix(self):
+    def expected_natural_params_as_matrix(self):
         return torch.cat([param.expected_value[None]
             for param in self._parameters], dim=0)
 
@@ -253,7 +253,7 @@ class NormalDiagonalCovarianceSet(NormalSet):
 
     def forward(self, T, labels=None):
         feadim = .25 * T.size(1)
-        retval = T @ self._expected_nparams_as_matrix().t()
+        retval = T @ self.expected_natural_params_as_matrix().t()
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
 
@@ -278,7 +278,7 @@ class NormalFullCovarianceSet(NormalSet):
 
     def forward(self, T, labels=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - T.size(1))))
-        retval = T @ self._expected_nparams_as_matrix().t()
+        retval = T @ self.expected_natural_params_as_matrix().t()
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
 

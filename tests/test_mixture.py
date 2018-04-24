@@ -90,6 +90,14 @@ class TestMixture:
         labs2 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         self.assertTrue(np.allclose(labs1.numpy(), labs2, atol=TOL))
 
+    def test_expected_natural_params(self):
+        prior = beer.DirichletPrior(self.prior_counts)
+        model = beer.Mixture(
+            prior, prior,
+            self.normalset
+        )
+
+
 
 def create_normalset_diag(ncomps, dim, type_t):
     posts = [beer.NormalGammaPrior(torch.zeros(dim).type(type_t),
