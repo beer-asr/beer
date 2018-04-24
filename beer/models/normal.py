@@ -373,6 +373,13 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
         return torch.cat([param1.view(-1), param4.view(-1)]), \
             torch.cat([param2, param3], dim=1)
 
+    def expected_natural_params_as_matrix(self):
+        exp_param = self.means_prec_param.expected_value
+        param1, param2, param3, param4, D = _jointnormalgamma_split_nparams(
+            exp_param, self._ncomp)
+        ones = torch.ones_like(param2)
+        return torch.cat([ones * param1, param2, param3, ones * param4], dim=1)
+
     def forward(self, T, labels=None):
         T1, T2 = T
         feadim = T1.size(1) // 2
@@ -430,6 +437,15 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
             exp_param, self._ncomp)
         return param1.view(-1), \
             torch.cat([param2, param3[:, None]], dim=1), param4
+
+    def expected_natural_params_as_matrix(self):
+        exp_param = self.means_prec_param.expected_value
+        param1, param2, param3, param4, D = _jointnormalwishart_split_nparams(
+            exp_param, self._ncomp)
+        ones1 = torch.ones(self._ncomp, D**2).type(param1.type())
+        ones2 = torch.ones(self._ncomp, 1).type(param1.type())
+        return torch.cat([ones1 * param1.view(-1)[None, :],
+            param2, param3.view(-1, 1), ones2 * param4], dim=1)
 
     def forward(self, T, labels=None):
         T1, T2 = T
