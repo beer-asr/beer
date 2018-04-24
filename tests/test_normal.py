@@ -70,8 +70,10 @@ class TestNormalDiagonalCovariance:
             NormalGammaPrior(self.mean, self.prec, self.prior_count),
             NormalGammaPrior(self.mean, self.prec, self.prior_count)
         )
-        np1 = model.expected_natural_params(self.means, self.vars).numpy()
+        T = model.sufficient_statistics_from_mean_var(self.means, self.vars)
+        np1 = model.expected_natural_params(T).numpy()
         np2 = model.parameters[0].expected_value.numpy()
+        np2 = np.ones((T.size(0), len(np2))) * np2
         self.assertTrue(np.allclose(np1, np2, atol=TOL))
 
 
@@ -106,6 +108,17 @@ class TestNormalFullCovariance:
         exp_llh2 = model(T)
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
                         atol=TOL))
+
+    def test_expected_natural_params(self):
+        model = beer.NormalFullCovariance(
+            NormalWishartPrior(self.mean, self.cov, self.prior_count),
+            NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        )
+        T = model.sufficient_statistics(self.X)
+        np1 = model.expected_natural_params(T).numpy()
+        np2 = model.parameters[0].expected_value.numpy()
+        np2 = np.ones((T.size(0), len(np2))) * np2
+        self.assertTrue(np.allclose(np1, np2, atol=TOL))
 
 
 class TestNormalDiagonalCovarianceSet:

@@ -70,6 +70,11 @@ class Mixture(BayesianModel):
         exp_llh = _logsumexp(per_component_exp_llh).view(-1)
         return per_component_exp_llh - exp_llh.view(-1, 1)
 
+    def expected_natural_params(self, T):
+        matrix = self.components.expected_natural_params_as_matrix()
+        resps = torch.exp(self.log_predictions(T))
+        return resps @ matrix
+
     def forward(self, T, labels=None):
         per_component_exp_llh = self.components(T)
         per_component_exp_llh += self.weights_params.expected_value.view(1, -1)

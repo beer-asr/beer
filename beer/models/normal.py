@@ -91,6 +91,22 @@ class Normal(BayesianModel, metaclass=abc.ABCMeta):
         '''
         NotImplemented
 
+    def expected_natural_params(self, T):
+        '''Interface for the VAE model. Returns the expected value of the
+        natural params of the latent model given the per-frame means
+        and variances.
+
+        Args:
+            T (Tensor): sufficient statistiscs.
+
+        Returns:
+            (Tensor): Expected value of the natural parameters.
+
+        '''
+        nparams = self.mean_prec_param.expected_value
+        ones = torch.ones(T.size(0), nparams.size(0)).type(T.type())
+        return ones * nparams
+
 
 class NormalDiagonalCovariance(Normal):
     'Bayesian Normal distribution with diagonal covariance matrix.'
@@ -120,21 +136,6 @@ class NormalDiagonalCovariance(Normal):
         evalue = self.mean_prec_param.expected_value
         np1, np2, _, _ = evalue.view(4, -1)
         return torch.diag(1/(-2 * np1))
-
-    def expected_natural_params(self, means, vars):
-        '''Interface for the VAE model. Returns the expected value of the
-        natural params of the latent model given the per-frame means
-        and variances.
-
-        Args:
-            means (Tensor): Per-frame means.
-            vars (Tensor): Per-frame variances.
-
-        Returns:
-            (Tensor): Expected value of the natural parameters.
-
-        '''
-        return self.mean_prec_param.expected_value
 
     def forward(self, T, labels=None):
         feadim = .25 * T.size(1)
@@ -301,7 +302,7 @@ def normal_diag_natural_params(mean, var):
 
 class FixedIsotropicGaussian:
     def __init__(self, dim):
-        mean = torch.ones(dim)
+        mean = torch.zeros(dim)
         var = torch.ones(dim)
         self._np = normal_diag_natural_params(mean, var)
 
