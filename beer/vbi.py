@@ -53,21 +53,19 @@ class VariationalBayesLossInstance:
         'Kullback-Leibler divergence.'
         return self._kl_div
 
-    def backward_natural_grad(self):
-        '''Accumulate the the natural gradient of the loss for each
-        parameter of the model.
+    def backward(self):
+        # Pytorch minimizes the loss ! We change the sign of the ELBO
+        # just before to compute the gradient.
+        try:
+            (-self._exp_llh).backward()
+        except RuntimeError:
+            pass
 
-        '''
         for parameter in self._parameters:
             acc_stats = self._acc_stats[parameter]
             parameter.natural_grad += parameter.prior.natural_params +  \
                 self._scale * acc_stats - \
                 parameter.posterior.natural_params
-
-    def backward(self):
-        # Pytorch minimizes the loss ! We change the sign of the loss
-        # just before to compute the gradient.
-        (-self._exp_llh).backward()
 
 
 class StochasticVariationalBayesLoss:

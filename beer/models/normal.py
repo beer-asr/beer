@@ -91,18 +91,24 @@ class Normal(BayesianModel, metaclass=abc.ABCMeta):
         '''
         NotImplemented
 
-    def expected_natural_params(self, T):
+    def expected_natural_params(self, mean, var, labels=None, nsamples=1):
         '''Interface for the VAE model. Returns the expected value of the
         natural params of the latent model given the per-frame means
         and variances.
 
         Args:
-            T (Tensor): sufficient statistiscs.
+            mean (Tensor): Per-frame mean of the posterior distribution.
+            var (Tensor): Per-frame variance of the posterior
+                distribution.
+            labels (Tensor): Frame labelling (if any).
+            nsamples (int): Number of samples to estimate the
+                natural parameters.
 
         Returns:
             (Tensor): Expected value of the natural parameters.
 
         '''
+        T = self.sufficient_statistics_from_mean_var(mean, var)
         nparams = self.mean_prec_param.expected_value
         ones = torch.ones(T.size(0), nparams.size(0)).type(T.type())
         return ones * nparams
@@ -298,16 +304,6 @@ def normal_diag_natural_params(mean, var):
         -(mean ** 2) / (2 * var),
         -.5 * torch.log(var)
     ], dim=-1)
-
-
-class FixedIsotropicGaussian:
-    def __init__(self, dim):
-        mean = torch.zeros(dim)
-        var = torch.ones(dim)
-        self._np = normal_diag_natural_params(mean, var)
-
-    def expected_natural_params(self, mean, var):
-        return self._np, None
 
 
 #######################################################################

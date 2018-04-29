@@ -100,23 +100,6 @@ class TestMixture:
             self.normalset
         )
 
-    def test_expected_natural_params(self):
-        prior = beer.DirichletPrior(self.prior_counts)
-        model = beer.Mixture(
-            prior, prior,
-            self.normalset
-        )
-
-        T = model.sufficient_statistics(self.X)
-        np1 = model.expected_natural_params(T)
-        matrix = model.components.expected_natural_params_as_matrix()
-        pc_exp_llh = (model.components(T) + \
-            prior.expected_sufficient_statistics.view(1, -1)).numpy()
-        resps = np.exp(pc_exp_llh - logsumexp(pc_exp_llh, axis=1)[:, None])
-        np2 = resps @ matrix
-        self.assertTrue(np.allclose(np1, np2, atol=TOL))
-
-
 
 def create_normalset_diag(ncomps, dim, type_t):
     posts = [beer.NormalGammaPrior(torch.zeros(dim).type(type_t),
