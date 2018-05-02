@@ -10,25 +10,11 @@ import abc
 import math
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.autograd import Variable
 
 from .normal import NormalDiagonalCovariance
-
-
-def _normal_diag_natural_params(mean, var):
-    '''Transform the standard parameters of a Normal (diag. cov.) into
-    their canonical forms.
-
-    Note:
-        The (negative) log normalizer is appended to it.
-
-    '''
-    return torch.cat([
-        -1. / (2 * var),
-        mean / var,
-        -(mean ** 2) / (2 * var),
-        -.5 * torch.log(var)
-    ], dim=-1)
+from .normal import normal_diag_natural_params
 
 
 def _structure_output_dim(structure):
@@ -64,10 +50,15 @@ class MLPModel(nn.Module, metaclass=abc.ABCMeta):
         for i, outdim in enumerate(outputs):
             self.output_layer.append(nn.Linear(s_out_dim, outdim))
 
+        # Make sure that by default the encoder/decoder has a small
+        # variance.
+        # TODO: should become a parameter.
+        self.output_layer[-1].bias.data += -1
+
     def forward(self, X):
         h = self.structure(X)
         outputs = [transform(h) for transform in self.output_layer]
-        return outputs
+        return [outputs[0] + X, outputs[1]]
 
 
 class MLPNormalDiag(MLPModel):
@@ -123,16 +114,17 @@ class MLPStateNormalDiagonalCovariance:
     def __init__(self, mean, var):
         self.mean = mean
         self.var = var
-        self._nparams = _normal_diag_natural_params(self.mean, self.var)
+        self._nparams = normal_diag_natural_params(self.mean, self.var)
 
     def entropy(self):
         'Compute the per-frame entropy of the posterior distribution.'
+        nparams = normal_diag_natural_params(self.mean, self.var)
         exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
             self.mean, self.var)
         return - (self._nparams * exp_T).sum(dim=-1)
 
     def kl_div(self, nparams_other):
-        nparams = _normal_diag_natural_params(self.mean, self.var)
+        nparams = normal_diag_natural_params(self.mean, self.var)
         exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
             self.mean, self.var)
         return ((nparams - nparams_other) * exp_T).sum(dim=-1)
@@ -141,8 +133,51 @@ class MLPStateNormalDiagonalCovariance:
         noise = Variable(torch.randn(*self.mean.size()))
         return self.mean + noise * torch.sqrt(self.var)
 
+    def log_likelihood(self, X):
+        distance_term = 0.5 * (X - self.mean).pow(2) / self.var
+        precision_term = 0.5 * self.var.log()
+        return (-distance_term - precision_term).sum(dim=-1).mean(dim=0)
+
+
+class MLPBernoulli(MLPModel):
+    '''Neural-Network ending with a linear projection
+    providing the mean of a Bernoulli distribution.
+
+    '''
+
+    def __init__(self, structure, dim):
+        '''Initialize a ``MLPBernoulli`` object.
+
+        Args:
+            structure (``torch.Sequential``): Sequence linear/
+                non-linear operations.
+            dim (int): Desired dimension of the modeled random
+                variable.
+
+        '''
+        super().__init__(structure, [dim])
+
+    def forward(self, X):
+        mu = super().forward(X)[0]
+        return BernoulliState(F.sigmoid(mu))
+
+
+class BernoulliState:
+    ''' Bernoulli distribution, to be an output of a MLP.
+
+    TODO -- as follows from the difference between the first line and
+    the name of the class, something smells here. A lot.
+
+    '''
+    def __init__(self, mu):
+        self.mu = mu
+
     def log_likelihood(self, T):
         dim0, dim1 = self._nparams.size()
         return torch.sum(T * self._nparams.view(1, dim0, dim1) , dim=-1) - \
             .5 * self.mean.size(0) * math.log(2 * math.pi)
+
+    def log_likelihood(self, X):
+        per_pixel_bce = X * self.mu.log() + (1.0 - X) * (1 - self.mu).log()
+        return per_pixel_bce.sum(dim=-1)
 

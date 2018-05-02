@@ -71,7 +71,7 @@ class TestBayesianModelOptimizer:
             loss = loss_fn(self.model, self.X, self.labels)
 
             optimizer.zero_grad()
-            loss.backward_natural_grad()
+            loss.backward()
             optimizer.step()
 
             self.assertGreaterEqual(round(float(loss), TOLPLACES),

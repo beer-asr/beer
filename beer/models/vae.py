@@ -34,34 +34,32 @@ class VAE(BayesianModel):
         self.decoder = decoder
         self.latent_model = latent_model
         self.nsamples = nsamples
-        self._state = None
+
+        # Temporary cache variable(s) used during training.
+        self._T = None
+
+    def sufficient_statistics(self, X):
+        return X
+
+    def forward(self, X, labels=None):
+        enc_state = self.encoder(X)
+        mean, var = enc_state.mean, enc_state.var
+        self._T = self.latent_model.sufficient_statistics_from_mean_var(mean,
+            var)
+        exp_np_params = self.latent_model.expected_natural_params(
+            mean.data, var.data, labels=labels, nsamples=self.nsamples)
+        samples = mean + torch.sqrt(var) * torch.randn(self.nsamples, *X.size())
+        llh = self.decoder(samples).log_likelihood(X)
+        return llh - enc_state.kl_div(exp_np_params)
 
     def evaluate(self, X):
         'Convenience function mostly for plotting and debugging.'
-        state = self.encoder(X)
-        return state.mean, state.var
+        torch_data = Variable(torch.from_numpy(data).float())
+        state = self(torch_data, sampling=sampling)
+        loss, llh, kld = self.loss(torch_data, state)
+        return -loss, llh, kld, state['encoder_state'].mean, \
+            state['encoder_state'].std_dev ** 2
 
-    def sufficient_statistics(self, X):
-        self._state = self.encoder(X)
-        nsamples = self.nsamples
-        samples = []
-        for i in range(self.nsamples):
-            samples.append(self._state.sample())
-        samples = torch.stack(samples)
-        #.view(self.nsamples * X.size(0), -1)
-        T = self.latent_model.sufficient_statistics(samples), \
-            self.latent_model.sufficient_statistics_from_mean_var(
-                self._state.mean, self._state.var)
-        return T
-
-    def forward(self, T, labels=None):
-        self.latent_model(T[1].data, labels.data)
-        nparams = self.latent_model.components._expected_nparams_as_matrix().data
-        nparams = Variable(self.latent_model._resps.data @ nparams)
-        retval = self._state.log_likelihood(T[0]).mean(dim=0)
-        retval -= self._state.kl_div(nparams)
-        return retval
-
-    def accumulate(self, T, parent_msg=None):
-        return self.latent_model.accumulate(T[1].data, parent_msg)
+    def accumulate(self, _, parent_msg=None):
+        return self.latent_model.accumulate(self._T, parent_msg)
 

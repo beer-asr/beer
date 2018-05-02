@@ -13,6 +13,8 @@ sys.path.insert(0, './')
 import beer
 from beer import NormalGammaPrior
 from beer import NormalWishartPrior
+from beer.expfamilyprior import _jointnormalgamma_split_nparams
+from beer.expfamilyprior import _jointnormalwishart_split_nparams
 
 
 torch.manual_seed(10)
@@ -43,13 +45,9 @@ class TestNormalDiagonalCovariance:
         self.assertTrue(np.allclose(s1, s2.numpy(), atol=TOL))
 
     def test_sufficient_statistics_from_mean_var(self):
-        mean = self.mean.view(1, -1)
-        var = (1. / self.prec.view(1, -1))
-        if len(var.size()) == 2:
-            var = torch.diag(var)
         s1 = beer.NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
-        mean, var = mean.numpy(), var.numpy()
+            self.means, self.vars)
+        mean, var = self.means.numpy(), self.vars.numpy()
         s2 = np.c_[mean**2 + var, mean, np.ones_like(mean),
                    np.ones_like(mean)]
         self.assertTrue(np.allclose(s1.numpy(), s2, atol=TOL))
@@ -67,6 +65,15 @@ class TestNormalDiagonalCovariance:
         self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy(),
                         atol=TOL))
 
+    def test_expected_natural_params(self):
+        model = beer.NormalDiagonalCovariance(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            NormalGammaPrior(self.mean, self.prec, self.prior_count)
+        )
+        np1 = model.expected_natural_params(self.means, self.vars).numpy()
+        np2 = model.parameters[0].expected_value.numpy()
+        np2 = np.ones((self.means.size(0), len(np2))) * np2
+        self.assertTrue(np.allclose(np1, np2, atol=TOL))
 
 
 class TestNormalFullCovariance:
@@ -87,18 +94,6 @@ class TestNormalFullCovariance:
             X, np.ones(len(X)), np.ones(len(X))]
         s2 = beer.NormalFullCovariance.sufficient_statistics(self.X)
         self.assertTrue(np.allclose(s1, s2.numpy(), atol=TOL))
-
-    def test_sufficient_statistics_from_mean_var(self):
-        mean = self.mean.view(1, -1)
-        var = torch.diag(self.cov).view(1, -1)
-        s1 = beer.NormalFullCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
-        mean, var = mean.numpy(), var.numpy()
-        idxs = np.identity(mean.shape[1]).reshape(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).reshape(mean.shape[0], -1)
-        XX[:, idxs] += var
-        s2 = np.c_[XX, mean, np.ones(len(mean)), np.ones(len(mean))]
-        self.assertTrue(np.allclose(s1.numpy(), s2, atol=TOL))
 
     def test_exp_llh(self):
         model = beer.NormalFullCovariance(
@@ -136,13 +131,24 @@ class TestNormalDiagonalCovarianceSet:
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
     def test_sufficient_statistics_from_mean_var(self):
-        mean = self.mean.view(1, -1)
-        var = (1. / self.prec.view(1, -1))
         s1 = beer.NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
+            self.means, self.vars)
         s2 = beer.NormalDiagonalCovarianceSet.sufficient_statistics_from_mean_var(
-            mean, var)
+            self.means, self.vars)
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
+
+    def test_expected_natural_params_as_matrix(self):
+        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalDiagonalCovarianceSet(
+            NormalGammaPrior(self.mean, self.prec, self.prior_count),
+            posts
+        )
+        matrix1 = model.expected_natural_params_as_matrix()
+        matrix2 = torch.cat([param.expected_value[None]
+            for param in model.parameters])
+        self.assertTrue(np.allclose(matrix1.numpy(), matrix2.numpy(),
+            atol=TOL))
 
     def test_forward(self):
         posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
@@ -173,65 +179,6 @@ class TestNormalDiagonalCovarianceSet:
         for s1, s2 in zip(acc_stats1, acc_stats2):
             self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
 
-
-class TestNormalFullCovarianceSet:
-
-    def test_create(self):
-        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
-                 for _ in range(self.ncomps)]
-        model = beer.NormalFullCovarianceSet(
-            NormalWishartPrior(self.mean, self.cov, self.prior_count),
-            posts
-        )
-        self.assertEqual(len(model.components), self.ncomps)
-        for i in range(self.ncomps):
-            m1, m2 = self.mean.numpy(), model.components[i].mean.numpy()
-            self.assertTrue(np.allclose(m1, m2))
-            c1, c2 = self.cov.numpy(), model.components[i].cov.numpy()
-            self.assertTrue(np.allclose(c1, c2, atol=TOL))
-
-    def test_sufficient_statistics(self):
-        s1 = beer.NormalFullCovariance.sufficient_statistics(self.X)
-        s2 = beer.NormalFullCovarianceSet.sufficient_statistics(self.X)
-        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
-
-    def test_sufficient_statistics_from_mean_var(self):
-        mean = self.mean.view(1, -1)
-        var = torch.diag(self.cov).view(1, -1)
-        s1 = beer.NormalFullCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
-        s2 = beer.NormalFullCovarianceSet.sufficient_statistics_from_mean_var(
-            mean, var)
-        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
-
-    def test_forward(self):
-        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
-                 for _ in range(self.ncomps)]
-        model = beer.NormalFullCovarianceSet(
-            NormalWishartPrior(self.mean, self.cov, self.prior_count),
-            posts
-        )
-        matrix = torch.cat([param.expected_value[None]
-            for param in model.parameters], dim=0)
-        T = model.sufficient_statistics(self.X)
-        exp_llh1 = T @ matrix.t()
-        exp_llh1 -= .5 * self.X.size(1) * math.log(2 * math.pi)
-        exp_llh2 = model(T)
-        self.assertTrue(np.allclose(exp_llh1.numpy(), exp_llh2.numpy()))
-
-    def test_accumulate(self):
-        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
-                 for _ in range(self.ncomps)]
-        model = beer.NormalFullCovarianceSet(
-            NormalWishartPrior(self.mean, self.cov, self.prior_count),
-            posts
-        )
-        weights = torch.ones(len(self.X), self.ncomps).type(self.X.type())
-        T = model.sufficient_statistics(self.X)
-        acc_stats1 = list(weights.t() @ T)
-        acc_stats2 = [value for key, value in model.accumulate(T, weights).items()]
-        for s1, s2 in zip(acc_stats1, acc_stats2):
-            self.assertTrue(np.allclose(s1.numpy(), s2.numpy()))
 
 class TestNormalFullCovarianceSet:
 
@@ -254,14 +201,18 @@ class TestNormalFullCovarianceSet:
         s2 = beer.NormalFullCovarianceSet.sufficient_statistics(self.X)
         self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
 
-    def test_sufficient_statistics_from_mean_var(self):
-        mean = self.mean.view(1, -1)
-        var = torch.diag(self.cov).view(1, -1)
-        s1 = beer.NormalFullCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
-        s2 = beer.NormalFullCovarianceSet.sufficient_statistics_from_mean_var(
-            mean, var)
-        self.assertTrue(np.allclose(s1.numpy(), s2.numpy(), atol=TOL))
+    def test_expected_natural_params_as_matrix(self):
+        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
+                 for _ in range(self.ncomps)]
+        model = beer.NormalFullCovarianceSet(
+            NormalWishartPrior(self.mean, self.cov, self.prior_count),
+            posts
+        )
+        matrix1 = model.expected_natural_params_as_matrix()
+        matrix2 = torch.cat([param.expected_value[None]
+            for param in model.parameters])
+        self.assertTrue(np.allclose(matrix1.numpy(), matrix2.numpy(),
+            atol=TOL))
 
     def test_forward(self):
         posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
@@ -329,6 +280,26 @@ class TestNormalSetSharedDiagonalCovariance:
             np.c_[mean, np.ones_like(mean)]
         self.assertTrue(np.allclose(s1[0].numpy(), s2[0], atol=TOL))
         self.assertTrue(np.allclose(s1[1].numpy(), s2[1], atol=TOL))
+
+    def test_expected_natural_params_as_matrix(self):
+        prior = beer.JointNormalGammaPrior(self.prior_means,
+            self.prec, self.prior_count)
+        posterior = beer.JointNormalGammaPrior(self.posterior_means,
+            self.prec, self.prior_count)
+        model = beer.NormalSetSharedDiagonalCovariance(prior, posterior,
+            self.ncomps)
+        matrix1 = model.expected_natural_params_as_matrix()
+        nparams = model.parameters[0].expected_value
+        param1, param2, param3, param4, D = _jointnormalgamma_split_nparams(
+            nparams, self.ncomps)
+        ones = torch.ones_like(param2)
+        matrix2 = torch.cat([
+            ones * param1[None, :],
+            param2,
+            param3,
+            ones * param4[None, :]], dim=1)
+        self.assertTrue(np.allclose(matrix1.numpy(), matrix2.numpy(),
+            atol=TOL))
 
     def test_forward(self):
         prior = beer.JointNormalGammaPrior(self.prior_means,
@@ -398,18 +369,26 @@ class TestNormalSetSharedFullCovariance:
         self.assertTrue(np.allclose(s1[0].numpy(), s2[0], atol=TOL))
         self.assertTrue(np.allclose(s1[1].numpy(), s2[1], atol=TOL))
 
-    def test_sufficient_statistics_from_mean_var(self):
-        mean = self.means
-        var = self.vars
-        s1 = beer.NormalSetSharedFullCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
-        mean, var = mean.numpy(), var.numpy()
-        idxs = np.identity(mean.shape[1]).reshape(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).reshape(mean.shape[0], -1)
-        XX[:, idxs] += var
-        s2 = XX, np.c_[mean, np.ones(len(mean))]
-        self.assertTrue(np.allclose(s1[0].numpy(), s2[0], atol=TOL))
-        self.assertTrue(np.allclose(s1[1].numpy(), s2[1], atol=TOL))
+    def test_expected_natural_params_as_matrix(self):
+        prior = beer.JointNormalWishartPrior(self.prior_means,
+            self.cov, self.prior_count)
+        posterior = beer.JointNormalWishartPrior(self.posterior_means,
+            self.cov, self.prior_count)
+        model = beer.NormalSetSharedFullCovariance(prior, posterior, self.ncomps)
+
+        matrix1 = model.expected_natural_params_as_matrix()
+        nparams = model.parameters[0].expected_value
+        param1, param2, param3, param4, D = _jointnormalwishart_split_nparams(
+            nparams, self.ncomps)
+        ones1 = torch.ones(self.ncomps, D**2).type(param2.type())
+        ones2 = torch.ones(self.ncomps, 1).type(param2.type())
+        matrix2 = torch.cat([
+            ones1 * param1.view(-1)[None, :],
+            param2,
+            param3[:, None],
+            ones2 * param4], dim=1)
+        self.assertTrue(np.allclose(matrix1.numpy(), matrix2.numpy(),
+            atol=TOL))
 
     def test_forward(self):
         prior = beer.JointNormalWishartPrior(self.prior_means,

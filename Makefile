@@ -23,7 +23,6 @@ clean:
 test:
 	@python tests/test_expfamilyprior.py -f -v
 	@python tests/test_bayesmodel.py -f -v
-	@python tests/test_bayesembedding.py -f -v
 	@python tests/test_features.py -f -v
 	@python tests/test_normal.py -f -v
 	@python tests/test_mixture.py -f -v

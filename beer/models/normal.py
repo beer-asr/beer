@@ -91,6 +91,28 @@ class Normal(BayesianModel, metaclass=abc.ABCMeta):
         '''
         NotImplemented
 
+    def expected_natural_params(self, mean, var, labels=None, nsamples=1):
+        '''Interface for the VAE model. Returns the expected value of the
+        natural params of the latent model given the per-frame means
+        and variances.
+
+        Args:
+            mean (Tensor): Per-frame mean of the posterior distribution.
+            var (Tensor): Per-frame variance of the posterior
+                distribution.
+            labels (Tensor): Frame labelling (if any).
+            nsamples (int): Number of samples to estimate the
+                natural parameters.
+
+        Returns:
+            (Tensor): Expected value of the natural parameters.
+
+        '''
+        T = self.sufficient_statistics_from_mean_var(mean, var)
+        nparams = self.mean_prec_param.expected_value
+        ones = torch.ones(T.size(0), nparams.size(0)).type(T.type())
+        return ones * nparams
+
 
 class NormalDiagonalCovariance(Normal):
     'Bayesian Normal distribution with diagonal covariance matrix.'
@@ -142,11 +164,7 @@ class NormalFullCovariance(Normal):
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        idxs = torch.eye(mean.size(1)).view(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).view(mean.shape[0], -1)
-        XX[:, idxs] += var
-        return torch.cat([XX, mean, torch.ones(len(mean), 1).type(mean.type()),
-            torch.ones(len(mean), 1).type(mean.type())], dim=-1)
+        raise NotImplementedError
 
     def __init__(self, prior, posterior):
         super().__init__()
@@ -214,7 +232,7 @@ class NormalSet(BayesianModel, metaclass=abc.ABCMeta):
     def __len__(self):
         return len(self._components)
 
-    def _expected_nparams_as_matrix(self):
+    def expected_natural_params_as_matrix(self):
         return torch.cat([param.expected_value[None]
             for param in self._parameters], dim=0)
 
@@ -242,7 +260,7 @@ class NormalDiagonalCovarianceSet(NormalSet):
 
     def forward(self, T, labels=None):
         feadim = .25 * T.size(1)
-        retval = T @ self._expected_nparams_as_matrix().t()
+        retval = T @ self.expected_natural_params_as_matrix().t()
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
 
@@ -267,9 +285,25 @@ class NormalFullCovarianceSet(NormalSet):
 
     def forward(self, T, labels=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - T.size(1))))
-        retval = T @ self._expected_nparams_as_matrix().t()
+        retval = T @ self.expected_natural_params_as_matrix().t()
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
+
+
+def normal_diag_natural_params(mean, var):
+    '''Transform the standard parameters of a Normal (diag. cov.) into
+    their canonical forms.
+
+    Note:
+        The (negative) log normalizer is appended to it.
+
+    '''
+    return torch.cat([
+        -1. / (2 * var),
+        mean / var,
+        -(mean ** 2) / (2 * var),
+        -.5 * torch.log(var)
+    ], dim=-1)
 
 
 #######################################################################
@@ -336,6 +370,13 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
         return torch.cat([param1.view(-1), param4.view(-1)]), \
             torch.cat([param2, param3], dim=1)
 
+    def expected_natural_params_as_matrix(self):
+        exp_param = self.means_prec_param.expected_value
+        param1, param2, param3, param4, D = _jointnormalgamma_split_nparams(
+            exp_param, self._ncomp)
+        ones = torch.ones_like(param2)
+        return torch.cat([ones * param1, param2, param3, ones * param4], dim=1)
+
     def forward(self, T, labels=None):
         T1, T2 = T
         feadim = T1.size(1) // 2
@@ -371,11 +412,7 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        idxs = torch.eye(mean.size(1)).view(-1) == 1
-        XX = (mean[:, :, None] * mean[:, None, :]).view(len(mean), -1)
-        XX[:, idxs] += var
-        return XX, torch.cat([mean, torch.ones(len(mean), 1).type(mean.type())],
-            dim=-1)
+        raise NotImplementedError()
 
     def __getitem__(self, key):
         if not isinstance(key, int):
@@ -393,6 +430,15 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
             exp_param, self._ncomp)
         return param1.view(-1), \
             torch.cat([param2, param3[:, None]], dim=1), param4
+
+    def expected_natural_params_as_matrix(self):
+        exp_param = self.means_prec_param.expected_value
+        param1, param2, param3, param4, D = _jointnormalwishart_split_nparams(
+            exp_param, self._ncomp)
+        ones1 = torch.ones(self._ncomp, D**2).type(param1.type())
+        ones2 = torch.ones(self._ncomp, 1).type(param1.type())
+        return torch.cat([ones1 * param1.view(-1)[None, :],
+            param2, param3.view(-1, 1), ones2 * param4], dim=1)
 
     def forward(self, T, labels=None):
         T1, T2 = T
