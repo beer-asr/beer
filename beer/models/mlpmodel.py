@@ -33,7 +33,7 @@ class MLPModel(nn.Module, metaclass=abc.ABCMeta):
 
     '''
 
-    def __init__(self, structure, outputs):
+    def __init__(self, structure, s_out_dim, outputs):
         '''Initialize the ``MLPModel``.
 
         Args:
@@ -45,7 +45,6 @@ class MLPModel(nn.Module, metaclass=abc.ABCMeta):
         '''
         super().__init__()
         self.structure = structure
-        s_out_dim = _structure_output_dim(structure)
         self.output_layer = nn.ModuleList()
         for i, outdim in enumerate(outputs):
             self.output_layer.append(nn.Linear(s_out_dim, outdim))
@@ -58,7 +57,7 @@ class MLPModel(nn.Module, metaclass=abc.ABCMeta):
     def forward(self, X):
         h = self.structure(X)
         outputs = [transform(h) for transform in self.output_layer]
-        return [outputs[0] + X, outputs[1]]
+        return [outputs[0], outputs[1]]
 
 
 class MLPNormalDiag(MLPModel):
@@ -68,7 +67,7 @@ class MLPNormalDiag(MLPModel):
 
     '''
 
-    def __init__(self, structure, dim):
+    def __init__(self, structure, s_out_dim,  dim):
         '''Initialize a ``MLPNormalDiag`` object.
 
         Args:
@@ -78,7 +77,7 @@ class MLPNormalDiag(MLPModel):
                 variable.
 
         '''
-        super().__init__(structure, [dim, dim])
+        super().__init__(structure, s_out_dim, [dim, dim])
 
     def forward(self, X):
         mean, logvar = super().forward(X)
