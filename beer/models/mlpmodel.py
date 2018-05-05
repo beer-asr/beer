@@ -42,11 +42,6 @@ class MLPModel(nn.Module):
         for outdim in self._dist_builder.required_params_shape():
             self.output_layer.append(nn.Linear(s_out_dim, outdim))
 
-        # Make sure that by default the encoder/decoder has a small
-        # variance.
-        # TODO: should become a parameter.
-        self.output_layer[-1].bias.data += -1
-
     def forward(self, X):
         h = self.structure(X)
         dist_params = [transform(h) for transform in self.output_layer]
