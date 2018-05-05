@@ -17,23 +17,14 @@ from .normal import NormalDiagonalCovariance
 from .normal import normal_diag_natural_params
 
 
-def _structure_output_dim(structure):
-    'Find the output dimension of a given structure.'
-    for transform in reversed(structure):
-        if isinstance(transform, nn.Linear):
-            s_out_dim = transform.out_features
-            break
-    return s_out_dim
-
-
-class MLPModel(nn.Module, metaclass=abc.ABCMeta):
+class MLPModel(nn.Module):
     '''Base class for the encoder / decoder neural network of
     the VAE. The output of this network are the parameters of a
     conjugate exponential model.
 
     '''
 
-    def __init__(self, structure, s_out_dim, outputs):
+    def __init__(self, structure, s_out_dim, dist_builder):
         '''Initialize the ``MLPModel``.
 
         Args:
@@ -45,8 +36,10 @@ class MLPModel(nn.Module, metaclass=abc.ABCMeta):
         '''
         super().__init__()
         self.structure = structure
+        self._dist_builder = dist_builder
+
         self.output_layer = nn.ModuleList()
-        for i, outdim in enumerate(outputs):
+        for outdim in self._dist_builder.required_params_shape():
             self.output_layer.append(nn.Linear(s_out_dim, outdim))
 
         # Make sure that by default the encoder/decoder has a small
@@ -56,60 +49,24 @@ class MLPModel(nn.Module, metaclass=abc.ABCMeta):
 
     def forward(self, X):
         h = self.structure(X)
-        outputs = [transform(h) for transform in self.output_layer]
-        return [outputs[0], outputs[1]]
+        dist_params = [transform(h) for transform in self.output_layer]
+        return self._dist_builder(dist_params)
 
 
-class MLPNormalDiag(MLPModel):
-    '''Neural-Network ending with a double linear projection
-    providing the mean and the logarithm of the diagonal of the
-    covariance matrix.
+class NormalDiagBuilder:
+    def __init__(self, dim):
+        self.dim = dim
 
-    '''
+    def required_params_shape(self):
+        return [self.dim, self.dim]
 
-    def __init__(self, structure, s_out_dim,  dim):
-        '''Initialize a ``MLPNormalDiag`` object.
+    def __call__(self, params):
+        mean = params[0]
+        logvar = params[1]
+        return NormalDiagonalCovariance_MLP(mean, logvar.exp())
+        
 
-        Args:
-            structure (``torch.Sequential``): Sequence linear/
-                non-linear operations.
-            dim (int): Desired dimension of the modeled random
-                variable.
-
-        '''
-        super().__init__(structure, s_out_dim, [dim, dim])
-
-    def forward(self, X):
-        mean, logvar = super().forward(X)
-        return MLPStateNormalDiagonalCovariance(mean, torch.exp(logvar))
-
-
-class MLPNormalIso(MLPModel):
-    '''Neural-Network ending with a double linear projection
-    providing the mean and the isotropic covariance matrix.
-
-    '''
-
-    def __init__(self, structure, dim):
-        '''Initialize a ``MLPNormalDiag`` object.
-
-        Args:
-            structure (``torch.Sequential``): Sequence linear/
-                non-linear operations.
-            dim (int): Desired dimension of the modeled random
-                variable.
-
-        '''
-        super().__init__(structure, [dim, 1])
-
-    def forward(self, X):
-        mean, logvar = super().forward(X)
-        ones = Variable(torch.ones(mean.size(1)).type(X.type()))
-        return MLPStateNormalDiagonalCovariance(mean, ones * torch.exp(logvar))
-
-
-class MLPStateNormalDiagonalCovariance:
-
+class NormalDiagonalCovariance_MLP:
     def __init__(self, mean, var):
         self.mean = mean
         self.var = var
