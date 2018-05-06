@@ -59,6 +59,7 @@ class TestDirichletPrior(BaseTest):
         log_norm = dirichlet_log_norm(natural_params)
         self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
 
+
 ########################################################################
 # Normal-Gamma prior.
 ########################################################################
@@ -131,9 +132,9 @@ class TestNormalGammaPrior(BaseTest):
         self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
 
 
-#######################################################################
-# Computations using numpy for testing.
-#######################################################################
+########################################################################
+# Joint Normal-Gamma prior.
+########################################################################
 
 def jointnormalgamma_split_nparams(natural_params, ncomp):
     dim = len(natural_params) // (2 + 2 * ncomp)
@@ -153,6 +154,70 @@ def jointnormalgamma_log_norm(natural_params, ncomp):
     lognorm += np.sum(-.5 * (np4 + 1) * \
         np.log(.5 * (np1 - tmp.sum(axis=0))))
     return lognorm
+
+
+class TestJointNormalGammaPrior(BaseTest):
+
+    def setUp(self):
+        self.ncomps = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.means = torch.randn((self.ncomps, self.dim)).type(self.type)
+        self.precision = (1 + torch.randn(self.dim)**2).type(self.type)
+        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+
+    def test_create(self):
+        model = beer.JointNormalGammaPrior(self.means, self.precision,
+            self.prior_count)
+        means, prec, prior_count = self.means.numpy(), \
+            self.precision.numpy(), self.prior_count
+        dim = self.dim
+        ncomps = self.ncomps
+        natural_params = np.hstack([
+            (prior_count * (means**2).sum(axis=0) + 2 * prior_count).reshape(-1),
+            (prior_count * means).reshape(-1),
+            (np.ones((ncomps, dim)) * prior_count).reshape(-1),
+            2 * prec * prior_count - 1
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(), 
+            natural_params)
+
+    def test_kl_divergence(self):
+        model1 = beer.JointNormalGammaPrior(self.means, self.precision,
+            self.prior_count)
+        model2 = beer.JointNormalGammaPrior(self.means, self.precision,
+            self.prior_count)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(float(div), 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.JointNormalGammaPrior(self.means, self.precision,
+            self.prior_count)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = jointnormalgamma_log_norm(natural_params, ncomp=self.ncomps)
+
+        if self.type == torch.FloatTensor:
+            # Because of the log-gamma function, we decrease the 
+            # tolerance for this test case.
+            self.assertAlmostEqual(model_log_norm, log_norm, 
+                places=min(0, self.tolplaces - 1))
+        else:
+            self.assertAlmostEqual(model_log_norm, log_norm, 
+                places=self.tolplaces)
+
+    # TODO: add test to check if the gradient of the log-norm. is 
+    #       correct. 
+    # So far we don't test the automatic differentiation of the
+    # log-normalizer. We hope that as long as the log-normalizer is 
+    # correct, then pytorch should gives us the right gradient.
+    #def test_exp_sufficient_statistics(self):
+    #   pass
+
+
+#######################################################################
+# Computations using numpy for testing.
+#######################################################################
+
 
 
 def normalwishart_split_np(natural_params):
@@ -234,34 +299,7 @@ def normal_fc_grad_log_norm(natural_params):
 #######################################################################
 
 
-class TestJointNormalGammaPrior:
 
-    def test_create(self):
-        model = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
-        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
-
-    def test_kl_divergence(self):
-        model1 = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
-        model2 = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(float(div), 0., places=TOLPLACES)
-
-    def test_log_norm(self):
-        model = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = jointnormalgamma_log_norm(natural_params, ncomp=self.ncomp)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
-
-    # We don't test the automatic differentiation of the
-    # log-normalizer. As long as the log-normlizer is correct, then
-    # pytorch should gives us the right gradient.
-    #def test_exp_sufficient_statistics(self):
-    #   pass
 
 
 class TestNormalWishartPrior:
@@ -472,4 +510,6 @@ tests += [(TestJointNormalGammaPrior,
 #    name = test[0].__name__ + 'Test' + str(i)
 #    setattr(module, name, type(name, (unittest.TestCase, test[0]),  test[1]))
 
-__all__ = [TestDirichletPrior, TestNormalGammaPrior]
+__all__ = [
+    TestDirichletPrior, TestNormalGammaPrior, TestJointNormalGammaPrior
+]
