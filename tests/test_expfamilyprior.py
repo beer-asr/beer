@@ -361,10 +361,10 @@ class TestJointNormalWishartPrior(BaseTest):
     #def test_exp_sufficient_statistics(self):
     #   pass
 
+
 ########################################################################
 # Normal prior.
 ########################################################################
-
 
 def normal_fc_split_np(natural_params):
     D = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params))))

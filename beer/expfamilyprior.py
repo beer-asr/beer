@@ -92,7 +92,8 @@ def _jointnormalwishart_split_nparams(natural_params, ncomp):
     #
     # The dimension D is found by solving the polynomial:
     #   D^2 + ncomp * D - len(self.natural_params[:-(ncomp + 1]) = 0
-    D = int(.5 * (-ncomp + math.sqrt(ncomp**2 + 4 * len(natural_params[:-(ncomp + 1)]))))
+    D = int(.5 * (-ncomp + math.sqrt(ncomp**2 + \
+        4 * len(natural_params[:-(ncomp + 1)]))))
     np1, np2s = natural_params[:int(D**2)].view(D, D), \
          natural_params[int(D**2):-(ncomp + 1)].view(ncomp, D)
     np3s = natural_params[-(ncomp + 1):-1]
@@ -132,7 +133,8 @@ def _jointnormalwishart_log_norm(natural_params, ncomp):
     np1, np2s, np3s, np4, D = _jointnormalwishart_split_nparams(natural_params,
         ncomp=ncomp)
     lognorm = .5 * ((np4 + D) * D * math.log(2) - D * torch.log(np3s).sum())
-    quad_exp = ((np2s[:, None, :] * np2s[:, :, None]) / np3s[:, None, None]).sum(dim=0)
+    quad_exp = ((np2s[:, None, :] * np2s[:, :, None]) / \
+        np3s[:, None, None]).sum(dim=0)
     lognorm += -.5 * (np4 + D) * _logdet(np1 - quad_exp)
     seq = ta.Variable(torch.arange(1, D + 1, 1).type(natural_params.type()))
     lognorm += torch.lgamma(.5 * (np4 + D + 1 - seq)).sum()
@@ -215,7 +217,6 @@ def NormalGammaPrior(mean, precision, prior_counts):
         A NormalGamma density.
 
     '''
-    dim = mean.size(0)
     n_mean = mean
     n_precision = prior_counts * torch.ones_like(n_mean)
     g_shapes = precision * prior_counts
