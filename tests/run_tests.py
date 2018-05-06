@@ -32,7 +32,7 @@ def run():
             for i in range(args.nruns):
                 suite.addTest(BaseTest.get_testsuite(testcase, 
                     tensor_type=args.tensor_type, seed=args.init_seed + i))
-            unittest.TextTestRunner(verbosity=2).run(suite)
+            unittest.TextTestRunner(verbosity=2, failfast=True).run(suite)
 
 
 if __name__ == '__main__':

@@ -14,6 +14,7 @@ sys.path.insert(0, './tests')
 import beer
 from basetest import BaseTest
 
+
 ########################################################################
 # Dirichlet prior.
 ########################################################################
@@ -58,11 +59,9 @@ class TestDirichletPrior(BaseTest):
         log_norm = dirichlet_log_norm(natural_params)
         self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
 
-
-#######################################################################
-# Computations using numpy for testing.
-#######################################################################
-
+########################################################################
+# Normal-Gamma prior.
+########################################################################
 
 def normalgamma_log_norm(natural_params):
     np1, np2, np3, np4 = natural_params.reshape(4, -1)
@@ -82,6 +81,59 @@ def normalgamma_grad_log_norm(natural_params):
         - .5 *np.log(.5 * (np1 - ((np2 ** 2) / np3)))
     return np.hstack([grad1, grad2, grad3, grad4])
 
+
+class TestNormalGammaPrior(BaseTest):
+
+    def setUp(self):
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.mean = torch.randn(self.dim).type(self.type)
+        self.precision = (torch.randn(self.dim)**2).type(self.type)
+        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+
+    def test_create(self):
+        model = beer.NormalGammaPrior(self.mean, self.precision,
+                                      self.prior_count)
+        n_mean = self.mean.numpy()
+        n_precision = self.prior_count * np.ones_like(n_mean)
+        g_shapes = self.precision.numpy() * self.prior_count
+        g_rates = self.prior_count
+        natural_params = np.hstack([
+            n_precision * (n_mean ** 2) + 2 * g_rates,
+            n_precision * n_mean,
+            n_precision,
+            2 * g_shapes - 1
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(), 
+            natural_params)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.NormalGammaPrior(self.mean, self.precision,
+                                      self.prior_count)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = normalgamma_grad_log_norm(natural_params)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.NormalGammaPrior(self.mean, self.precision,
+                                       self.prior_count)
+        model2 = beer.NormalGammaPrior(self.mean, self.precision,
+                                       self.prior_count)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.NormalGammaPrior(self.mean, self.precision,
+                                      self.prior_count)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = normalgamma_log_norm(natural_params)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+
+
+#######################################################################
+# Computations using numpy for testing.
+#######################################################################
 
 def jointnormalgamma_split_nparams(natural_params, ncomp):
     dim = len(natural_params) // (2 + 2 * ncomp)
@@ -180,41 +232,6 @@ def normal_fc_grad_log_norm(natural_params):
 #######################################################################
 # Abstract base class for implementing the logic of the tests.
 #######################################################################
-
-
-
-
-
-class TestNormalGammaPrior:
-
-    def test_create(self):
-        model = beer.NormalGammaPrior(self.mean, self.precision,
-                                      self.prior_count)
-        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
-
-    def test_exp_sufficient_statistics(self):
-        model = beer.NormalGammaPrior(self.mean, self.precision,
-                                      self.prior_count)
-        model_s_stats = model.expected_sufficient_statistics.numpy()
-        natural_params = model.natural_params.numpy()
-        s_stats = normalgamma_grad_log_norm(natural_params)
-        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
-
-    def test_kl_divergence(self):
-        model1 = beer.NormalGammaPrior(self.mean, self.precision,
-                                       self.prior_count)
-        model2 = beer.NormalGammaPrior(self.mean, self.precision,
-                                       self.prior_count)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=TOLPLACES)
-
-    def test_log_norm(self):
-        model = beer.NormalGammaPrior(self.mean, self.precision,
-                                      self.prior_count)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = normalgamma_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
 
 class TestJointNormalGammaPrior:
@@ -455,4 +472,4 @@ tests += [(TestJointNormalGammaPrior,
 #    name = test[0].__name__ + 'Test' + str(i)
 #    setattr(module, name, type(name, (unittest.TestCase, test[0]),  test[1]))
 
-__all__ = [TestDirichletPrior]
+__all__ = [TestDirichletPrior, TestNormalGammaPrior]
