@@ -25,6 +25,7 @@ from .models import Mixture
 
 from .models import MLPModel
 from .models import NormalDiagBuilder
+from .models import BernoulliBuilder
 from .models import VAE
 from .models import kl_div_posterior_prior
 

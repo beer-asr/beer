@@ -19,6 +19,9 @@ from .mixture import Mixture
 
 from .mlpmodel import MLPModel
 from .mlpmodel import NormalDiagBuilder
+from .mlpmodel import BernoulliBuilder
+
+from .mlpmodel import NormalDiagonalCovariance_MLP
 
 from .vae import VAE
 

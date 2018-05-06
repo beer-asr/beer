@@ -59,7 +59,7 @@ class NormalDiagBuilder:
         mean = params[0]
         logvar = params[1]
         return NormalDiagonalCovariance_MLP(mean, logvar.exp())
-        
+
 
 class NormalDiagonalCovariance_MLP:
     def __init__(self, mean, var):
@@ -90,43 +90,24 @@ class NormalDiagonalCovariance_MLP:
         return (-distance_term - precision_term).sum(dim=-1).mean(dim=0)
 
 
-class MLPBernoulli(MLPModel):
-    '''Neural-Network ending with a linear projection
-    providing the mean of a Bernoulli distribution.
+class BernoulliBuilder:
+    def __init__(self, dim):
+        self.dim = dim
 
-    '''
+    def required_params_shape(self):
+        return [self.dim]
 
-    def __init__(self, structure, dim):
-        '''Initialize a ``MLPBernoulli`` object.
-
-        Args:
-            structure (``torch.Sequential``): Sequence linear/
-                non-linear operations.
-            dim (int): Desired dimension of the modeled random
-                variable.
-
-        '''
-        super().__init__(structure, [dim])
-
-    def forward(self, X):
-        mu = super().forward(X)[0]
-        return BernoulliState(F.sigmoid(mu))
+    def __call__(self, params):
+        mu = params[0]
+        return Bernoulli_MLP(F.sigmoid(mu))
 
 
-class BernoulliState:
+class Bernoulli_MLP:
     ''' Bernoulli distribution, to be an output of a MLP.
-
-    TODO -- as follows from the difference between the first line and
-    the name of the class, something smells here. A lot.
 
     '''
     def __init__(self, mu):
         self.mu = mu
-
-    def log_likelihood(self, T):
-        dim0, dim1 = self._nparams.size()
-        return torch.sum(T * self._nparams.view(1, dim0, dim1) , dim=-1) - \
-            .5 * self.mean.size(0) * math.log(2 * math.pi)
 
     def log_likelihood(self, X):
         per_pixel_bce = X * self.mu.log() + (1.0 - X) * (1 - self.mu).log()
