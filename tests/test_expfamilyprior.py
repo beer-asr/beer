@@ -1,4 +1,4 @@
-'Test the expfamily module.'
+'Test the expfamilyprior module.'
 
 
 import numpy as np
@@ -7,9 +7,12 @@ import sys
 import torch
 import unittest
 
+import sys
 sys.path.insert(0, './')
-import beer
+sys.path.insert(0, './tests')
 
+import beer
+from basetest import BaseTest
 
 torch.manual_seed(10)
 
@@ -148,7 +151,7 @@ def normal_fc_grad_log_norm(natural_params):
 #######################################################################
 
 
-class TestDirichletPrior:
+class TestDirichletPrior(BaseTest):
 
     def test_create(self):
         model = beer.DirichletPrior(self.prior_counts)
@@ -323,40 +326,31 @@ class TestNormalPrior:
 # Testing condition.
 #######################################################################
 
+tests = []
 
-tests = [
-    (TestDirichletPrior, {'prior_counts': torch.ones(1).float()}),
-    (TestDirichletPrior, {'prior_counts': torch.ones(1).double()}),
-    (TestDirichletPrior, {'prior_counts': torch.ones(2).float()}),
-    (TestDirichletPrior, {'prior_counts': torch.ones(2).float()}),
-    (TestDirichletPrior, {'prior_counts': torch.ones(10).double()}),
-    (TestDirichletPrior, {'prior_counts': torch.ones(10).double()}),
-    (TestDirichletPrior, {'prior_counts': torch.FloatTensor([1, 2, 3, 4, 5])}),
-    (TestDirichletPrior, {'prior_counts': torch.DoubleTensor([1, 2, 3, 4, 5])}),
+# Dirichlet prior.
+tests += [(TestDirichletPrior,
+    {'prior_counts': (torch.randn(20) ** 2).float()}) for _ in range(10)]
+tests += [(TestDirichletPrior,
+    {'prior_counts': (torch.randn(20) ** 2).double()}) for _ in range(10)]
 
-    (TestNormalGammaPrior, {'mean': torch.zeros(2).float(),
-        'precision': torch.ones(2).float(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.zeros(2).double(),
-        'precision': torch.ones(2).double(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
-        'precision': torch.ones(2).float(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
-        'precision': torch.ones(2).double(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e-3}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e-8}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e4}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e8}),
 
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).float(),
-        'precision': torch.randn(2).float() ** 2, 'prior_count': 1.,
+# NormalGamma prior.
+tests += [(TestNormalGammaPrior,
+    {'mean': torch.randn(20).float(),
+     'precision': torch.randn(20).float()**2,
+     'prior_count': (torch.randn(1).float().item())}) for i in range(10)]
+tests += [(TestNormalGammaPrior,
+    {'mean': torch.randn(20).double(),
+     'precision': torch.randn(20).double()**2,
+     'prior_count': (torch.randn(1)**2).double().item()}) for i in range(10)]
+
+
+# JointNormalGamma prior
+tests += [(TestJointNormalGammaPrior,
+    {'means': torch.randn(10, 4).float(),
+     'precision': torch.randn(4).float() ** 2,
+     'prior_count': (torch.randn(1)**2).item(),
         'ncomp': 10}),
     (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
         'precision': torch.randn(2).double() ** 2, 'prior_count': 1.,
@@ -451,12 +445,9 @@ tests = [
 ]
 
 
-module = sys.modules[__name__]
-for i, test in enumerate(tests, start=1):
-    name = test[0].__name__ + 'Test' + str(i)
-    setattr(module, name, type(name, (unittest.TestCase, test[0]),  test[1]))
+#module = sys.modules[__name__]
+#for i, test in enumerate(tests, start=1):
+#    name = test[0].__name__ + 'Test' + str(i)
+#    setattr(module, name, type(name, (unittest.TestCase, test[0]),  test[1]))
 
-
-if __name__ == '__main__':
-    unittest.main()
-
+__all__ = [TestDirichletPrior]

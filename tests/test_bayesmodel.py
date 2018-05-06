@@ -9,8 +9,10 @@ import torch
 
 import sys
 sys.path.insert(0, './')
+sys.path.insert(0, './tests')
 
 import beer
+from basetest import BaseTest
 
 torch.manual_seed(10)
 
@@ -23,8 +25,8 @@ class TestBayesianParameter:
 
     def test_create(self):
         bayesparam = beer.BayesianParameter(self.prior, self.posterior)
-        self.assertTrue(np.allclose(bayesparam.natural_grad.numpy(),
-            np.zeros(len(bayesparam.natural_grad))))
+        self.assertArraysAlmostEqual(self, bayesparam.natura_grad.numpy(),
+            np.zeros(len(bayesparam.natural_grad)))
 
     def test_expected_value(self):
         bayesparam = beer.BayesianParameter(self.prior, self.posterior)
@@ -69,7 +71,7 @@ tests = [
 module = sys.modules[__name__]
 for i, test in enumerate(tests, start=1):
     name = test[0].__name__ + 'Test' + str(i)
-    setattr(module, name, type(name, (unittest.TestCase, test[0]),  test[1]))
+    setattr(module, name, type(name, (BaseTest, test[0]),  test[1]))
 
 if __name__ == '__main__':
     unittest.main()
