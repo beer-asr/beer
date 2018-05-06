@@ -306,7 +306,6 @@ def JointNormalWishartPrior(means, cov, prior_counts):
     if len(cov.size()) != 2: raise ValueError('Expect a (D x D) matrix')
 
     D = means.size(1)
-    ncomp = len(means)
     dof = prior_counts + D
     V = dof * cov
     mmT = (means[:, None, :] * means[:, :, None]).sum(dim=0)
