@@ -214,11 +214,9 @@ class TestJointNormalGammaPrior(BaseTest):
     #   pass
 
 
-#######################################################################
-# Computations using numpy for testing.
-#######################################################################
-
-
+########################################################################
+# Joint Normal-Gamma prior.
+########################################################################
 
 def normalwishart_split_np(natural_params):
     D = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params[:-2]))))
@@ -251,6 +249,65 @@ def normalwishart_grad_log_norm(natural_params):
     grad4 = .5 * np.sum(psi(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
     grad4 += -.5 * sign * logdet + .5 * D * np.log(2)
     return np.hstack([grad1.reshape(-1), grad2, grad3, grad4])
+
+
+class TestNormalWishartPrior(BaseTest):
+
+    def setUp(self):
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.mean = torch.randn(self.dim).type(self.type)
+        cov = (1 + torch.randn(self.dim)).type(self.type)
+        self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
+        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+
+    def test_create(self):
+        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        mean, cov = self.mean.numpy(), self.cov.numpy()
+        dof = self.prior_count + self.dim
+        V = dof * cov
+        natural_params = np.hstack([
+            (self.prior_count * np.outer(mean, mean) + V).reshape(-1),
+            self.prior_count * mean,
+            np.asarray([self.prior_count]),
+            np.asarray([dof - self.dim])
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(), 
+            natural_params)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = normalwishart_grad_log_norm(natural_params)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        model2 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = normalwishart_log_norm(natural_params)
+
+        if self.type == torch.FloatTensor:
+            # Because of the log-gamma function, we decrease the 
+            # tolerance for this test case.
+            self.assertAlmostEqual(model_log_norm, log_norm, 
+                places=min(0, self.tolplaces - 1))
+        else:
+            self.assertAlmostEqual(model_log_norm, log_norm, 
+                places=self.tolplaces)
+
+#######################################################################
+# Computations using numpy for testing.
+#######################################################################
+
+
+
 
 
 def jointnormalwishart_split_np(natural_params, ncomp=1):
@@ -297,36 +354,6 @@ def normal_fc_grad_log_norm(natural_params):
 #######################################################################
 # Abstract base class for implementing the logic of the tests.
 #######################################################################
-
-
-
-
-
-class TestNormalWishartPrior:
-
-    def test_create(self):
-        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
-
-    def test_exp_sufficient_statistics(self):
-        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        model_s_stats = model.expected_sufficient_statistics.numpy()
-        natural_params = model.natural_params.numpy()
-        s_stats = normalwishart_grad_log_norm(natural_params)
-        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
-
-    def test_kl_divergence(self):
-        model1 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        model2 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=TOLPLACES)
-
-    def test_log_norm(self):
-        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = normalwishart_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
 
 class TestJointNormalWishartPrior:
@@ -382,134 +409,7 @@ class TestNormalPrior:
         self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
 
-#######################################################################
-# Testing condition.
-#######################################################################
-
-tests = []
-
-# Dirichlet prior.
-tests += [(TestDirichletPrior,
-    {'prior_counts': (torch.randn(20) ** 2).float()}) for _ in range(10)]
-tests += [(TestDirichletPrior,
-    {'prior_counts': (torch.randn(20) ** 2).double()}) for _ in range(10)]
-
-
-# NormalGamma prior.
-tests += [(TestNormalGammaPrior,
-    {'mean': torch.randn(20).float(),
-     'precision': torch.randn(20).float()**2,
-     'prior_count': (torch.randn(1).float().item())}) for i in range(10)]
-tests += [(TestNormalGammaPrior,
-    {'mean': torch.randn(20).double(),
-     'precision': torch.randn(20).double()**2,
-     'prior_count': (torch.randn(1)**2).double().item()}) for i in range(10)]
-
-
-# JointNormalGamma prior
-tests += [(TestJointNormalGammaPrior,
-    {'means': torch.randn(10, 4).float(),
-     'precision': torch.randn(4).float() ** 2,
-     'prior_count': (torch.randn(1)**2).item(),
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
-        'precision': torch.randn(2).double() ** 2, 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).float(),
-        'precision': torch.randn(2).float() ** 2, 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
-        'precision': torch.randn(2).double() ** 2, 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e-3,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e-8,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e4,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e8,
-        'ncomp': 10}),
-
-    (TestNormalWishartPrior, {'mean': torch.zeros(2).float(),
-        'cov': torch.eye(2).float(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.zeros(2).double(),
-        'cov': torch.eye(2).double(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e-3}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e-8}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e2}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8}),
-
-    (TestJointNormalWishartPrior, {'means': torch.zeros(3, 2).float(),
-        'cov': torch.eye(2).float(), 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.zeros(3, 2).double(),
-        'cov': torch.eye(2).double(), 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
-        'cov': torch.eye(2).float(), 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
-        'cov': torch.eye(2).double(), 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e-3, 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e-8, 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e2, 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8, 'ncomp': 3}),
-
-    (TestNormalPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float()}),
-    (TestNormalPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double()}),
-    (TestNormalPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float()}),
-    (TestNormalPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double()}),
-    (TestNormalPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4}),
-    (TestNormalPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8}),
-    (TestNormalPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4}),
-    (TestNormalPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8}),
-    (TestNormalPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4}),
-    (TestNormalPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8}),
-]
-
-
-#module = sys.modules[__name__]
-#for i, test in enumerate(tests, start=1):
-#    name = test[0].__name__ + 'Test' + str(i)
-#    setattr(module, name, type(name, (unittest.TestCase, test[0]),  test[1]))
-
 __all__ = [
-    TestDirichletPrior, TestNormalGammaPrior, TestJointNormalGammaPrior
+    TestDirichletPrior, TestNormalGammaPrior, TestJointNormalGammaPrior,
+    TestNormalWishartPrior
 ]
