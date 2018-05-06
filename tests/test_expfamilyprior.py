@@ -14,15 +14,9 @@ sys.path.insert(0, './tests')
 import beer
 from basetest import BaseTest
 
-torch.manual_seed(10)
-
-TOLPLACES = 4
-TOL = 10 ** (-TOLPLACES)
-
-
-#######################################################################
-# Computations using numpy for testing.
-#######################################################################
+########################################################################
+# Dirichlet prior.
+########################################################################
 
 def dirichlet_log_norm(natural_params):
     return -gammaln(np.sum(natural_params + 1)) \
@@ -31,6 +25,43 @@ def dirichlet_log_norm(natural_params):
 
 def dirichlet_grad_log_norm(natural_params):
     return -psi(np.sum(natural_params + 1)) + psi(natural_params + 1)
+
+
+class TestDirichletPrior(BaseTest):
+
+    def setUp(self):
+        dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.prior_counts = (torch.randn(dim) ** 2).type(self.type)
+    
+    def test_create(self):
+        model = beer.DirichletPrior(self.prior_counts)
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+            self.prior_counts.numpy() - 1)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.DirichletPrior(self.prior_counts)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = dirichlet_grad_log_norm(natural_params)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.DirichletPrior(self.prior_counts)
+        model2 = beer.DirichletPrior(self.prior_counts)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.DirichletPrior(self.prior_counts)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = dirichlet_log_norm(natural_params)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+
+
+#######################################################################
+# Computations using numpy for testing.
+#######################################################################
 
 
 def normalgamma_log_norm(natural_params):
@@ -151,33 +182,7 @@ def normal_fc_grad_log_norm(natural_params):
 #######################################################################
 
 
-class TestDirichletPrior(BaseTest):
 
-    def test_create(self):
-        model = beer.DirichletPrior(self.prior_counts)
-        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
-        self.assertTrue(np.allclose(model.natural_params.numpy(),
-            self.prior_counts.numpy() - 1, rtol=TOL, atol=TOL))
-
-    def test_exp_sufficient_statistics(self):
-        model = beer.DirichletPrior(self.prior_counts)
-        model_s_stats = model.expected_sufficient_statistics.numpy()
-        natural_params = model.natural_params.numpy()
-        s_stats = dirichlet_grad_log_norm(natural_params)
-        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
-
-    def test_kl_divergence(self):
-        model1 = beer.DirichletPrior(self.prior_counts)
-        model2 = beer.DirichletPrior(self.prior_counts)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=TOLPLACES)
-
-    def test_log_norm(self):
-        model = beer.DirichletPrior(self.prior_counts)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = dirichlet_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
 
 
 class TestNormalGammaPrior:
