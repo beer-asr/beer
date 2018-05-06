@@ -459,3 +459,25 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
         ])
         return {self.means_prec_param: acc_stats}
 
+
+#######################################################################
+# FixedGaussian model for simple VAE recipes
+#######################################################################
+
+class FixedIsotropicGaussian:
+    def __init__(self, dim):
+        mean = torch.zeros(dim)
+        var = torch.ones(dim)
+        self._np = normal_diag_natural_params(mean, var)
+
+    def expected_natural_params(self, *args, **kwargs):
+        '''
+            This model is fixed.
+            Its expected natural params are independent of any arguments.
+        '''
+        return self._np
+
+    @staticmethod
+    def sufficient_statistics_from_mean_var(mean, var):
+        return NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
+            mean, var)

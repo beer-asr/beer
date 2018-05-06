@@ -14,6 +14,7 @@ from .normal import NormalDiagonalCovarianceSet
 from .normal import NormalFullCovarianceSet
 from .normal import NormalSetSharedDiagonalCovariance
 from .normal import NormalSetSharedFullCovariance
+from .normal import FixedIsotropicGaussian
 
 from .mixture import Mixture
 
