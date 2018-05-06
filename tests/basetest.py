@@ -13,7 +13,7 @@ import torch
 import unittest
 
 
-FLOAT_TOLPLACES = 3
+FLOAT_TOLPLACES = 2
 FLOAT_TOL = 10 ** (-FLOAT_TOLPLACES)
 
 DOUBLE_TOLPLACES = 6

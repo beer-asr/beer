@@ -27,7 +27,8 @@ def run():
 
     test_modules = [test_expfamilyprior]
     for test_module in test_modules:
-        for testcase in test_module.__all__:
+        for testcase_name in test_module.__all__:
+            testcase = getattr(test_module, testcase_name)
             suite = unittest.TestSuite()
             for i in range(args.nruns):
                 suite.addTest(BaseTest.get_testsuite(testcase, 
