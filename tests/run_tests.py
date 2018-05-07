@@ -5,19 +5,21 @@ This script should be run from the beer root directory.
 
 '''
 
-import argparse
-import unittest
-
+# pylint: disable=C0413
+# Not all the modules can be placed at the top of the files as we need
+# first to change the PYTHONPATH before to import the modules.
 import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './tests')
 
+import argparse
+import unittest
 from basetest import BaseTest
 import test_bayesmodel
 import test_expfamilyprior
 import test_features
 import test_mixture
-
+import test_normal
 
 
 def run():
@@ -39,7 +41,8 @@ def run():
         test_bayesmodel,
         test_expfamilyprior,
         test_features,
-        test_mixture
+        test_mixture,
+        test_normal,
     ]
     for test_module in test_modules:
         for testcase_name in test_module.__all__:

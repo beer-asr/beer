@@ -1,4 +1,4 @@
-'Test the Normal model.'
+'Test the BayesianModel module.'
 
 # pylint: disable=C0413
 # Not all the modules can be placed at the top of the files as we need

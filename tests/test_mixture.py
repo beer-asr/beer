@@ -52,8 +52,7 @@ class TestGMMDiag(BaseTest):
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
         self.means = torch.randn(self.npoints, self.dim).type(self.type)
-        self.vars = torch.randn(self.npoints, self.dim).double() ** 2
-        self.vars = self.vars.type(self.type)
+        self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
         self.prior_count = 1e-2 + 100 * torch.rand(1).item()
         self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
         self.normalset = create_normalset_diag(self.ncomp, self.dim, self.type)
