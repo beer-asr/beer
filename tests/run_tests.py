@@ -16,6 +16,7 @@ from basetest import BaseTest
 import test_bayesmodel
 import test_expfamilyprior
 import test_features
+import test_mixture
 
 
 
@@ -37,7 +38,8 @@ def run():
     test_modules = [
         test_bayesmodel,
         test_expfamilyprior,
-        test_features
+        test_features,
+        test_mixture
     ]
     for test_module in test_modules:
         for testcase_name in test_module.__all__:
