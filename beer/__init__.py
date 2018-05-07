@@ -37,4 +37,3 @@ from . import features
 # Variational Bayes Inference.
 from .vbi import StochasticVariationalBayesLoss
 from .vbi import BayesianModelOptimizer
-
