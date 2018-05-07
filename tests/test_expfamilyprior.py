@@ -1,16 +1,16 @@
 'Test the expfamilyprior module.'
 
-
-import numpy as np
-from scipy.special import gammaln, psi
-import sys
-import torch
-import unittest
+# pylint: disable=C0413
+# Not all the modules can be placed at the top of the files as we need
+# first to change the PYTHONPATH before to import the modules.
 
 import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './tests')
 
+import numpy as np
+from scipy.special import gammaln, psi
+import torch
 import beer
 from basetest import BaseTest
 
@@ -33,11 +33,11 @@ class TestDirichletPrior(BaseTest):
     def setUp(self):
         dim = int(1 + torch.randint(100, (1, 1)).item())
         self.prior_counts = (torch.randn(dim) ** 2).type(self.type)
-    
+
     def test_create(self):
         model = beer.DirichletPrior(self.prior_counts)
         self.assertArraysAlmostEqual(model.natural_params.numpy(),
-            self.prior_counts.numpy() - 1)
+                                     self.prior_counts.numpy() - 1)
 
     def test_exp_sufficient_statistics(self):
         model = beer.DirichletPrior(self.prior_counts)
@@ -104,8 +104,8 @@ class TestNormalGammaPrior(BaseTest):
             n_precision,
             2 * g_shapes - 1
         ])
-        self.assertArraysAlmostEqual(model.natural_params.numpy(), 
-            natural_params)
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
 
     def test_exp_sufficient_statistics(self):
         model = beer.NormalGammaPrior(self.mean, self.precision,
@@ -147,7 +147,7 @@ def jointnormalgamma_split_nparams(natural_params, ncomp):
 
 def jointnormalgamma_log_norm(natural_params, ncomp):
     np1, np2s, np3s, np4, dim = jointnormalgamma_split_nparams(natural_params,
-        ncomp)
+                                                               ncomp)
     lognorm = gammaln(.5 * (np4 + 1)).sum()
     lognorm += -.5 * np.log(np3s).sum()
     tmp = ((np2s ** 2) / np3s).reshape((ncomp, dim))
@@ -167,7 +167,7 @@ class TestJointNormalGammaPrior(BaseTest):
 
     def test_create(self):
         model = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
+                                           self.prior_count)
         means, prec, prior_count = self.means.numpy(), \
             self.precision.numpy(), self.prior_count
         dim = self.dim
@@ -178,33 +178,25 @@ class TestJointNormalGammaPrior(BaseTest):
             (np.ones((ncomps, dim)) * prior_count).reshape(-1),
             2 * prec * prior_count - 1
         ])
-        self.assertArraysAlmostEqual(model.natural_params.numpy(), 
-            natural_params)
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
 
     def test_kl_divergence(self):
         model1 = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
+                                            self.prior_count)
         model2 = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
+                                            self.prior_count)
         div = beer.kl_div(model1, model2)
         self.assertAlmostEqual(float(div), 0., places=self.tolplaces)
 
     def test_log_norm(self):
         model = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
+                                           self.prior_count)
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = jointnormalgamma_log_norm(natural_params, ncomp=self.ncomps)
-        self.assertAlmostEqual(model_log_norm, log_norm, 
-            places=self.tolplaces)
-
-    # TODO: add test to check if the gradient of the log-norm. is 
-    #       correct. 
-    # So far we don't test the automatic differentiation of the
-    # log-normalizer. We hope that as long as the log-normalizer is 
-    # correct, then pytorch should gives us the right gradient.
-    #def test_exp_sufficient_statistics(self):
-    #   pass
+        self.assertAlmostEqual(model_log_norm, log_norm,
+                               places=self.tolplaces)
 
 
 ########################################################################
@@ -212,35 +204,35 @@ class TestJointNormalGammaPrior(BaseTest):
 ########################################################################
 
 def normalwishart_split_np(natural_params):
-    D = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params[:-2]))))
-    np1, np2 = natural_params[:int(D**2)].reshape(D, D), \
-         natural_params[int(D**2):-2]
+    dim = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params[:-2]))))
+    np1, np2 = natural_params[:int(dim ** 2)].reshape(dim, dim), \
+         natural_params[int(dim ** 2):-2]
     np3, np4 = natural_params[-2:]
-    return np1, np2, np3, np4, D
+    return np1, np2, np3, np4, dim
 
 
 def normalwishart_log_norm(natural_params):
-    np1, np2, np3, np4, D = normalwishart_split_np(natural_params)
-    lognorm = .5 * ((np4 + D) * D * np.log(2) - D * np.log(np3))
+    np1, np2, np3, np4, dim = normalwishart_split_np(natural_params)
+    lognorm = .5 * ((np4 + dim) * dim * np.log(2) - dim * np.log(np3))
     sign, logdet = np.linalg.slogdet(np1 - np.outer(np2, np2) / np3)
-    lognorm += -.5 * (np4 + D) * sign * logdet
-    lognorm += np.sum(gammaln(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
+    lognorm += -.5 * (np4 + dim) * sign * logdet
+    lognorm += np.sum(gammaln(.5 * (np4 + dim + 1 - np.arange(1, dim + 1, 1))))
     return lognorm
 
 
 def normalwishart_grad_log_norm(natural_params):
-    np1, np2, np3, np4, D = normalwishart_split_np(natural_params)
+    np1, np2, np3, np4, dim = normalwishart_split_np(natural_params)
     outer = np.outer(np2, np2) / np3
     matrix = (np1 - outer)
     sign, logdet = np.linalg.slogdet(matrix)
     inv_matrix = np.linalg.inv(matrix)
 
-    grad1 = -.5 * (np4 + D) * inv_matrix
-    grad2 = (np4 + D) * inv_matrix @ (np2 / np3)
-    grad3 = - D / (2 * np3) - .5 * (np4 + D) \
+    grad1 = -.5 * (np4 + dim) * inv_matrix
+    grad2 = (np4 + dim) * inv_matrix @ (np2 / np3)
+    grad3 = - dim / (2 * np3) - .5 * (np4 + dim) \
         * np.trace(inv_matrix @ (outer / np3))
-    grad4 = .5 * np.sum(psi(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
-    grad4 += -.5 * sign * logdet + .5 * D * np.log(2)
+    grad4 = .5 * np.sum(psi(.5 * (np4 + dim + 1 - np.arange(1, dim + 1, 1))))
+    grad4 += -.5 * sign * logdet + .5 * dim * np.log(2)
     return np.hstack([grad1.reshape(-1), grad2, grad3, grad4])
 
 
@@ -257,15 +249,15 @@ class TestNormalWishartPrior(BaseTest):
         model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
         mean, cov = self.mean.numpy(), self.cov.numpy()
         dof = self.prior_count + self.dim
-        V = dof * cov
+        mean_cov = dof * cov
         natural_params = np.hstack([
-            (self.prior_count * np.outer(mean, mean) + V).reshape(-1),
+            (self.prior_count * np.outer(mean, mean) + mean_cov).reshape(-1),
             self.prior_count * mean,
             np.asarray([self.prior_count]),
             np.asarray([dof - self.dim])
         ])
-        self.assertArraysAlmostEqual(model.natural_params.numpy(), 
-            natural_params)
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
 
     def test_exp_sufficient_statistics(self):
         model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
@@ -285,8 +277,8 @@ class TestNormalWishartPrior(BaseTest):
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = normalwishart_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm, 
-            places=self.tolplaces)
+        self.assertAlmostEqual(model_log_norm, log_norm,
+                               places=self.tolplaces)
 
 
 ########################################################################
@@ -294,23 +286,23 @@ class TestNormalWishartPrior(BaseTest):
 ########################################################################
 
 def jointnormalwishart_split_np(natural_params, ncomp=1):
-    D = int(.5 * (-ncomp + np.sqrt(ncomp**2 + \
+    dim = int(.5 * (-ncomp + np.sqrt(ncomp**2 + \
         4 * len(natural_params[:-(ncomp + 1)]))))
-    np1, np2s = natural_params[:int(D**2)].reshape(D, D), \
-         natural_params[int(D**2):-(ncomp+1)].reshape(ncomp, D)
+    np1, np2s = natural_params[:int(dim ** 2)].reshape(dim, dim), \
+         natural_params[int(dim ** 2):-(ncomp+1)].reshape(ncomp, dim)
     np3s = natural_params[-(ncomp+1): -1]
     np4 = natural_params[-1]
-    return np1, np2s, np3s, np4, D
+    return np1, np2s, np3s, np4, dim
 
 
 def jointnormalwishart_log_norm(natural_params, ncomp):
-    np1, np2s, np3s, np4, D = jointnormalwishart_split_np(natural_params, ncomp)
-    lognorm = .5 * ((np4 + D) * D * np.log(2) - D * np.log(np3s).sum())
+    np1, np2s, np3s, np4, dim = jointnormalwishart_split_np(natural_params, ncomp)
+    lognorm = .5 * ((np4 + dim) * dim * np.log(2) - dim * np.log(np3s).sum())
     quad_exp = ((np2s[:, None, :] * np2s[:, :, None]) / \
         np3s[:, None, None]).sum(axis=0)
     sign, logdet = np.linalg.slogdet(np1 - quad_exp)
-    lognorm += -.5 * (np4 + D) * sign * logdet
-    lognorm += np.sum(gammaln(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
+    lognorm += -.5 * (np4 + dim) * sign * logdet
+    lognorm += np.sum(gammaln(.5 * (np4 + dim + 1 - np.arange(1, dim + 1, 1))))
     return lognorm
 
 
@@ -325,20 +317,20 @@ class TestJointNormalWishartPrior(BaseTest):
         self.prior_count = 1e-2 + 100 * torch.rand(1).item()
 
     def test_create(self):
-        model = beer.JointNormalWishartPrior(self.means, self.cov, 
-            self.prior_count)
+        model = beer.JointNormalWishartPrior(self.means, self.cov,
+                                             self.prior_count)
         means, cov = self.means.numpy(), self.cov.numpy()
         dof = self.prior_count + self.dim
-        V = dof * cov
-        mmT = (means[:, None, :] * means[:, :, None]).sum(axis=0)
+        mean_cov = dof * cov
+        quad_mean = (means[:, None, :] * means[:, :, None]).sum(axis=0)
         natural_params = np.hstack([
-            (self.prior_count * mmT + V).reshape(-1),
+            (self.prior_count * quad_mean + mean_cov).reshape(-1),
             self.prior_count * means.reshape(-1),
             np.ones(self.ncomps) * self.prior_count,
             np.asarray([dof - self.dim])
         ])
-        self.assertArraysAlmostEqual(model.natural_params.numpy(), 
-            natural_params)
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
 
     def test_kl_divergence(self):
         model1 = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
@@ -350,10 +342,10 @@ class TestJointNormalWishartPrior(BaseTest):
         model = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
-        log_norm = jointnormalwishart_log_norm(natural_params, 
-            ncomp=self.ncomps)
-        self.assertAlmostEqual(model_log_norm, log_norm, 
-            places=self.tolplaces)
+        log_norm = jointnormalwishart_log_norm(natural_params,
+                                               ncomp=self.ncomps)
+        self.assertAlmostEqual(model_log_norm, log_norm,
+                               places=self.tolplaces)
 
     # We don't test the automatic differentiation of the
     # log-normalizer. As long as the log-normlizer is correct, then
@@ -367,14 +359,14 @@ class TestJointNormalWishartPrior(BaseTest):
 ########################################################################
 
 def normal_fc_split_np(natural_params):
-    D = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params))))
-    np1, np2 = natural_params[:int(D**2)].reshape(D, D), \
-         natural_params[int(D**2):]
-    return np1, np2, D
+    dim = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params))))
+    np1, np2 = natural_params[:int(dim ** 2)].reshape(dim, dim), \
+         natural_params[int(dim ** 2):]
+    return np1, np2, dim
 
 
 def normal_fc_log_norm(natural_params):
-    np1, np2, D = normal_fc_split_np(natural_params)
+    np1, np2, _ = normal_fc_split_np(natural_params)
     inv_np1 = np.linalg.inv(np1)
     sign, logdet = np.linalg.slogdet(-2 * np1)
     lognorm = -.5 * sign * logdet - .25 * (np2[None, :] @ inv_np1) @ np2
@@ -382,7 +374,7 @@ def normal_fc_log_norm(natural_params):
 
 
 def normal_fc_grad_log_norm(natural_params):
-    np1, np2, D = normal_fc_split_np(natural_params)
+    np1, np2, _ = normal_fc_split_np(natural_params)
     cov = np.linalg.inv(-2 * np1)
     mean = cov @ np2
     return np.hstack([(cov + np.outer(mean, mean)).reshape(-1), mean])
@@ -404,16 +396,15 @@ class TestNormalPrior(BaseTest):
             -.5 * cov.reshape(-1),
             cov @ mean,
         ])
-        self.assertArraysAlmostEqual(model.natural_params.numpy(), 
-            natural_params)
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
 
     def test_exp_sufficient_statistics(self):
         model = beer.NormalPrior(self.mean, self.cov)
         model_s_stats = model.expected_sufficient_statistics.numpy()
         natural_params = model.natural_params.numpy()
         s_stats = normal_fc_grad_log_norm(natural_params)
-        self.assertArraysAlmostEqual(model.natural_params.numpy(), 
-            natural_params)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
 
     def test_kl_divergence(self):
         model1 = beer.NormalPrior(self.mean, self.cov)
