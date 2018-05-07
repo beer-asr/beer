@@ -7,7 +7,6 @@ and bayesian model (Variational Auto-Encoder and its variant).
 '''
 
 import abc
-import math
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -47,18 +46,18 @@ class MLPModel(nn.Module, metaclass=abc.ABCMeta):
         self.structure = structure
         s_out_dim = _structure_output_dim(structure)
         self.output_layer = nn.ModuleList()
-        for i, outdim in enumerate(outputs):
+        for outdim in outputs:
             self.output_layer.append(nn.Linear(s_out_dim, outdim))
 
         # Make sure that by default the encoder/decoder has a small
         # variance.
-        # TODO: should become a parameter.
         self.output_layer[-1].bias.data += -1
 
-    def forward(self, X):
-        h = self.structure(X)
-        outputs = [transform(h) for transform in self.output_layer]
-        return [outputs[0] + X, outputs[1]]
+    # pylint: disable=W0221
+    def forward(self, data):
+        activations = self.structure(data)
+        outputs = [transform(activations) for transform in self.output_layer]
+        return [outputs[0] + data, outputs[1]]
 
 
 class MLPNormalDiag(MLPModel):
@@ -80,8 +79,9 @@ class MLPNormalDiag(MLPModel):
         '''
         super().__init__(structure, [dim, dim])
 
-    def forward(self, X):
-        mean, logvar = super().forward(X)
+    # pylint: disable=W0221
+    def forward(self, data):
+        mean, logvar = super().forward(data)
         return MLPStateNormalDiagonalCovariance(mean, torch.exp(logvar))
 
 
@@ -103,9 +103,10 @@ class MLPNormalIso(MLPModel):
         '''
         super().__init__(structure, [dim, 1])
 
-    def forward(self, X):
-        mean, logvar = super().forward(X)
-        ones = Variable(torch.ones(mean.size(1)).type(X.type()))
+    # pylint: disable=W0221
+    def forward(self, data):
+        mean, logvar = super().forward(data)
+        ones = Variable(torch.ones(mean.size(1)).type(data.type()))
         return MLPStateNormalDiagonalCovariance(mean, ones * torch.exp(logvar))
 
 
@@ -118,23 +119,24 @@ class MLPStateNormalDiagonalCovariance:
 
     def entropy(self):
         'Compute the per-frame entropy of the posterior distribution.'
-        nparams = normal_diag_natural_params(self.mean, self.var)
-        exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
-            self.mean, self.var)
-        return - (self._nparams * exp_T).sum(dim=-1)
+        exp_s_stats = \
+            NormalDiagonalCovariance.sufficient_statistics_from_mean_var(\
+                self.mean, self.var)
+        return - (self._nparams * exp_s_stats).sum(dim=-1)
 
     def kl_div(self, nparams_other):
         nparams = normal_diag_natural_params(self.mean, self.var)
-        exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
-            self.mean, self.var)
-        return ((nparams - nparams_other) * exp_T).sum(dim=-1)
+        exp_s_stats = \
+            NormalDiagonalCovariance.sufficient_statistics_from_mean_var(\
+                self.mean, self.var)
+        return ((nparams - nparams_other) * exp_s_stats).sum(dim=-1)
 
     def sample(self):
         noise = Variable(torch.randn(*self.mean.size()))
         return self.mean + noise * torch.sqrt(self.var)
 
-    def log_likelihood(self, X):
-        distance_term = 0.5 * (X - self.mean).pow(2) / self.var
+    def log_likelihood(self, data):
+        distance_term = 0.5 * (data - self.mean).pow(2) / self.var
         precision_term = 0.5 * self.var.log()
         return (-distance_term - precision_term).sum(dim=-1).mean(dim=0)
 
@@ -157,11 +159,14 @@ class MLPBernoulli(MLPModel):
         '''
         super().__init__(structure, [dim])
 
-    def forward(self, X):
-        mu = super().forward(X)[0]
-        return BernoulliState(F.sigmoid(mu))
+    # pylint: disable=W0221
+    def forward(self, data):
+        mean = super().forward(data)[0]
+        return BernoulliState(F.sigmoid(mean))
 
 
+# pylint: disable=R0903
+# Too few public method.
 class BernoulliState:
     ''' Bernoulli distribution, to be an output of a MLP.
 
@@ -169,15 +174,11 @@ class BernoulliState:
     the name of the class, something smells here. A lot.
 
     '''
-    def __init__(self, mu):
-        self.mu = mu
+    def __init__(self, mean):
+        self.mean = mean
+        self._nparams = None
 
-    def log_likelihood(self, T):
-        dim0, dim1 = self._nparams.size()
-        return torch.sum(T * self._nparams.view(1, dim0, dim1) , dim=-1) - \
-            .5 * self.mean.size(0) * math.log(2 * math.pi)
-
-    def log_likelihood(self, X):
-        per_pixel_bce = X * self.mu.log() + (1.0 - X) * (1 - self.mu).log()
+    def log_likelihood(self, data):
+        per_pixel_bce = data * self.mean.log() + (1.0 - data) * \
+            (1 - self.mean).log()
         return per_pixel_bce.sum(dim=-1)
-

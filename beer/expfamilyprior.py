@@ -8,8 +8,8 @@ import torch
 import torch.autograd as ta
 
 
-def _bregman_divergence(F_p, F_q, grad_F_q, p, q):
-    return F_p - F_q - grad_F_q @ (p - q)
+def _bregman_divergence(f_val1, f_val2, grad_f_val2, val1, val2):
+    return f_val1 - f_val2 - grad_f_val2 @ (val1 - val2)
 
 
 def _exp_stats_and_log_norm(natural_params, log_norm_fn, args):
@@ -22,12 +22,12 @@ def _exp_stats_and_log_norm(natural_params, log_norm_fn, args):
 
 # The following code compute the log of the determinant of a
 # positive definite matrix. This is equivalent to:
-#   >>> torch.log(torch.det(A))
+#   >>> torch.log(torch.det(mat))
 # Note: the hook is necessary to correct the gradient as pytorch
 # will return upper triangular gradient.
-def _logdet(A):
-    A.register_hook(lambda grad: .5 * (grad + grad.t()))
-    return 2 * torch.log(torch.diag(torch.potrf(A))).sum()
+def _logdet(mat):
+    mat.register_hook(lambda grad: .5 * (grad + grad.t()))
+    return 2 * torch.log(torch.diag(torch.potrf(mat))).sum()
 
 
 ########################################################################
@@ -62,7 +62,7 @@ def _jointnormalgamma_split_nparams(natural_params, ncomp):
 
 def _jointnormalgamma_log_norm(natural_params, ncomp):
     np1, np2s, np3s, np4, dim = _jointnormalgamma_split_nparams(natural_params,
-        ncomp)
+                                                                ncomp)
     lognorm = torch.lgamma(.5 * (np4 + 1)).sum()
     lognorm += -.5 * torch.log(np3s).sum()
     tmp = ((np2s ** 2) / np3s).view(ncomp, dim)
@@ -78,11 +78,11 @@ def _normalwishart_split_nparams(natural_params):
     #
     # The dimension D is found by solving the polynomial:
     #   D^2 + D - len(self.natural_params[:-2]) = 0
-    D = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params[:-2]))))
-    np1, np2 = natural_params[:int(D**2)].view(D, D), \
-         natural_params[int(D**2):-2]
+    dim = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params[:-2]))))
+    np1, np2 = natural_params[:int(dim ** 2)].view(dim, dim), \
+         natural_params[int(dim ** 2):-2]
     np3, np4 = natural_params[-2:]
-    return np1, np2, np3, np4, D
+    return np1, np2, np3, np4, dim
 
 def _jointnormalwishart_split_nparams(natural_params, ncomp):
     # We need to retrieve the 4 natural parameters organized as
@@ -92,13 +92,13 @@ def _jointnormalwishart_split_nparams(natural_params, ncomp):
     #
     # The dimension D is found by solving the polynomial:
     #   D^2 + ncomp * D - len(self.natural_params[:-(ncomp + 1]) = 0
-    D = int(.5 * (-ncomp + math.sqrt(ncomp**2 + \
+    dim = int(.5 * (-ncomp + math.sqrt(ncomp**2 + \
         4 * len(natural_params[:-(ncomp + 1)]))))
-    np1, np2s = natural_params[:int(D**2)].view(D, D), \
-         natural_params[int(D**2):-(ncomp + 1)].view(ncomp, D)
+    np1, np2s = natural_params[:int(dim ** 2)].view(dim, dim), \
+         natural_params[int(dim ** 2):-(ncomp + 1)].view(ncomp, dim)
     np3s = natural_params[-(ncomp + 1):-1]
     np4 = natural_params[-1]
-    return np1, np2s, np3s, np4, D
+    return np1, np2s, np3s, np4, dim
 
 
 def _normal_fc_split_nparams(natural_params):
@@ -108,36 +108,36 @@ def _normal_fc_split_nparams(natural_params):
     #
     # The dimension D is found by solving the polynomial:
     #   D^2 + D - len(self.natural_params) = 0
-    D = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params))))
-    np1, np2 = natural_params[:int(D**2)].view(D, D), \
-         natural_params[int(D**2):]
-    return np1, np2, D
+    dim = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params))))
+    np1, np2 = natural_params[:int(dim ** 2)].view(dim, dim), \
+         natural_params[int(dim ** 2):]
+    return np1, np2, dim
 
 
 def _normal_fc_log_norm(natural_params):
-    np1, np2, D = _normal_fc_split_nparams(natural_params)
+    np1, np2, _ = _normal_fc_split_nparams(natural_params)
     inv_np1 = torch.inverse(np1)
     return -.5 * _logdet(-2 * np1) - .25 * ((np2[None, :] @ inv_np1) @ np2)[0]
 
 
 def _normalwishart_log_norm(natural_params):
-    np1, np2, np3, np4, D = _normalwishart_split_nparams(natural_params)
-    lognorm = .5 * ((np4 + D) * D * math.log(2) - D * torch.log(np3))
-    lognorm += -.5 * (np4 + D) * _logdet(np1 - torch.ger(np2, np2)/np3)
-    seq = ta.Variable(torch.arange(1, D + 1, 1).type(natural_params.type()))
-    lognorm += torch.lgamma(.5 * (np4 + D + 1 - seq)).sum()
+    np1, np2, np3, np4, dim = _normalwishart_split_nparams(natural_params)
+    lognorm = .5 * ((np4 + dim) * dim * math.log(2) - dim * torch.log(np3))
+    lognorm += -.5 * (np4 + dim) * _logdet(np1 - torch.ger(np2, np2)/np3)
+    seq = ta.Variable(torch.arange(1, dim + 1, 1).type(natural_params.type()))
+    lognorm += torch.lgamma(.5 * (np4 + dim + 1 - seq)).sum()
     return lognorm
 
 
 def _jointnormalwishart_log_norm(natural_params, ncomp):
-    np1, np2s, np3s, np4, D = _jointnormalwishart_split_nparams(natural_params,
-        ncomp=ncomp)
-    lognorm = .5 * ((np4 + D) * D * math.log(2) - D * torch.log(np3s).sum())
+    np1, np2s, np3s, np4, dim = _jointnormalwishart_split_nparams(natural_params,
+                                                                  ncomp=ncomp)
+    lognorm = .5 * ((np4 + dim) * dim * math.log(2) - dim * torch.log(np3s).sum())
     quad_exp = ((np2s[:, None, :] * np2s[:, :, None]) / \
         np3s[:, None, None]).sum(dim=0)
-    lognorm += -.5 * (np4 + D) * _logdet(np1 - quad_exp)
-    seq = ta.Variable(torch.arange(1, D + 1, 1).type(natural_params.type()))
-    lognorm += torch.lgamma(.5 * (np4 + D + 1 - seq)).sum()
+    lognorm += -.5 * (np4 + dim) * _logdet(np1 - quad_exp)
+    seq = ta.Variable(torch.arange(1, dim + 1, 1).type(natural_params.type()))
+    lognorm += torch.lgamma(.5 * (np4 + dim + 1 - seq)).sum()
     return lognorm
 
 
@@ -147,6 +147,8 @@ class ExpFamilyPrior:
 
     '''
 
+    # pylint: disable=W0102
+    # Dangerous default value {}.
     def __init__(self, natural_params, log_norm_fn, args={}):
         # This will be initialized when setting the natural params
         # property.
@@ -190,6 +192,8 @@ def kl_div(model1, model2):
                                model2.natural_params, model1.natural_params)
 
 
+# pylint: disable=C0103
+# Invalid function name.
 def DirichletPrior(prior_counts):
     '''Create a Dirichlet density function.
 
@@ -205,6 +209,8 @@ def DirichletPrior(prior_counts):
     return ExpFamilyPrior(natural_params, _dirichlet_log_norm)
 
 
+# pylint: disable=C0103
+# Invalid function name.
 def NormalGammaPrior(mean, precision, prior_counts):
     '''Create a NormalGamma density function.
 
@@ -229,7 +235,8 @@ def NormalGammaPrior(mean, precision, prior_counts):
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _normalgamma_log_norm)
 
-
+# pylint: disable=C0103
+# Invalid function name.
 def JointNormalGammaPrior(means, prec, prior_counts):
     '''Create a joint Normal-Gamma density function.
 
@@ -260,6 +267,9 @@ def JointNormalGammaPrior(means, prec, prior_counts):
     return ExpFamilyPrior(natural_params, _jointnormalgamma_log_norm,
                           args={'ncomp': means.size(0)})
 
+
+# pylint: disable=C0103
+# Invalid function name.
 def NormalWishartPrior(mean, cov, prior_counts):
     '''Create a NormalWishart density function.
 
@@ -272,7 +282,8 @@ def NormalWishartPrior(mean, cov, prior_counts):
         A NormalWishart density.
 
     '''
-    if len(cov.size()) != 2: raise ValueError('Expect a (D x D) matrix')
+    if len(cov.size()) != 2:
+        raise ValueError('Expect a (D x D) matrix')
 
     D = mean.size(0)
     dof = prior_counts + D
@@ -286,6 +297,8 @@ def NormalWishartPrior(mean, cov, prior_counts):
     return ExpFamilyPrior(natural_params, _normalwishart_log_norm)
 
 
+# pylint: disable=C0103
+# Invalid function name.
 def JointNormalWishartPrior(means, cov, prior_counts):
     '''Create a JointNormalWishart density function.
 
@@ -304,7 +317,8 @@ def JointNormalWishartPrior(means, cov, prior_counts):
         ``JointNormalWishartPrior``
 
     '''
-    if len(cov.size()) != 2: raise ValueError('Expect a (D x D) matrix')
+    if len(cov.size()) != 2:
+        raise ValueError('Expect a (D x D) matrix')
 
     D = means.size(1)
     dof = prior_counts + D
@@ -320,6 +334,8 @@ def JointNormalWishartPrior(means, cov, prior_counts):
                           args={'ncomp': means.size(0)})
 
 
+# pylint: disable=C0103
+# Invalid function name.
 def NormalPrior(mean, cov):
     '''Create a Normal density prior.
 
@@ -331,11 +347,11 @@ def NormalPrior(mean, cov):
         ``NormalPrior``: A Normal density.
 
     '''
-    if len(cov.size()) != 2: raise ValueError('Expect a (D x D) matrix')
+    if len(cov.size()) != 2:
+        raise ValueError('Expect a (D x D) matrix')
 
     natural_params = ta.Variable(torch.cat([
         -.5 * cov.view(-1),
         cov @ mean,
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _normal_fc_log_norm)
-

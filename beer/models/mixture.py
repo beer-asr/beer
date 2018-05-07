@@ -1,13 +1,9 @@
 
 'Bayesian Mixture model.'
 
-import math
 import torch
-import torch.autograd as ta
-
 from .bayesmodel import BayesianModel
 from .bayesmodel import BayesianParameter
-from ..expfamilyprior import DirichletPrior, kl_div
 
 
 def _expand_labels(labels, ncomp):
@@ -19,8 +15,8 @@ def _expand_labels(labels, ncomp):
 
 def _logsumexp(tensor):
     'Equivatent to: scipy.special.logsumexp(tensor, axis=1)'
-    s, _ = torch.max(tensor, dim=1, keepdim=True)
-    return s + (tensor - s).exp().sum(dim=1, keepdim=True).log()
+    tmax, _ = torch.max(tensor, dim=1, keepdim=True)
+    return tmax + (tensor - tmax).exp().sum(dim=1, keepdim=True).log()
 
 
 class Mixture(BayesianModel):
@@ -45,12 +41,14 @@ class Mixture(BayesianModel):
     @property
     def weights(self):
         'Expected value of the weights.'
-        w = torch.exp(self.weights_params.expected_value)
-        return w / w.sum()
+        weights = torch.exp(self.weights_params.expected_value)
+        return weights / weights.sum()
 
-    def sufficient_statistics(self, X):
-        return self.components.sufficient_statistics(X)
+    def sufficient_statistics(self, data):
+        return self.components.sufficient_statistics(data)
 
+    # pylint: disable=C0103
+    # Invalid method name.
     def sufficient_statistics_from_mean_var(self, mean, var):
         return self.components.sufficient_statistics_from_mean_var(mean, var)
 
@@ -76,7 +74,7 @@ class Mixture(BayesianModel):
             self._resps = onehot_labels.type(mean.type())
         else:
             samples = mean + torch.sqrt(var) * torch.randn(nsamples,
-                *mean.size())
+                                                           *mean.size())
             samples = samples.view(-1, mean.size(1)).type(mean.type())
             T = self.sufficient_statistics(samples)
             per_component_exp_llh = self.components(T)
@@ -85,17 +83,16 @@ class Mixture(BayesianModel):
             exp_llh = _logsumexp(per_component_exp_llh).view(-1)
             self._resps = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
             self._resps = self._resps.view(nsamples, mean.size(0),
-                len(self.components)).mean(dim=0)
+                                           len(self.components)).mean(dim=0)
         matrix = self.components.expected_natural_params_as_matrix()
         return self._resps @ matrix
 
-    def forward(self, T, labels=None):
-        per_component_exp_llh = self.components(T)
+    def forward(self, s_stats, labels=None):
+        per_component_exp_llh = self.components(s_stats)
         per_component_exp_llh += self.weights_params.expected_value.view(1, -1)
         if labels is not None:
-            onehot_labels = _expand_labels(labels,
-                len(self.components)).type(T.type())
-            #per_component_exp_llh += torch.log(onehot_labels)
+            onehot_labels = _expand_labels(labels, len(self.components))
+            onehot_labels = onehot_labels.type(s_stats.type())
             exp_llh = (per_component_exp_llh * onehot_labels).sum(dim=-1)
             self._resps = onehot_labels
         else:
@@ -103,13 +100,10 @@ class Mixture(BayesianModel):
             self._resps = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
         return exp_llh
 
-    def accumulate(self, T, parent_msg=None):
-        #import pdb
-        #pdb.set_trace()
+    def accumulate(self, s_stats, parent_msg=None):
         retval = {
             self.weights_params: self._resps.sum(dim=0),
-            **self.components.accumulate(T, self._resps)
+            **self.components.accumulate(s_stats, self._resps)
         }
         self._resps = None
         return retval
-

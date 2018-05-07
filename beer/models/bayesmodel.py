@@ -40,6 +40,7 @@ class BayesianParameter:
         self.natural_grad.zero_()
 
 
+# pylint: disable=R0903
 class BayesianParameterSet:
     '''Set of Bayesian parameters.
 
@@ -94,36 +95,36 @@ class BayesianModel(metaclass=abc.ABCMeta):
             self._parameters += value.parameters
         super().__setattr__(name, value)
 
-    def __call__(self, X, labels=None):
-        return self.forward(X, labels)
+    def __call__(self, data, labels=None):
+        return self.forward(data, labels)
 
     @property
     def parameters(self):
         return self._parameters
 
     @abc.abstractmethod
-    def forward(self, T, labels=None):
+    def forward(self, s_stats, labels=None):
         '''Expected value of the log-likelihood w.r.t to the posterior
         distribution over the parameters.
 
         Args:
-            T (Tensor[n_frames, dim]): Sufficient statistics.
+            s_stats (Tensor[n_frames, dim]): Sufficient statistics.
             labels (LongTensor[n_frames]): Labels.
 
         Returns:
             Tensor: Per-frame expected value of the log-likelihood.
 
         '''
-        NotImplemented
+        raise NotImplementedError
 
     @abc.abstractmethod
-    def accumulate(self, s_stats, parent_message=None):
+    def accumulate(self, s_stats, parent_msg=None):
         '''Accumulate the sufficient statistics for the parameters's
         update.
 
         Args:
             s_stats (list): List of sufficient statistics.
-            parent_message (object): Message from the parent (and
+            parent_msg (object): Message from the parent (and
                 the co-parents) to make the VB update.
 
         Returns:
@@ -132,5 +133,4 @@ class BayesianModel(metaclass=abc.ABCMeta):
                 parameters were registered.
 
         '''
-        NotImplemented
-
+        raise NotImplementedError

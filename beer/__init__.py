@@ -11,7 +11,6 @@ from .expfamilyprior import NormalPrior
 from .expfamilyprior import kl_div
 
 # Bayesian models.
-from .models import BayesianEmbeddingModel
 from .models import BayesianModel
 from .models import BayesianParameter
 from .models import BayesianParameterSet
