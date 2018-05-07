@@ -1,6 +1,5 @@
 'Test the Normal model.'
 
-
 # pylint: disable=C0413
 # Not all the modules can be placed at the top of the files as we need
 # first to change the PYTHONPATH before to import the modules.
@@ -8,9 +7,7 @@ import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './tests')
 
-import copy
 import numpy as np
-from scipy.special import gammaln, psi
 import torch
 import beer
 from basetest import BaseTest
@@ -76,7 +73,7 @@ class TestBayesianParameter(BaseTest):
                 kl_div = beer.kl_div_posterior_prior(
                     [beer.BayesianParameter(prior, posterior)
                      for _ in range(10)]
-        )
+                )
         self.assertGreaterEqual(float(kl_div), 0.)
 
 
@@ -87,19 +84,19 @@ class TestBayesianParameterSet(BaseTest):
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
         self.prior_count = 1e-2 + 100 * torch.rand(1).item()
         self.priors, self.posteriors = [], []
-        for i in range(self.nparams):
+        for _ in range(self.nparams):
             self.priors.append([
                 beer.DirichletPrior(torch.ones(self.dim).type(self.type)),
                 beer.NormalGammaPrior(torch.randn(self.dim).type(self.type),
-                                    (torch.randn(self.dim)**2).type(self.type),
-                                    self.prior_count)
+                                      (torch.randn(self.dim)**2).type(self.type),
+                                      self.prior_count)
             ])
 
             self.posteriors.append([
                 beer.DirichletPrior(torch.ones(self.dim).type(self.type)),
                 beer.NormalGammaPrior(torch.randn(self.dim).type(self.type),
-                                    (torch.randn(self.dim)**2).type(self.type),
-                                    self.prior_count)
+                                      (torch.randn(self.dim)**2).type(self.type),
+                                      self.prior_count)
             ])
 
     def test_create(self):
@@ -147,4 +144,3 @@ class TestBayesianParameterSet(BaseTest):
 
 
 __all__ = ['TestBayesianParameter', 'TestBayesianParameterSet']
-
