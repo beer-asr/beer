@@ -3,7 +3,6 @@
 # pylint: disable=C0413
 # Not all the modules can be placed at the top of the files as we need
 # first to change the PYTHONPATH before to import the modules.
-
 import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './tests')
