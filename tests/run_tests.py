@@ -20,6 +20,7 @@ import test_expfamilyprior
 import test_features
 import test_mixture
 import test_normal
+import test_hmm
 
 
 def run():
@@ -38,11 +39,12 @@ def run():
     init_seed = args.init_seed
 
     test_modules = [
-        test_bayesmodel,
-        test_expfamilyprior,
-        test_features,
-        test_mixture,
-        test_normal,
+        #test_bayesmodel,
+        #test_expfamilyprior,
+        #test_features,
+        #test_mixture,
+        #test_normal,
+        test_hmm
     ]
     for test_module in test_modules:
         for testcase_name in test_module.__all__:

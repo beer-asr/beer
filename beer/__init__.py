@@ -21,6 +21,7 @@ from .models import NormalFullCovarianceSet
 from .models import NormalSetSharedDiagonalCovariance
 from .models import NormalSetSharedFullCovariance
 from .models import Mixture
+from .models import HMM
 from .models import MLPNormalDiag
 from .models import MLPNormalIso
 from .models import VAE
