@@ -2,9 +2,7 @@
 'Variational Bayes Inference.'
 
 
-import numpy as np
 import torch.autograd as ta
-
 from .models import kl_div_posterior_prior
 
 class VariationalBayesLossInstance:
@@ -15,6 +13,7 @@ class VariationalBayesLossInstance:
 
     '''
 
+    # pylint: disable=R0913
     def __init__(self, expected_llh, kl_div, parameters, acc_stats, scale):
         self._exp_llh = expected_llh.sum()
         self._loss = scale * self._exp_llh - kl_div
@@ -68,10 +67,11 @@ class VariationalBayesLossInstance:
                 parameter.posterior.natural_params
 
 
+# pylint: disable=R0903
 class StochasticVariationalBayesLoss:
     '''Standard Variational Bayes Loss function.
 
-    \ln p(x) \ge \langle \ln p(X|Z) \rangle_{q(Z)} - D_{kl}( q(Z) || p(Z))
+    ln p(X) >= E[ ln p(X | Z) ] - KL(q(Z) || p(Z) )
 
     '''
 
@@ -86,14 +86,14 @@ class StochasticVariationalBayesLoss:
         '''
         self.datasize = datasize
 
-    def __call__(self, model, X, labels=None):
-        T = model.sufficient_statistics(X)
+    def __call__(self, model, data, labels=None):
+        s_stats = model.sufficient_statistics(data)
         return VariationalBayesLossInstance(
-            expected_llh=model(T, labels),
+            expected_llh=model(s_stats, labels),
             kl_div=kl_div_posterior_prior(model.parameters),
             parameters=model.parameters,
-            acc_stats=model.accumulate(T),
-            scale=float(len(X)) / self.datasize
+            acc_stats=model.accumulate(s_stats),
+            scale=float(len(data)) / self.datasize
         )
 
 
@@ -130,4 +130,3 @@ class BayesianModelOptimizer:
                 self._lrate * parameter.natural_grad,
                 requires_grad=True
             )
-

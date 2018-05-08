@@ -20,14 +20,12 @@ clean:
 	@find . -depth -type d -name "__pycache__" -exec rm -fr "{}" \;
 
 
+linting:
+	@pylint --rcfile .pylintrc beer
+
 test:
-	@python tests/test_expfamilyprior.py -f -v
-	@python tests/test_bayesmodel.py -f -v
-	@python tests/test_features.py -f -v
-	@python tests/test_normal.py -f -v
-	@python tests/test_mixture.py -f -v
-	@python tests/test_mlpmodel.py -f -v
-	@python tests/test_vbi.py -f -v
+	@python tests/run_tests.py --nruns 10 --tensor-type float
+	@python tests/run_tests.py --nruns 10 --tensor-type double
 
 
 .PHONY: clean test
