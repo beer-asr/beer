@@ -13,7 +13,7 @@ import torch
 import unittest
 
 
-FLOAT_TOLPLACES = 2
+FLOAT_TOLPLACES = 1
 FLOAT_TOL = 10 ** (-FLOAT_TOLPLACES)
 
 DOUBLE_TOLPLACES = 6
@@ -32,12 +32,12 @@ class BaseTest(unittest.TestCase):
     @property
     def tol(self):
         return FLOAT_TOL if self.tensor_type == 'float' else DOUBLE_TOL
-    
+
     @property
     def tolplaces(self):
         return FLOAT_TOLPLACES if self.tensor_type == 'float' else \
             DOUBLE_TOLPLACES
-    
+
     @property
     def type(self):
         return torch.FloatTensor if self.tensor_type == 'float' else \
