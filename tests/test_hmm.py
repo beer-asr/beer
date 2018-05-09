@@ -149,32 +149,39 @@ class TestHMMDiag(BaseTest):
         self.trans_mat = (tmp_mat / tmp_mat.sum(dim=1).view(-1, 1)).type(self.type)
 
     def test_create(self):
-        model = beer.HMM(self.init_states, self.trans_mat, self.normalset)
+        model = beer.HMM(self.init_states, self.final_states,
+                         self.trans_mat, self.normalset)
         self.assertEqual(len(model.components), self.nstates)
 
     def test_sufficient_statistics(self):
-        model = beer.HMM(self.init_states, self.trans_mat, self.normalset)
+        model = beer.HMM(self.init_states, self.final_states,
+                         self.trans_mat, self.normalset)
         stats1 = model.sufficient_statistics(self.data).numpy()
         stats2 = model.components.sufficient_statistics(self.data).numpy()
         self.assertArraysAlmostEqual(stats1, stats2)
 
     # pylint: disable=C0103
     def test_sufficient_statistics_from_mean_var(self):
-        model = beer.HMM(self.init_states, self.trans_mat, self.normalset)
+        model = beer.HMM(self.init_states, self.final_states,
+                         self.trans_mat, self.normalset)
         stats1 = model.sufficient_statistics_from_mean_var(
             self.means, self.vars).numpy()
         stats2 = model.components.sufficient_statistics_from_mean_var(
             self.means, self.vars).numpy()
         self.assertArraysAlmostEqual(stats1, stats2)
 
-    @unittest.skip('Not implemented')
     def test_forward(self):
-        model = beer.Mixture(self.dir_prior, self.dir_posterior, self.normalset)
+        model = beer.HMM(self.init_states, self.final_states,
+                         self.trans_mat, self.normalset)
         stats = model.sufficient_statistics(self.data)
-        pc_exp_llh = (model.components(stats) + \
-            self.dir_posterior.expected_sufficient_statistics.view(1, -1))
-        pc_exp_llh = pc_exp_llh.numpy()
-        exp_llh1 = logsumexp(pc_exp_llh, axis=1)
+        pc_exp_llh = model.components(stats)
+        log_alphas = model.baum_welch_forward(self.init_states, self.trans_mat,
+                                              pc_exp_llh)
+        log_betas = model.baum_welch_backward(self.final_states, self.trans_mat,
+                                              pc_exp_llh)
+        log_posts = (log_alphas + log_betas).numpy()
+        log_norm = logsumexp(log_posts[0])
+        exp_llh1 = log_norm
         exp_llh2 = model(stats).numpy()
         self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 

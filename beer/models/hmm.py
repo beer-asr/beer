@@ -7,23 +7,17 @@ from .bayesmodel import BayesianModel
 from .bayesmodel import BayesianParameter
 
 
-def _expand_labels(labels, ncomp):
-    retval = torch.zeros(len(labels), ncomp)
-    idxs = torch.range(0, len(labels) - 1).long()
-    retval[idxs, labels] = 1
-    return retval
 
-
-def _logsumexp(tensor):
+def _logsumexp(tensor, dim=1):
     'Equivatent to: scipy.special.logsumexp(tensor, axis=1)'
-    tmax, _ = torch.max(tensor, dim=1, keepdim=True)
-    return tmax + (tensor - tmax).exp().sum(dim=1, keepdim=True).log()
+    tmax, _ = torch.max(tensor, dim=dim, keepdim=True)
+    return tmax + (tensor - tmax).exp().sum(dim=dim, keepdim=True).log()
 
 
 class HMM(BayesianModel):
     'Bayesian Mixture Model.'
 
-    def __init__(self, init_states, trans_mat, normalset):
+    def __init__(self, init_states, final_states, trans_mat, normalset):
         '''Initialie the HMM model.
 
         Args:
@@ -34,8 +28,10 @@ class HMM(BayesianModel):
         '''
         super().__init__()
         self.init_states = init_states
+        self.final_states = final_states
         self.trans_mat = trans_mat
         self.components = normalset
+        self._resps = None
 
     def sufficient_statistics(self, data):
         return self.components.sufficient_statistics(data)
@@ -88,11 +84,19 @@ class HMM(BayesianModel):
 
 
     def forward(self, s_stats, labels=None):
-        raise NotImplementedError
+        pc_exp_llh = self.components(s_stats)
+        log_alphas = HMM.baum_welch_forward(self.init_states, self.trans_mat, pc_exp_llh)
+        log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat, pc_exp_llh)
+
+        if labels is not None:
+            raise NotImplementedError
+        else:
+            exp_llh = _logsumexp((log_alphas + log_betas)[0], dim=0)
+            self._resps = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))
+        return exp_llh
 
     def accumulate(self, s_stats, parent_msg=None):
         retval = {
-            self.weights_params: self._resps.sum(dim=0),
             **self.components.accumulate(s_stats, self._resps)
         }
         self._resps = None
