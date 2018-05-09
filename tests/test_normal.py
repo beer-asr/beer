@@ -29,7 +29,7 @@ class TestNormalDiagonalCovariance(BaseTest):
         self.means = torch.randn(self.npoints, self.dim).type(self.type)
         self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
         self.mean = torch.randn(self.dim).type(self.type)
-        self.prec = (torch.randn(self.dim)**2).type(self.type)
+        self.prec = 1 + (torch.randn(self.dim)**2).type(self.type)
         self.prior_count = 1e-2 + 100 * torch.rand(1).item()
 
     def test_create(self):
@@ -42,6 +42,9 @@ class TestNormalDiagonalCovariance(BaseTest):
         cov1, cov2 = (1. / self.prec.numpy()), model.cov.numpy()
         if len(cov1.shape) == 1:
             cov1 = np.diag(cov1)
+        #print(np.diag(cov1) - np.diag(cov2))
+        #import pdb
+        #pdb.set_trace()
         self.assertArraysAlmostEqual(cov1, cov2)
 
     def test_sufficient_statistics(self):
@@ -137,7 +140,7 @@ class TestNormalDiagonalCovarianceSet(BaseTest):
         self.means = torch.randn(self.npoints, self.dim).type(self.type)
         self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
         self.mean = torch.randn(self.dim).type(self.type)
-        self.prec = (torch.randn(self.dim)**2).type(self.type)
+        self.prec = 1 + (torch.randn(self.dim)**2).type(self.type)
         self.prior_count = 1e-2 + 100 * torch.rand(1).item()
         self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
 
@@ -297,7 +300,7 @@ class TestNormalSetSharedDiagonalCovariance(BaseTest):
         self.means = torch.randn(self.npoints, self.dim).type(self.type)
         self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
         self.mean = torch.randn(self.dim).type(self.type)
-        self.prec = (torch.randn(self.dim)**2).type(self.type)
+        self.prec = 1 + (torch.randn(self.dim)**2).type(self.type)
         self.prior_count = 1e-2 + 100 * torch.rand(1).item()
         self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
         self.prior_means = torch.randn(self.ncomp, self.dim).type(self.type)
