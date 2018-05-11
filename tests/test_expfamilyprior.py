@@ -548,9 +548,58 @@ class TestMatrixNormalPrior(BaseTest):
                                             self.dim2)
         self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
 
+
+########################################################################
+# Gamma prior.
+########################################################################
+
+def gamma_log_norm(natural_params):
+    return float(gammaln(natural_params[0] + 1) - \
+        (natural_params[0] + 1) * np.log(-natural_params[1]))
+
+
+def gamma_grad_log_norm(natural_params):
+    return np.hstack([psi(natural_params[0] + 1) - np.log(-natural_params[1]),
+                      (natural_params[0] + 1) / (-natural_params[1])])
+
+
+class TestGammaPrior(BaseTest):
+
+    def setUp(self):
+        self.shape = (1 + torch.randn(1) ** 2).type(self.type)
+        self.rate = (1 + torch.randn(1) ** 2).type(self.type)
+
+    def test_create(self):
+        model = beer.GammaPrior(self.shape, self.rate)
+        shape, rate = self.shape.numpy(), self.rate.numpy()
+        natural_params = np.hstack([shape - 1, -rate])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.GammaPrior(self.shape, self.rate)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = gamma_grad_log_norm(natural_params)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.GammaPrior(self.shape, self.rate)
+        model2 = beer.GammaPrior(self.shape, self.rate)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(float(div), 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.GammaPrior(self.shape, self.rate)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = gamma_log_norm(natural_params)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+
+
 __all__ = [
     'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior',
     'TestNormalWishartPrior', 'TestJointNormalWishartPrior',
     'TestNormalFullCovariancePrior', 'TestNormalIsotropicCovariancePrior',
-    'TestMatrixNormalPrior',
+    'TestMatrixNormalPrior', 'TestGammaPrior'
 ]

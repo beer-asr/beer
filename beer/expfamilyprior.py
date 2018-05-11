@@ -403,6 +403,7 @@ def _matrixnormal_fc_log_norm(natural_params, dim1, dim2):
     #trace_mat1_mat2 = mat1.view(-1) @ mat2.t().contiguous().view(-1)
     return -.5 * dim2 * _logdet(-2 * np1) - .25 * torch.trace(np2.t() @ inv_np1 @ np2)
 
+
 def MatrixNormalPrior(mean, cov):
     '''Create a Matrix Normal density prior.
 
@@ -426,3 +427,29 @@ def MatrixNormalPrior(mean, cov):
     ]), dtype=mean.dtype, requires_grad=True)
     return ExpFamilyPrior(natural_params, _matrixnormal_fc_log_norm,
                           args={'dim1': mean.size(0), 'dim2': mean.size(1)})
+
+
+########################################################################
+# Gamma Prior.
+########################################################################
+
+
+def _gamma_log_norm(natural_params):
+    return torch.lgamma(natural_params[0] + 1) - \
+        (natural_params[0] + 1) * torch.log(- natural_params[1])
+
+
+def GammaPrior(shape, rate):
+    '''Create a Gamma density prior.
+
+    Args:
+        shape (scalar torch Tensor): Expected mean.
+        rate (scalar torch Tensor): Expected covariance of the mean.
+
+    Returns:
+        ``NormalPrior``: A Normal density.
+
+    '''
+    natural_params = torch.tensor(torch.cat([shape - 1, -rate]),
+                                  requires_grad=True)
+    return ExpFamilyPrior(natural_params, _gamma_log_norm)
