@@ -3,6 +3,8 @@ Exponential Family of Distribution.
 
 '''
 
+# pylint: disable=E1102
+
 import math
 import torch
 import torch.autograd as ta
@@ -124,7 +126,7 @@ def _normalwishart_log_norm(natural_params):
     np1, np2, np3, np4, dim = _normalwishart_split_nparams(natural_params)
     lognorm = .5 * ((np4 + dim) * dim * math.log(2) - dim * torch.log(np3))
     lognorm += -.5 * (np4 + dim) * _logdet(np1 - torch.ger(np2, np2)/np3)
-    seq = ta.Variable(torch.arange(1, dim + 1, 1).type(natural_params.type()))
+    seq = torch.arange(1, dim + 1, 1).type(natural_params.type())
     lognorm += torch.lgamma(.5 * (np4 + dim + 1 - seq)).sum()
     return lognorm
 
@@ -136,7 +138,7 @@ def _jointnormalwishart_log_norm(natural_params, ncomp):
     quad_exp = ((np2s[:, None, :] * np2s[:, :, None]) / \
         np3s[:, None, None]).sum(dim=0)
     lognorm += -.5 * (np4 + dim) * _logdet(np1 - quad_exp)
-    seq = ta.Variable(torch.arange(1, dim + 1, 1).type(natural_params.type()))
+    seq = torch.arange(1, dim + 1, 1).type(natural_params.type())
     lognorm += torch.lgamma(.5 * (np4 + dim + 1 - seq)).sum()
     return lognorm
 
@@ -203,7 +205,8 @@ def DirichletPrior(prior_counts):
 
     '''
     natural_params = prior_counts - 1
-    natural_params = ta.Variable(natural_params, requires_grad=True)
+
+    natural_params = torch.tensor(natural_params, requires_grad=True)
     return ExpFamilyPrior(natural_params, _dirichlet_log_norm)
 
 
@@ -224,7 +227,7 @@ def NormalGammaPrior(mean, precision, prior_counts):
     n_precision = prior_counts * torch.ones_like(n_mean)
     g_shapes = precision * prior_counts
     g_rates = prior_counts
-    natural_params = ta.Variable(torch.cat([
+    natural_params = torch.tensor(torch.cat([
         n_precision * (n_mean ** 2) + 2 * g_rates,
         n_precision * n_mean,
         n_precision,
@@ -254,7 +257,7 @@ def JointNormalGammaPrior(means, prec, prior_counts):
     '''
     dim = means.size(1)
     ncomp = len(means)
-    natural_params = ta.Variable(torch.cat([
+    natural_params = torch.tensor(torch.cat([
         (prior_counts * (means**2).sum(dim=0) + 2 * prior_counts).view(-1),
         (prior_counts * means).view(-1),
         (torch.ones(ncomp, dim) * prior_counts).type(means.type()).view(-1),
@@ -283,7 +286,7 @@ def NormalWishartPrior(mean, cov, prior_counts):
     D = mean.size(0)
     dof = prior_counts + D
     V = dof * cov
-    natural_params = ta.Variable(torch.cat([
+    natural_params = torch.tensor(torch.cat([
         (prior_counts * torch.ger(mean, mean) + V).view(-1),
         prior_counts * mean,
         (torch.ones(1) * prior_counts).type(mean.type()),
@@ -318,7 +321,7 @@ def JointNormalWishartPrior(means, cov, prior_counts):
     dof = prior_counts + D
     V = dof * cov
     mmT = (means[:, None, :] * means[:, :, None]).sum(dim=0)
-    natural_params = ta.Variable(torch.cat([
+    natural_params = torch.tensor(torch.cat([
         (prior_counts * mmT + V).view(-1),
         prior_counts * means.view(-1),
         (torch.ones(means.size(0)) * prior_counts).type(means.type()),
@@ -341,7 +344,7 @@ def NormalPrior(mean, cov):
 
     '''
     prec = torch.inverse(cov)
-    natural_params = ta.Variable(torch.cat([
+    natural_params = torch.tensor(torch.cat([
         -.5 * prec.contiguous().view(-1),
         prec @ mean,
     ]), requires_grad=True)
@@ -383,9 +386,9 @@ def MatrixNormalPrior(mean, cov):
 
     '''
     prec = torch.inverse(cov)
-    natural_params = ta.Variable(torch.cat([
+    natural_params = torch.tensor(torch.cat([
         -.5 * prec.contiguous().view(-1),
         (prec @ mean).view(-1),
-    ]), requires_grad=True)
+    ]), dtype=mean.dtype, requires_grad=True)
     return ExpFamilyPrior(natural_params, _matrixnormal_fc_log_norm,
                           args={'dim1': mean.size(0), 'dim2': mean.size(1)})
