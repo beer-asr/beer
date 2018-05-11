@@ -148,7 +148,6 @@ class ExpFamilyPrior:
     '''
 
     # pylint: disable=W0102
-    # Dangerous default value {}.
     def __init__(self, natural_params, log_norm_fn, args={}):
         # This will be initialized when setting the natural params
         # property.
@@ -193,7 +192,6 @@ def kl_div(model1, model2):
 
 
 # pylint: disable=C0103
-# Invalid function name.
 def DirichletPrior(prior_counts):
     '''Create a Dirichlet density function.
 
@@ -210,7 +208,6 @@ def DirichletPrior(prior_counts):
 
 
 # pylint: disable=C0103
-# Invalid function name.
 def NormalGammaPrior(mean, precision, prior_counts):
     '''Create a NormalGamma density function.
 
@@ -236,7 +233,6 @@ def NormalGammaPrior(mean, precision, prior_counts):
     return ExpFamilyPrior(natural_params, _normalgamma_log_norm)
 
 # pylint: disable=C0103
-# Invalid function name.
 def JointNormalGammaPrior(means, prec, prior_counts):
     '''Create a joint Normal-Gamma density function.
 
@@ -269,7 +265,6 @@ def JointNormalGammaPrior(means, prec, prior_counts):
 
 
 # pylint: disable=C0103
-# Invalid function name.
 def NormalWishartPrior(mean, cov, prior_counts):
     '''Create a NormalWishart density function.
 
@@ -298,7 +293,6 @@ def NormalWishartPrior(mean, cov, prior_counts):
 
 
 # pylint: disable=C0103
-# Invalid function name.
 def JointNormalWishartPrior(means, cov, prior_counts):
     '''Create a JointNormalWishart density function.
 
@@ -335,7 +329,6 @@ def JointNormalWishartPrior(means, cov, prior_counts):
 
 
 # pylint: disable=C0103
-# Invalid function name.
 def NormalPrior(mean, cov):
     '''Create a Normal density prior.
 
@@ -347,11 +340,52 @@ def NormalPrior(mean, cov):
         ``NormalPrior``: A Normal density.
 
     '''
-    if len(cov.size()) != 2:
-        raise ValueError('Expect a (D x D) matrix')
-
+    prec = torch.inverse(cov)
     natural_params = ta.Variable(torch.cat([
-        -.5 * cov.view(-1),
-        cov @ mean,
+        -.5 * prec.contiguous().view(-1),
+        prec @ mean,
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _normal_fc_log_norm)
+
+
+########################################################################
+# Matrix Normal Prior.
+########################################################################
+
+def _matrixnormal_fc_split_nparams(natural_params, dim1, dim2):
+    np1, np2 = natural_params[:int(dim1 ** 2)].view(dim1, dim1), \
+         natural_params[int(dim1 ** 2):].view(dim1, dim2)
+    return np1, np2
+
+
+def _matrixnormal_fc_log_norm(natural_params, dim1, dim2):
+    np1, np2 = _matrixnormal_fc_split_nparams(natural_params, dim1, dim2)
+    inv_np1 = torch.inverse(np1)
+    #mat1, mat2 = np2.t() @ inv_np1, np2
+    #trace_mat1_mat2 = mat1.view(-1) @ mat2.t().contiguous().view(-1)
+    return -.5 * dim2 * _logdet(-2 * np1) - .25 * torch.trace(np2.t() @ inv_np1 @ np2)
+
+# pylint: disable=C0103
+def MatrixNormalPrior(mean, cov):
+    '''Create a Matrix Normal density prior.
+
+    Note:
+        The ``MatrixNormalPrior`` is a special case of the Matrix
+        Normal density with a single scale matrix (the other is
+        assumed to be the identity matrix).
+
+    Args:
+        mean (Tensor (q x d)): Expected mean.
+        cov (Tensor (q x q)): Expected covariance of the mean.
+
+    Returns:
+        ``NormalPrior``: A Normal density.
+
+    '''
+    prec = torch.inverse(cov)
+    natural_params = ta.Variable(torch.cat([
+        -.5 * prec.contiguous().view(-1),
+        (prec @ mean).view(-1),
+    ]), requires_grad=True)
+    return ExpFamilyPrior(natural_params, _matrixnormal_fc_log_norm,
+                          args={'dim1': mean.size(0), 'dim2': mean.size(1)})

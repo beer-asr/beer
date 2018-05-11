@@ -49,7 +49,17 @@ class BaseTest(unittest.TestCase):
             torch.cuda.manual_seed(seed)
 
     def assertArraysAlmostEqual(self, arr1, arr2):
-        self.assertTrue(np.allclose(arr1, arr2, atol=self.tol))
+        try:
+            self.assertTrue(np.allclose(arr1, arr2, atol=self.tol))
+            fail = False
+        except AssertionError as error:
+            fail = True
+            raise error
+        finally:
+            if fail:
+                print(arr1, arr2)
+
+
 
     @staticmethod
     def get_testsuite(class_name, tensor_type='float', gpu=False, seed=13):

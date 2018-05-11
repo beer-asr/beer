@@ -199,7 +199,7 @@ class TestJointNormalGammaPrior(BaseTest):
 
 
 ########################################################################
-# Joint Normal-Gamma prior.
+# Normal Wishart prior.
 ########################################################################
 
 def normalwishart_split_np(natural_params):
@@ -386,14 +386,14 @@ class TestNormalPrior(BaseTest):
         self.mean = torch.randn(self.dim).type(self.type)
         cov = (1 + torch.randn(self.dim)).type(self.type)
         self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
 
     def test_create(self):
         model = beer.NormalPrior(self.mean, self.cov)
         mean, cov = self.mean.numpy(), self.cov.numpy()
+        prec = np.linalg.inv(cov)
         natural_params = np.hstack([
-            -.5 * cov.reshape(-1),
-            cov @ mean,
+            -.5 * prec.reshape(-1),
+            prec @ mean,
         ])
         self.assertArraysAlmostEqual(model.natural_params.numpy(),
                                      natural_params)
@@ -419,7 +419,75 @@ class TestNormalPrior(BaseTest):
         self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
 
 
+########################################################################
+# Matrix Normal prior.
+########################################################################
+
+def matrixnormal_fc_split_np(natural_params, dim1, dim2):
+    np1, np2 = natural_params[:dim1 ** 2], natural_params[dim1 ** 2:]
+    return np1.reshape(dim1, dim1), np2.reshape(dim1, dim2)
+
+
+def matrixnormal_fc_log_norm(natural_params, dim1, dim2):
+    np1, np2 = matrixnormal_fc_split_np(natural_params, dim1, dim2)
+    inv_np1 = np.linalg.inv(np1)
+    sign, logdet = np.linalg.slogdet(-2 * np1)
+    lognorm = -.5 * dim2 * sign * logdet - .25 * np.trace(np2.T @ inv_np1 @ np2)
+    return lognorm.item()
+
+
+def matrixnormal_fc_grad_log_norm(natural_params, dim1, dim2):
+    np1, np2 = matrixnormal_fc_split_np(natural_params, dim1, dim2)
+    cov = np.linalg.inv(-2 * np1)
+    mean = cov @ np2
+    return np.hstack([(dim2 * cov + mean @ mean.T).reshape(-1),
+                      mean.reshape(-1)])
+
+
+class TestMatrixNormalPrior(BaseTest):
+
+    def setUp(self):
+        self.dim1 = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim2 = int(1 + torch.randint(100, (1, 1)).item())
+        self.mean = torch.randn(self.dim1, self.dim2).type(self.type)
+        cov = (1 + torch.randn(self.dim1)).type(self.type)
+        self.cov = torch.eye(self.dim1).type(self.type) + torch.ger(cov, cov)
+
+    def test_create(self):
+        model = beer.MatrixNormalPrior(self.mean, self.cov)
+        mean, cov = self.mean.numpy(), self.cov.numpy()
+        prec = np.linalg.inv(cov)
+        natural_params = np.hstack([
+            -.5 * prec.reshape(-1),
+            (prec @ mean).reshape(-1),
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.MatrixNormalPrior(self.mean, self.cov)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = matrixnormal_fc_grad_log_norm(natural_params, self.dim1,
+                                                self.dim2)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.MatrixNormalPrior(self.mean, self.cov)
+        model2 = beer.MatrixNormalPrior(self.mean, self.cov)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.MatrixNormalPrior(self.mean, self.cov)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = matrixnormal_fc_log_norm(natural_params, self.dim1,
+                                            self.dim2)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+
 __all__ = [
     'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior',
-    'TestNormalWishartPrior', 'TestJointNormalWishartPrior', 'TestNormalPrior'
+    'TestNormalWishartPrior', 'TestJointNormalWishartPrior', 'TestNormalPrior',
+    'TestMatrixNormalPrior',
 ]
