@@ -7,7 +7,8 @@ from .expfamilyprior import NormalGammaPrior
 from .expfamilyprior import JointNormalGammaPrior
 from .expfamilyprior import NormalWishartPrior
 from .expfamilyprior import JointNormalWishartPrior
-from .expfamilyprior import NormalPrior
+from .expfamilyprior import NormalFullCovariancePrior
+from .expfamilyprior import NormalIsotropicCovariancePrior
 from .expfamilyprior import MatrixNormalPrior
 from .expfamilyprior import kl_div
 

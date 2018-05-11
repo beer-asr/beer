@@ -4,6 +4,7 @@ Exponential Family of Distribution.
 '''
 
 # pylint: disable=E1102
+# pylint: disable=C0103
 
 import math
 import torch
@@ -103,25 +104,6 @@ def _jointnormalwishart_split_nparams(natural_params, ncomp):
     return np1, np2s, np3s, np4, dim
 
 
-def _normal_fc_split_nparams(natural_params):
-    # We need to retrieve the 2 natural parameters organized as
-    # follows:
-    #   [ np1_1, ..., np1_D^2, np2_1, ..., np2_D]
-    #
-    # The dimension D is found by solving the polynomial:
-    #   D^2 + D - len(self.natural_params) = 0
-    dim = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params))))
-    np1, np2 = natural_params[:int(dim ** 2)].view(dim, dim), \
-         natural_params[int(dim ** 2):]
-    return np1, np2, dim
-
-
-def _normal_fc_log_norm(natural_params):
-    np1, np2, _ = _normal_fc_split_nparams(natural_params)
-    inv_np1 = torch.inverse(np1)
-    return -.5 * _logdet(-2 * np1) - .25 * ((np2[None, :] @ inv_np1) @ np2)[0]
-
-
 def _normalwishart_log_norm(natural_params):
     np1, np2, np3, np4, dim = _normalwishart_split_nparams(natural_params)
     lognorm = .5 * ((np4 + dim) * dim * math.log(2) - dim * torch.log(np3))
@@ -193,7 +175,6 @@ def kl_div(model1, model2):
                                model2.natural_params, model1.natural_params)
 
 
-# pylint: disable=C0103
 def DirichletPrior(prior_counts):
     '''Create a Dirichlet density function.
 
@@ -210,7 +191,6 @@ def DirichletPrior(prior_counts):
     return ExpFamilyPrior(natural_params, _dirichlet_log_norm)
 
 
-# pylint: disable=C0103
 def NormalGammaPrior(mean, precision, prior_counts):
     '''Create a NormalGamma density function.
 
@@ -235,7 +215,7 @@ def NormalGammaPrior(mean, precision, prior_counts):
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _normalgamma_log_norm)
 
-# pylint: disable=C0103
+
 def JointNormalGammaPrior(means, prec, prior_counts):
     '''Create a joint Normal-Gamma density function.
 
@@ -267,7 +247,6 @@ def JointNormalGammaPrior(means, prec, prior_counts):
                           args={'ncomp': means.size(0)})
 
 
-# pylint: disable=C0103
 def NormalWishartPrior(mean, cov, prior_counts):
     '''Create a NormalWishart density function.
 
@@ -295,7 +274,6 @@ def NormalWishartPrior(mean, cov, prior_counts):
     return ExpFamilyPrior(natural_params, _normalwishart_log_norm)
 
 
-# pylint: disable=C0103
 def JointNormalWishartPrior(means, cov, prior_counts):
     '''Create a JointNormalWishart density function.
 
@@ -331,8 +309,30 @@ def JointNormalWishartPrior(means, cov, prior_counts):
                           args={'ncomp': means.size(0)})
 
 
-# pylint: disable=C0103
-def NormalPrior(mean, cov):
+########################################################################
+# Normal Prior (full cov).
+########################################################################
+
+def _normal_fc_split_nparams(natural_params):
+    # We need to retrieve the 2 natural parameters organized as
+    # follows:
+    #   [ np1_1, ..., np1_D^2, np2_1, ..., np2_D]
+    #
+    # The dimension D is found by solving the polynomial:
+    #   D^2 + D - len(self.natural_params) = 0
+    dim = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params))))
+    np1, np2 = natural_params[:int(dim ** 2)].view(dim, dim), \
+         natural_params[int(dim ** 2):]
+    return np1, np2, dim
+
+
+def _normal_fc_log_norm(natural_params):
+    np1, np2, _ = _normal_fc_split_nparams(natural_params)
+    inv_np1 = torch.inverse(np1)
+    return -.5 * _logdet(-2 * np1) - .25 * ((np2[None, :] @ inv_np1) @ np2)[0]
+
+
+def NormalFullCovariancePrior(mean, cov):
     '''Create a Normal density prior.
 
     Args:
@@ -340,7 +340,7 @@ def NormalPrior(mean, cov):
         cov (Tensor): Expected covariance of the mean.
 
     Returns:
-        ``NormalPrior``: A Normal density.
+        ``NormalFullCovariancePrior``: A Normal density.
 
     '''
     prec = torch.inverse(cov)
@@ -349,6 +349,41 @@ def NormalPrior(mean, cov):
         prec @ mean,
     ]), requires_grad=True)
     return ExpFamilyPrior(natural_params, _normal_fc_log_norm)
+
+
+########################################################################
+# Normal Prior (isotropic cov).
+########################################################################
+
+def _normal_iso_split_nparams(natural_params):
+    np1, np2 = natural_params[0], natural_params[1:]
+    return np1, np2
+
+
+def _normal_iso_log_norm(natural_params):
+    np1, np2  = _normal_iso_split_nparams(natural_params)
+    inv_np1 = 1 / np1
+    logdet = len(np2) * torch.log(-2 * np1)
+    return -.5 * logdet - .25 * inv_np1 * (np2[None, :] @ np2)
+
+
+def NormalIsotropicCovariancePrior(mean, variance):
+    '''Create a Normal density prior with isotropic covariance matrix.
+
+    Args:
+        mean (Tensor): Expected mean.
+        variance (Tensor): The variance parameter.
+
+    Returns:
+        ``NormalIsotropicPrior``: A Normal density.
+
+    '''
+    prec = 1 / variance
+    natural_params = torch.tensor(torch.cat([
+        -.5 * prec,
+        prec * mean,
+    ]), requires_grad=True)
+    return ExpFamilyPrior(natural_params, _normal_iso_log_norm)
 
 
 ########################################################################
@@ -368,7 +403,6 @@ def _matrixnormal_fc_log_norm(natural_params, dim1, dim2):
     #trace_mat1_mat2 = mat1.view(-1) @ mat2.t().contiguous().view(-1)
     return -.5 * dim2 * _logdet(-2 * np1) - .25 * torch.trace(np2.t() @ inv_np1 @ np2)
 
-# pylint: disable=C0103
 def MatrixNormalPrior(mean, cov):
     '''Create a Matrix Normal density prior.
 
