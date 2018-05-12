@@ -14,6 +14,8 @@ import torch
 import beer
 from basetest import BaseTest
 
+from beer.expfamilyprior import _matrixnormal_fc_split_nparams
+
 
 ########################################################################
 # PPCA.
@@ -90,13 +92,38 @@ class TestPPCA(BaseTest):
                        np.ones(len(means))]
         self.assertArraysAlmostEqual(stats1.numpy(), stats2)
 
-    @unittest.skip("Not implemented")
-    def test_exp_llh(self):
-        model = beer.NormalDiagonalCovariance(
-            NormalGammaPrior(self.mean, self.prec, self.prior_count),
-            NormalGammaPrior(self.mean, self.prec, self.prior_count)
+    def test_latent_posterior(self):
+        model = beer.PPCA(
+            self.prior_prec, self.posterior_prec,
+            self.prior_mean, self.posterior_mean,
+            self.prior_subspace, self.posterior_subspace,
+            self.dim_subspace
         )
         stats = model.sufficient_statistics(self.data)
+        data = stats[:, 1:-1].numpy()
+        s_cov, s_mean =  _matrixnormal_fc_split_nparams(
+            model._subspace_param.expected_value,
+            model._subspace_dim,
+            model._data_dim
+        )
+        s_cov, s_mean = s_cov.numpy(), s_mean.numpy()
+        prec = model.precision.numpy()
+        cov1 = np.linalg.inv(np.eye(self.dim_subspace) + prec * s_cov)
+        means1 = prec * cov1 @ s_mean @ (data - model.mean.numpy()).T
+        means2, cov2 = model.latent_posterior(stats)
+        self.assertArraysAlmostEqual(cov1, cov2.numpy())
+        self.assertArraysAlmostEqual(means1, means2.numpy())
+
+    @unittest.skip("Not implemented")
+    def test_forward(self):
+        model = beer.PPCA(
+            self.prior_prec, self.posterior_prec,
+            self.prior_mean, self.posterior_mean,
+            self.prior_subspace, self.posterior_subspace,
+            self.dim_subspace
+        )
+        stats = model.sufficient_statistics(self.data)
+        means, cov = model.latent_posterior(stats)
         nparams = model.parameters[0].expected_value
         exp_llh1 = stats @ nparams
         exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)

@@ -103,6 +103,20 @@ class PPCA(BayesianModel):
         ones = torch.ones(s_stats.size(0), nparams.size(0)).type(s_stats.type())
         return ones * nparams
 
+    def latent_posterior(self, stats):
+        data = stats[:, 1:-1]
+        _, mean = _normal_iso_split_nparams(self._mean_param.expected_value)
+        subspace_cov, subspace_mean =  _matrixnormal_fc_split_nparams(
+            self._subspace_param.expected_value,
+            self._subspace_dim,
+            self._data_dim
+        )
+        prec = self._precision_param.expected_value[1]
+        lposterior_cov = torch.inverse(
+            torch.eye(self._subspace_dim).type(stats.type()) + prec * subspace_cov)
+        lposterior_means = prec * lposterior_cov @ subspace_mean @ (data - mean).t()
+        return lposterior_means, lposterior_cov
+
     def forward(self, s_stats, labels=None):
         feadim = .25 * s_stats.size(1)
         exp_llh = s_stats @ self.mean_prec_param.expected_value
