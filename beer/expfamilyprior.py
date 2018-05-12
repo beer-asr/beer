@@ -361,7 +361,7 @@ def _normal_iso_split_nparams(natural_params):
 
 
 def _normal_iso_log_norm(natural_params):
-    np1, np2  = _normal_iso_split_nparams(natural_params)
+    np1, np2 = _normal_iso_split_nparams(natural_params)
     inv_np1 = 1 / np1
     logdet = len(np2) * torch.log(-2 * np1)
     return -.5 * logdet - .25 * inv_np1 * (np2[None, :] @ np2)
