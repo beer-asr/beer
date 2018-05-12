@@ -20,6 +20,17 @@ import test_expfamilyprior
 import test_features
 import test_mixture
 import test_normal
+import test_subspacemodels
+
+
+testcases = {
+    'test_bayesmodel': test_bayesmodel,
+    'test_expfamilyprior': test_expfamilyprior,
+    'test_features': test_features,
+    'test_mixture': test_mixture,
+    'test_normal': test_normal,
+    'test_subspacemodels': test_subspacemodels
+}
 
 
 def run():
@@ -33,19 +44,25 @@ def run():
     parser.add_argument('--tensor-type', choices=['float', 'double'],
                         default='float',
                         help='type of the tensor to use in the tests')
+    parser.add_argument('--testcase', choices=list(testcases.keys()),
+                        help='specific test case to run')
     parser.add_argument('--verbosity', choices=[1, 2], default=1, type=int,
                         help='verbosity')
     args = parser.parse_args()
     tensor_type = args.tensor_type
     init_seed = args.init_seed
 
-    test_modules = [
-        test_bayesmodel,
-        test_expfamilyprior,
-        test_features,
-        test_mixture,
-        test_normal,
-    ]
+    if args.testcase is not None:
+        test_modules = [testcases[args.testcase]]
+    else:
+        test_modules = [
+            test_bayesmodel,
+            test_expfamilyprior,
+            test_features,
+            test_mixture,
+            test_normal,
+            test_subspacemodels,
+        ]
 
     suite = unittest.TestSuite()
     for test_module in test_modules:

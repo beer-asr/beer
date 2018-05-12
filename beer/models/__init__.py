@@ -13,6 +13,9 @@ from .normal import NormalSetSharedFullCovariance
 
 from .mixture import Mixture
 
+from .subspace import PPCA
+
+
 from .mlpmodel import MLPNormalDiag
 from .mlpmodel import MLPNormalIso
 from .mlpmodel import MLPBernoulli

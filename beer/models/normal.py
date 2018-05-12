@@ -14,8 +14,8 @@ covariance matrix.
 NormalSet
 ---------
    The ``NormalSet`` object is not a model but rather a component of
-   more comple model (e.g. GMM). It allows to have a set of Normal
-   densities to have a shared prior distribution.
+   more comple model (e.g. GMM). For example, it allows to have a set of
+   Normal densities to with a shared prior distribution for ex.
 
 
 '''

@@ -7,7 +7,10 @@ from .expfamilyprior import NormalGammaPrior
 from .expfamilyprior import JointNormalGammaPrior
 from .expfamilyprior import NormalWishartPrior
 from .expfamilyprior import JointNormalWishartPrior
-from .expfamilyprior import NormalPrior
+from .expfamilyprior import NormalFullCovariancePrior
+from .expfamilyprior import NormalIsotropicCovariancePrior
+from .expfamilyprior import GammaPrior
+from .expfamilyprior import MatrixNormalPrior
 from .expfamilyprior import kl_div
 
 # Bayesian models.
@@ -21,6 +24,7 @@ from .models import NormalFullCovarianceSet
 from .models import NormalSetSharedDiagonalCovariance
 from .models import NormalSetSharedFullCovariance
 from .models import Mixture
+from .models import PPCA
 from .models import MLPNormalDiag
 from .models import MLPNormalIso
 from .models import VAE
