@@ -215,6 +215,17 @@ class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def expected_natural_params_as_matrix(self):
+        '''Abstract method to be implemented by subclasses of
+        :any:`BayesianModel`.
+
+        Compute the expected value natural of the set parameters as
+        a matrix.
+
+        Returns:
+            ``torch.Tensor``: The set of natural parameters in a matrix.
+        '''
+    @abc.abstractmethod
     def forward(self, s_stats, latent_variables=None):
         '''Abstract method to be implemented by subclasses of
         :any:`BayesianModel`.
