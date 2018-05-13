@@ -26,7 +26,6 @@ def dirichlet_log_norm(natural_params):
 def dirichlet_grad_log_norm(natural_params):
     return -psi(np.sum(natural_params + 1)) + psi(natural_params + 1)
 
-
 class TestDirichletPrior(BaseTest):
 
     def setUp(self):

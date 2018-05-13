@@ -1,5 +1,5 @@
-Conjugate Priors
-================
+Priors
+======
 
 Most of the models in ``beer`` are *Bayesian* in the sense that they
 have a distribution over their parameter, usually called the *prior*.

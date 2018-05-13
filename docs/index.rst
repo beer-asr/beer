@@ -5,3 +5,4 @@ BEER -- the Bayesian spEEch Recognizer
    :maxdepth: 2
 
    priors
+   models

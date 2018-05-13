@@ -3,7 +3,7 @@
 
 
 import torch.autograd as ta
-from .models import kl_div_posterior_prior
+from .models import BayesianModel
 
 class VariationalBayesLossInstance:
     '''Generic loss term.
@@ -90,7 +90,7 @@ class StochasticVariationalBayesLoss:
         s_stats = model.sufficient_statistics(data)
         return VariationalBayesLossInstance(
             expected_llh=model(s_stats, labels),
-            kl_div=kl_div_posterior_prior(model.parameters),
+            kl_div=BayesianModel.kl_div_posterior_prior(model.parameters),
             parameters=model.parameters,
             acc_stats=model.accumulate(s_stats),
             scale=float(len(data)) / self.datasize
