@@ -430,60 +430,92 @@ class NormalWishartPrior(ExpFamilyPrior):
         return lognorm
 
 
+class JointNormalWishartPrior(ExpFamilyPrior):
+    '''Joint Normal-Wishart is the distribution over a set of
+    :math:`D` dimensional mean vectors :math:`M = (\\mu_1, ...,
+    \\mu_K)^T` and a precision matrix :math:`\\Lambda`.
+    It is defined as:
+
+    .. math::
+       p(M, \\lambda | M, \\kappa, W, \\nu) = \\big\\lbrack \\prod_{i=1}^K
+            \\mathcal{N} \\big(\\mu_i | m_i, (\\kappa_i \;
+            \\Lambda)^{-1} \\big)  \\big\\rbrack
+            \\mathcal{W} \\big( \\Lambda | W, \\nu \\big)
+
+    The parameters are defined in the same way as for the
+    :any:`beer.NormalWishartPrior`
+
+    Attributes:
+        dim (int): Dimension of the mean parameter.
+        ncomp (int): Number of Normal densities.
+    '''
+
+    def __init__(self, means, scales, scale_matrix, dof):
+        '''
+        Args:
+            means (``torch.Tensor``): Means of the Normal densities.
+            scales (float): s of the Normal densities.
+            scale_matrix (``torch.Tensor``): Scale matrix of the
+                Wishart.
+            dof (float): Degree of freedom of the Wishart.
+        '''
+        self.ncomp, self.dim = means.size()
+        inv_scale = torch.inverse(scale_matrix)
+        mmT = ((scales.view(-1, 1) * means)[:, None, :] * \
+            means[:, :, None]).sum(dim=0)
+        natural_hparams = torch.tensor(torch.cat([
+            (mmT + inv_scale).view(-1),
+            (scales.view(-1, 1) * means).view(-1),
+            scales,
+            (torch.ones(1) * (dof - self.dim)).type(means.type())
+        ]), requires_grad=True)
+        super().__init__(natural_hparams)
+
+    def split_sufficient_statistics(self, s_stats):
+        '''Split the sufficient statistics into 4 groups.
+
+        Args:
+            s_stats (``torch.Tensor``): Sufficients statistics to
+                split
+
+        Returns:
+            ``torch.Tensor``: tuple of sufficient statistics.
+
+        '''
+        grp1 = s_stats[:self.dim ** 2].view(self.dim, self.dim)
+        grp2s = s_stats[self.dim ** 2:-(self.ncomp + 1)].view(self.ncomp,
+                                                              self.dim)
+        grp3s = s_stats[-(self.ncomp + 1):-1]
+        grp4 = s_stats[-1]
+        return grp1, grp2s, grp3s, grp4
+
+    def log_norm(self, natural_hparams):
+        '''Log-normalizing function
+
+        Args:
+            natural_hparams (``torch.Tensor``): Natural hyper-parameters
+                of the distribution.
+
+        Returns:
+            ``torch.Tensor`` of size 1: Log-normalization value.
+
+        '''
+        hnp1, hnp2s, hnp3s, hnp4 = self.split_sufficient_statistics(
+            natural_hparams)
+        lognorm = .5 * ((hnp4 + self.dim) * self.dim * math.log(2) - \
+            self.dim * torch.log(hnp3s).sum())
+        quad_exp = ((hnp2s[:, None, :] * hnp2s[:, :, None]) / \
+            hnp3s[:, None, None]).sum(dim=0)
+        lognorm += -.5 * (hnp4 + self.dim) * _logdet(hnp1 - quad_exp)
+        seq = torch.arange(1, self.dim + 1, 1).type(natural_hparams.type())
+        lognorm += torch.lgamma(.5 * (hnp4 + self.dim + 1 - seq)).sum()
+        return lognorm
+
+
+
 ########################################################################
 # Densities log-normalizer functions.
 ########################################################################
-
-
-def _normalwishart_split_nparams(natural_params):
-    # We need to retrieve the 4 natural parameters organized as
-    # follows:
-    #   [ np1_1, ..., np1_D^2, np2_1, ..., np2_D, np3, np4]
-    #
-    # The dimension D is found by solving the polynomial:
-    #   D^2 + D - len(self.natural_params[:-2]) = 0
-    dim = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params[:-2]))))
-    np1, np2 = natural_params[:int(dim ** 2)].view(dim, dim), \
-         natural_params[int(dim ** 2):-2]
-    np3, np4 = natural_params[-2:]
-    return np1, np2, np3, np4, dim
-
-def _jointnormalwishart_split_nparams(natural_params, ncomp):
-    # We need to retrieve the 4 natural parameters organized as
-    # follows:
-    #   [ np1_1, ..., np1_D^2, np2_1_1, ..., np2_k_D, np3_1, ...,
-    #     np3_k, np4]
-    #
-    # The dimension D is found by solving the polynomial:
-    #   D^2 + ncomp * D - len(self.natural_params[:-(ncomp + 1]) = 0
-    dim = int(.5 * (-ncomp + math.sqrt(ncomp**2 + \
-        4 * len(natural_params[:-(ncomp + 1)]))))
-    np1, np2s = natural_params[:int(dim ** 2)].view(dim, dim), \
-         natural_params[int(dim ** 2):-(ncomp + 1)].view(ncomp, dim)
-    np3s = natural_params[-(ncomp + 1):-1]
-    np4 = natural_params[-1]
-    return np1, np2s, np3s, np4, dim
-
-
-def _normalwishart_log_norm(natural_params):
-    np1, np2, np3, np4, dim = _normalwishart_split_nparams(natural_params)
-    lognorm = .5 * ((np4 + dim) * dim * math.log(2) - dim * torch.log(np3))
-    lognorm += -.5 * (np4 + dim) * _logdet(np1 - torch.ger(np2, np2)/np3)
-    seq = torch.arange(1, dim + 1, 1).type(natural_params.type())
-    lognorm += torch.lgamma(.5 * (np4 + dim + 1 - seq)).sum()
-    return lognorm
-
-
-def _jointnormalwishart_log_norm(natural_params, ncomp):
-    np1, np2s, np3s, np4, dim = _jointnormalwishart_split_nparams(natural_params,
-                                                                  ncomp=ncomp)
-    lognorm = .5 * ((np4 + dim) * dim * math.log(2) - dim * torch.log(np3s).sum())
-    quad_exp = ((np2s[:, None, :] * np2s[:, :, None]) / \
-        np3s[:, None, None]).sum(dim=0)
-    lognorm += -.5 * (np4 + dim) * _logdet(np1 - quad_exp)
-    seq = torch.arange(1, dim + 1, 1).type(natural_params.type())
-    lognorm += torch.lgamma(.5 * (np4 + dim + 1 - seq)).sum()
-    return lognorm
 
 def kl_div(model1, model2):
     '''Kullback-Leibler divergence between two densities of the same
@@ -493,41 +525,6 @@ def kl_div(model1, model2):
     return _bregman_divergence(model2.log_norm, model1.log_norm,
                                model1.expected_sufficient_statistics,
                                model2.natural_params, model1.natural_params)
-
-
-def JointNormalWishartPrior(means, cov, prior_counts):
-    '''Create a JointNormalWishart density function.
-
-    Note:
-        By "joint" normal-wishart density we mean a set of independent
-        Normal density sharing the same covariance matrix (up to a
-        multiplicative constant) and the probability over the
-        covariance matrix is given by a Wishart distribution.
-
-    Args:
-        means (Tensor): Expected mean of the Normal densities.
-        cov (Tensor): Expected covariance matrix.
-        prior_counts (float): Strength of the prior.
-
-    Returns:
-        ``JointNormalWishartPrior``
-
-    '''
-    if len(cov.size()) != 2:
-        raise ValueError('Expect a (D x D) matrix')
-
-    D = means.size(1)
-    dof = prior_counts + D
-    V = dof * cov
-    mmT = (means[:, None, :] * means[:, :, None]).sum(dim=0)
-    natural_params = torch.tensor(torch.cat([
-        (prior_counts * mmT + V).view(-1),
-        prior_counts * means.view(-1),
-        (torch.ones(means.size(0)) * prior_counts).type(means.type()),
-        (torch.ones(1) * (dof - (D))).type(means.type())
-    ]), requires_grad=True)
-    #return ExpFamilyPrior(natural_params, _jointnormalwishart_log_norm,
-    #                      args={'ncomp': means.size(0)})
 
 
 ########################################################################

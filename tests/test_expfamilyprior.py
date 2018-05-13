@@ -270,49 +270,38 @@ def jointnormalwishart_log_norm(natural_params, ncomp):
 class TestJointNormalWishartPrior(BaseTest):
 
     def setUp(self):
-        self.ncomps = int(1 + torch.randint(100, (1, 1)).item())
+        self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
-        self.means = torch.randn((self.ncomps, self.dim)).type(self.type)
-        cov = (1 + torch.randn(self.dim)).type(self.type)
-        self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+        self.means = torch.randn((self.ncomp, self.dim)).type(self.type)
+        self.scales = (1 + torch.randn((self.ncomp))**2).type(self.type)
+        scale_mat = (1 + torch.randn(self.dim)).type(self.type)
+        self.scale_mat = torch.eye(self.dim).type(self.type) + \
+            torch.ger(scale_mat, scale_mat)
+        self.dof = (self.dim + 100 + torch.randn(1)**2).type(self.type)
+        self.model = beer.JointNormalWishartPrior(self.means, self.scales,
+                                                  self.scale_mat,
+                                                  float(self.dof))
 
-    def test_create(self):
-        model = beer.JointNormalWishartPrior(self.means, self.cov,
-                                             self.prior_count)
-        means, cov = self.means.numpy(), self.cov.numpy()
-        dof = self.prior_count + self.dim
-        mean_cov = dof * cov
-        quad_mean = (means[:, None, :] * means[:, :, None]).sum(axis=0)
+    def test_init(self):
+        means, scales, scale_mat, dof = self.means.numpy(), self.scales.numpy(), \
+            self.scale_mat.numpy(), self.dof.numpy()
+        inv_scale = np.linalg.inv(scale_mat)
+        quad_mean = ((scales[:, None] * means)[:, None, :] * means[:, :, None]).sum(axis=0)
         natural_params = np.hstack([
-            (self.prior_count * quad_mean + mean_cov).reshape(-1),
-            self.prior_count * means.reshape(-1),
-            np.ones(self.ncomps) * self.prior_count,
-            np.asarray([dof - self.dim])
+            (quad_mean + inv_scale).reshape(-1),
+            (scales[:, None] * means).reshape(-1),
+            scales,
+            dof - self.dim
         ])
-        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+        self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
                                      natural_params)
 
-    def test_kl_divergence(self):
-        model1 = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
-        model2 = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=self.tolplaces)
-
     def test_log_norm(self):
-        model = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = jointnormalwishart_log_norm(natural_params,
-                                               ncomp=self.ncomps)
-        self.assertAlmostEqual(model_log_norm, log_norm,
-                               places=self.tolplaces)
-
-    # We don't test the automatic differentiation of the
-    # log-normalizer. As long as the log-normlizer is correct, then
-    # pytorch should gives us the right gradient.
-    #def test_exp_sufficient_statistics(self):
-    #   pass
+        log_norm1 = self.model.log_norm(self.model.natural_hparams).numpy()
+        natural_hparams = self.model.natural_hparams.numpy()
+        log_norm2 = jointnormalwishart_log_norm(natural_hparams,
+                                                ncomp=self.ncomp)
+        self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
 
 
 ########################################################################
@@ -561,5 +550,5 @@ class TestGammaPrior(BaseTest):
 
 __all__ = [
     'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior',
-    'TestNormalWishartPrior'
+    'TestNormalWishartPrior', 'TestJointNormalWishartPrior'
 ]
