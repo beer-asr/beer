@@ -192,17 +192,89 @@ class DirichletPrior(ExpFamilyPrior):
             torch.lgamma(natural_hparams + 1).sum()
 
 
+class NormalGammaPrior(ExpFamilyPrior):
+    '''The Normal-Gamma density defined as:
+
+    .. math::
+       p(\\mu, \\lambda | m, \\kappa) = \\mathcal{N} \\big(\mu | m,
+        (\\kappa \; \\text{diag}(\\lambda))^{-1} \\big)
+        \\mathcal{G}(\\lambda | a, b)
+
+    where:
+
+      * :math:`\\mu`, :math:`\\lambda` are the mean and the diagonal
+        of the precision matrix of a multivariate normal density.
+      * :math:`m` is the hyper-parameter mean of the Normal density.
+      * :math:`\\kappa` is the hyper-parameter scale of the Normal
+        density.
+      * :math:`a` is the hyper-paramater shape of the Gamma density.
+      * :math:`b` is the hyper-parameter rate of the Gamma density.
+
+    Note:
+        Strictily speaking, the Normal-Gamma density is a
+        distribution over a 1 dimensional mean and precision parameter.
+        In our case, :math:`\\mu` and :math:`\\lambda` are a
+        D-dimensional vector and the diagonal of a :math:`D \\times D`
+        precision matrix respectively. The ``beer.NormalGammaPrior``
+        can be seen as the concatenation of :math:`D` indenpendent
+        "standard" Normal-Gamma densities.
+
+    '''
+
+    def __init__(self, mean, scale, shape, rate):
+        '''
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal.
+            scale (``torch.Tensor``): Scale of the Normal.
+            shape (``torch.Tensor``): Shape parameter of the Gamma.
+            rate (``torch.Tensor``): Rate parameter of the Gamma.
+
+        '''
+        natural_hparams = torch.tensor(torch.cat([
+            scale * (mean ** 2) + 2 * rate,
+            scale * mean,
+            scale,
+            2 * shape - 1
+        ]), requires_grad=True)
+        super().__init__(natural_hparams)
+
+    def split_sufficient_statistics(self, s_stats):
+        '''For the Dirichichlet density, this is simply the identity
+        function as there is only a single "group" of sufficient
+        statistics.
+
+        Args:
+            s_stats (``torch.Tensor``): Sufficients statistics to
+                split
+
+        Returns:
+            ``torch.Tensor``: ``s_stats`` unchanged.
+
+        '''
+        return tuple(s_stats.view(4, -1))
+
+    def log_norm(self, natural_hparams):
+        '''Log-normalizing function
+
+        Args:
+            natural_hparams (``torch.Tensor``): Natural hyper-parameters
+                of the distribution.
+
+        Returns:
+            ``torch.Tensor`` of size 1: Log-normalization value.
+
+        '''
+        np1, np2, np3, np4 = self.split_sufficient_statistics(natural_hparams)
+        lognorm = torch.lgamma(.5 * (np4 + 1))
+        lognorm += -.5 * torch.log(np3)
+        lognorm += -.5 * (np4 + 1) * torch.log(.5 * (np1 - ((np2**2) / np3)))
+        return torch.sum(lognorm)
+
+
 ########################################################################
 ## Densities log-normalizer functions.
 ########################################################################
-
-
-def _normalgamma_log_norm(natural_params):
-    np1, np2, np3, np4 = natural_params.view(4, -1)
-    lognorm = torch.lgamma(.5 * (np4 + 1))
-    lognorm += -.5 * torch.log(np3)
-    lognorm += -.5 * (np4 + 1) * torch.log(.5 * (np1 - ((np2**2) / np3)))
-    return torch.sum(lognorm)
 
 
 def _jointnormalgamma_split_nparams(natural_params, ncomp):
@@ -287,31 +359,6 @@ def kl_div(model1, model2):
     return _bregman_divergence(model2.log_norm, model1.log_norm,
                                model1.expected_sufficient_statistics,
                                model2.natural_params, model1.natural_params)
-
-
-def NormalGammaPrior(mean, precision, prior_counts):
-    '''Create a NormalGamma density function.
-
-    Args:
-        mean (Tensor): Mean of the Normal.
-        precision (Tensor): Mean of the Gamma.
-        prior_counts (float): Strength of the prior.
-
-    Returns:
-        A NormalGamma density.
-
-    '''
-    n_mean = mean
-    n_precision = prior_counts * torch.ones_like(n_mean)
-    g_shapes = precision * prior_counts
-    g_rates = prior_counts
-    natural_params = torch.tensor(torch.cat([
-        n_precision * (n_mean ** 2) + 2 * g_rates,
-        n_precision * n_mean,
-        n_precision,
-        2 * g_shapes - 1
-    ]), requires_grad=True)
-    #return ExpFamilyPrior(natural_params, _normalgamma_log_norm)
 
 
 def JointNormalGammaPrior(means, prec, prior_counts):

@@ -17,3 +17,7 @@ Concrete Priors
 .. autoclass:: beer.DirichletPrior
    :members:
    :special-members: __init__
+
+.. autoclass:: beer.NormalGammaPrior
+   :members:
+   :special-members: __init__
