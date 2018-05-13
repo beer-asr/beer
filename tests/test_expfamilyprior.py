@@ -450,39 +450,31 @@ class TestMatrixNormalPrior(BaseTest):
         self.mean = torch.randn(self.dim1, self.dim2).type(self.type)
         cov = (1 + torch.randn(self.dim1)).type(self.type)
         self.cov = torch.eye(self.dim1).type(self.type) + torch.ger(cov, cov)
+        self.model = beer.MatrixNormalPrior(self.mean, self.cov)
 
     def test_create(self):
-        model = beer.MatrixNormalPrior(self.mean, self.cov)
         mean, cov = self.mean.numpy(), self.cov.numpy()
         prec = np.linalg.inv(cov)
-        natural_params = np.hstack([
+        natural_hparams = np.hstack([
             -.5 * prec.reshape(-1),
             (prec @ mean).reshape(-1),
         ])
-        self.assertArraysAlmostEqual(model.natural_params.numpy(),
-                                     natural_params)
+        self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
+                                     natural_hparams)
 
     def test_exp_sufficient_statistics(self):
-        model = beer.MatrixNormalPrior(self.mean, self.cov)
-        model_s_stats = model.expected_sufficient_statistics.numpy()
-        natural_params = model.natural_params.numpy()
-        s_stats = matrixnormal_fc_grad_log_norm(natural_params, self.dim1,
+        s_stats1 = self.model.expected_sufficient_statistics.numpy()
+        natural_hparams = self.model.natural_hparams.numpy()
+        s_stats2 = matrixnormal_fc_grad_log_norm(natural_hparams, self.dim1,
                                                 self.dim2)
-        self.assertArraysAlmostEqual(model_s_stats, s_stats)
-
-    def test_kl_divergence(self):
-        model1 = beer.MatrixNormalPrior(self.mean, self.cov)
-        model2 = beer.MatrixNormalPrior(self.mean, self.cov)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(float(div), 0., places=self.tolplaces)
+        self.assertArraysAlmostEqual(s_stats1, s_stats2)
 
     def test_log_norm(self):
-        model = beer.MatrixNormalPrior(self.mean, self.cov)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = matrixnormal_fc_log_norm(natural_params, self.dim1,
+        log_norm1 = self.model.log_norm(self.model.natural_hparams).numpy()
+        natural_hparams = self.model.natural_hparams.numpy()
+        log_norm2 = matrixnormal_fc_log_norm(natural_hparams, self.dim1,
                                             self.dim2)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+        self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
 
 
 ########################################################################
@@ -504,37 +496,30 @@ class TestGammaPrior(BaseTest):
     def setUp(self):
         self.shape = (1 + torch.randn(1) ** 2).type(self.type)
         self.rate = (1 + torch.randn(1) ** 2).type(self.type)
+        self.model = beer.GammaPrior(self.shape, self.rate)
 
-    def test_create(self):
-        model = beer.GammaPrior(self.shape, self.rate)
+    def test_init(self):
         shape, rate = self.shape.numpy(), self.rate.numpy()
-        natural_params = np.hstack([shape - 1, -rate])
-        self.assertArraysAlmostEqual(model.natural_params.numpy(),
-                                     natural_params)
+        natural_hparams = np.hstack([shape - 1, -rate])
+        self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
+                                     natural_hparams)
 
     def test_exp_sufficient_statistics(self):
-        model = beer.GammaPrior(self.shape, self.rate)
-        model_s_stats = model.expected_sufficient_statistics.numpy()
-        natural_params = model.natural_params.numpy()
-        s_stats = gamma_grad_log_norm(natural_params)
-        self.assertArraysAlmostEqual(model_s_stats, s_stats)
-
-    def test_kl_divergence(self):
-        model1 = beer.GammaPrior(self.shape, self.rate)
-        model2 = beer.GammaPrior(self.shape, self.rate)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(float(div), 0., places=self.tolplaces)
+        s_stats1 = self.model.expected_sufficient_statistics.numpy()
+        natural_hparams = self.model.natural_hparams.numpy()
+        s_stats2 = gamma_grad_log_norm(natural_hparams)
+        self.assertArraysAlmostEqual(s_stats1, s_stats2)
 
     def test_log_norm(self):
-        model = beer.GammaPrior(self.shape, self.rate)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = gamma_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+        log_norm1 = float(self.model.log_norm(self.model.natural_hparams).numpy())
+        natural_hparams = self.model.natural_hparams.numpy()
+        log_norm2 = gamma_log_norm(natural_hparams)
+        self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
 
 
 __all__ = [
     'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior',
     'TestNormalWishartPrior', 'TestJointNormalWishartPrior',
-    'TestNormalFullCovariancePrior', 'TestNormalIsotropicCovariancePrior'
+    'TestNormalFullCovariancePrior', 'TestNormalIsotropicCovariancePrior',
+    'TestMatrixNormalPrior', 'TestGammaPrior'
 ]

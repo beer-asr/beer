@@ -41,3 +41,11 @@ Concrete Priors
 .. autoclass:: beer.NormalIsotropicCovariancePrior
    :members:
    :special-members: __init__
+
+.. autoclass:: beer.MatrixNormalPrior
+   :members:
+   :special-members: __init__
+
+.. autoclass:: beer.GammaPrior
+   :members:
+   :special-members: __init__

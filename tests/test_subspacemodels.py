@@ -14,9 +14,6 @@ import torch
 import beer
 from basetest import BaseTest
 
-from beer.expfamilyprior import _matrixnormal_fc_split_nparams
-
-
 ########################################################################
 # PPCA.
 ########################################################################
