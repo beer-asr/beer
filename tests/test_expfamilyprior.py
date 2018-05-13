@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './tests')
 
+import unittest
 import numpy as np
 from scipy.special import gammaln, psi
 import torch
@@ -31,31 +32,25 @@ class TestDirichletPrior(BaseTest):
 
     def setUp(self):
         dim = int(1 + torch.randint(100, (1, 1)).item())
-        self.prior_counts = (torch.randn(dim) ** 2).type(self.type)
+        self.concentrations = (torch.randn(dim) ** 2).type(self.type)
 
-    def test_create(self):
-        model = beer.DirichletPrior(self.prior_counts)
-        self.assertArraysAlmostEqual(model.natural_params.numpy(),
-                                     self.prior_counts.numpy() - 1)
+    def test_init(self):
+        model = beer.DirichletPrior(self.concentrations)
+        self.assertArraysAlmostEqual(model.natural_hparams.numpy(),
+                                     self.concentrations.numpy() - 1)
 
     def test_exp_sufficient_statistics(self):
-        model = beer.DirichletPrior(self.prior_counts)
+        model = beer.DirichletPrior(self.concentrations)
         model_s_stats = model.expected_sufficient_statistics.numpy()
-        natural_params = model.natural_params.numpy()
+        natural_params = model.natural_hparams.numpy()
         s_stats = dirichlet_grad_log_norm(natural_params)
         self.assertArraysAlmostEqual(model_s_stats, s_stats)
 
-    def test_kl_divergence(self):
-        model1 = beer.DirichletPrior(self.prior_counts)
-        model2 = beer.DirichletPrior(self.prior_counts)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=self.tolplaces)
-
     def test_log_norm(self):
-        model = beer.DirichletPrior(self.prior_counts)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = dirichlet_log_norm(natural_params)
+        model = beer.DirichletPrior(self.concentrations)
+        model_log_norm = model.log_norm(model.natural_hparams).numpy()
+        natural_hparams = model.natural_hparams.numpy()
+        log_norm = dirichlet_log_norm(natural_hparams)
         self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
 
 
@@ -598,8 +593,5 @@ class TestGammaPrior(BaseTest):
 
 
 __all__ = [
-    'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior',
-    'TestNormalWishartPrior', 'TestJointNormalWishartPrior',
-    'TestNormalFullCovariancePrior', 'TestNormalIsotropicCovariancePrior',
-    'TestMatrixNormalPrior', 'TestGammaPrior'
+    'TestDirichletPrior'
 ]

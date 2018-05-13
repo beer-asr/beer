@@ -1,11 +1,8 @@
-'''This module implements (conjugate) prior densities member of the
-Exponential Family of Distribution.
-
-'''
 
 # pylint: disable=E1102
 # pylint: disable=C0103
 
+import abc
 import math
 import torch
 import torch.autograd as ta
@@ -13,14 +10,6 @@ import torch.autograd as ta
 
 def _bregman_divergence(f_val1, f_val2, grad_f_val2, val1, val2):
     return f_val1 - f_val2 - grad_f_val2 @ (val1 - val2)
-
-
-def _exp_stats_and_log_norm(natural_params, log_norm_fn, args):
-    if natural_params.grad is not None:
-        natural_params.grad.zero_()
-    log_norm = log_norm_fn(natural_params, **args)
-    ta.backward(log_norm)
-    return natural_params.grad, log_norm
 
 
 # The following code compute the log of the determinant of a
@@ -33,13 +22,179 @@ def _logdet(mat):
     return 2 * torch.log(torch.diag(torch.potrf(mat))).sum()
 
 
+class ExpFamilyPrior(metaclass=abc.ABCMeta):
+    '''Abstract base class for (conjugate) priors from the exponential
+    family of distribution. Prior distributions subclassing
+    ``ExpFamilyPrior`` are of the form:
+
+    .. math::
+       p(x | \\theta ) = \\exp \\big\\{ \\eta(\\theta)^T T(x)
+        - A\\big(\\eta(\\theta) \\big) \\big\\}
+
+    where
+
+      * :math:`x` is the parameter for a model for which we want to
+        have a prior/posterior distribution.
+      * :math:`\\theta` is the set of *standard hyper-parameters*
+      * :math:`\\eta(\\theta)` is the vector of *natural
+        hyper-parameters*
+      * :math:`T(x)` are the sufficient statistics.
+      * :math:`A\\big(\\eta(\\theta) \\big)` is the log-normalizing
+        function
+
+    '''
+
+    # pylint: disable=W0102
+    def __init__(self, natural_hparams):
+        '''Initialize the base class.
+
+        Args:
+            natural_hparams (``torch.Tensor``): Natural hyper-parameters
+                of the distribution.
+
+        Note:
+            When subclassing ``beer.ExpFamilyPrior``, the child class
+            should call the ``__init__`` method.
+
+            .. code-block:: python
+
+               class MyPrior(beer.ExpFamilyPrior):
+
+                   def __init__(self, std_hparams):
+                        # Transfrom the standard hyper-parameters into
+                        # the natural hyper-parameters.
+                        natural_hparams = transform(std_hparams)
+                        super().__init__(natural_hparams)
+
+                   ...
+
+        '''
+        # This will be initialized when setting the natural params
+        # property.
+        self._expected_sufficient_statistics = None
+        self._natural_hparams = None
+
+        self.natural_hparams = natural_hparams
+
+    @property
+    def expected_sufficient_statistics(self):
+        '''``torch.Tensor``: Expected value of the sufficient statistics.
+
+        .. math::
+           \\langle T(x) \\rangle_{p(x | \\theta)} = \\nabla_{\\eta} \\;
+                A\\big(\\eta(\\theta) \\big)
+
+        '''
+        return self._expected_sufficient_statistics.data
+
+    @property
+    def natural_hparams(self):
+        '``torch.Tensor``: Natural hyper-parameters vector.'
+        return self._natural_hparams.data
+
+    @natural_hparams.setter
+    def natural_hparams(self, value):
+        if value.grad is not None:
+            value.grad.zero_()()
+        log_norm_value = self.log_norm(value)
+        ta.backward(log_norm_value)
+        self._expected_sufficient_statistics = value.grad
+        self._natural_hparams = value
+
+    @abc.abstractmethod
+    def split_sufficient_statistics(self, s_stats):
+        '''Abstract method to be implemented by subclasses of
+        ``beer.ExpFamilyPrior``.
+
+        Split the sufficient statistics vector into meaningful groups.
+        The notion of *meaningful group* depends on the type of the
+        subclass. For instance, the sufficient statistics of the
+        Normal density are :math:`T(x) = (x^2, x)^T` leading to
+        the following groups: :math:`x^2` and :math:`x`.
+
+        Args:
+            s_stats (``torch.Tensor``): Sufficients statistics to
+                split
+
+        Returns:
+            A ``torch.Tensor`` or a tuple of ``torch.Tensor`` depending
+            on the type of density.
+
+        '''
+        pass
+
+    @abc.abstractmethod
+    def log_norm(self, natural_hparams):
+        '''Abstract method to be implemented by subclasses of
+        ``beer.ExpFamilyPrior``.
+
+        Log-normalizing function of the density.
+
+        Args:
+            natural_hparams (``torch.Tensor``): Natural hyper-parameters
+                of the distribution.
+
+        Returns:
+            ``torch.Tensor`` of size 1: Log-normalization value.
+
+        '''
+        pass
+
+
+class DirichletPrior(ExpFamilyPrior):
+    '''The Dirichlet density defined as:
+
+    .. math::
+       p(x | \\alpha) = \\frac{\\Gamma(\\sum_{i=1}^K \\alpha_i)}
+            {\\prod_{i=1}^K \\Gamma(\\alpha_i)}
+            \\prod_{i=1}^K x_i^{\\alpha_i - 1}
+
+    where :math:`\\alpha` is the concentration parameter.
+
+    '''
+
+    def __init__(self, concentrations):
+        '''
+        Args:
+            concentrations (``torch.Tensor``): Concentration for each
+                dimension.
+        '''
+        natural_hparams = torch.tensor(concentrations - 1, requires_grad=True)
+        super().__init__(natural_hparams)
+
+    def split_sufficient_statistics(self, s_stats):
+        '''For the Dirichichlet density, this is simply the identity
+        function as there is only a single "group" of sufficient
+        statistics.
+
+        Args:
+            s_stats (``torch.Tensor``): Sufficients statistics to
+                split
+
+        Returns:
+            ``torch.Tensor``: ``s_stats`` unchanged.
+
+        '''
+        return s_stats
+
+    def log_norm(self, natural_hparams):
+        '''Log-normalizing function
+
+        Args:
+            natural_hparams (``torch.Tensor``): Natural hyper-parameters
+                of the distribution.
+
+        Returns:
+            ``torch.Tensor`` of size 1: Log-normalization value.
+
+        '''
+        return - torch.lgamma((natural_hparams + 1).sum()) +\
+            torch.lgamma(natural_hparams + 1).sum()
+
+
 ########################################################################
 ## Densities log-normalizer functions.
 ########################################################################
-
-def _dirichlet_log_norm(natural_params):
-    return - torch.lgamma((natural_params + 1).sum()) \
-        + torch.lgamma(natural_params + 1).sum()
 
 
 def _normalgamma_log_norm(natural_params):
@@ -124,47 +279,6 @@ def _jointnormalwishart_log_norm(natural_params, ncomp):
     lognorm += torch.lgamma(.5 * (np4 + dim + 1 - seq)).sum()
     return lognorm
 
-
-class ExpFamilyPrior:
-    '''General implementation of a member of a Exponential Family of
-    Distribution prior.
-
-    '''
-
-    # pylint: disable=W0102
-    def __init__(self, natural_params, log_norm_fn, args={}):
-        # This will be initialized when setting the natural params
-        # property.
-        self._log_norm = None
-        self._expected_sufficient_statistics = None
-        self._natural_params = None
-        self._args = args
-
-        self._log_norm_fn = log_norm_fn
-        self.natural_params = natural_params
-
-    @property
-    def expected_sufficient_statistics(self):
-        'Expected value of the sufficient statistics.'
-        return self._expected_sufficient_statistics.data
-
-    @property
-    def log_norm(self):
-        'Value of the log-partition function for the given parameters.'
-        return self._log_norm.data
-
-    @property
-    def natural_params(self):
-        'Natural parameters of the density'
-        return self._natural_params.data
-
-    @natural_params.setter
-    def natural_params(self, value):
-        self._expected_sufficient_statistics, self._log_norm = \
-            _exp_stats_and_log_norm(value, self._log_norm_fn, self._args)
-        self._natural_params = value
-
-
 def kl_div(model1, model2):
     '''Kullback-Leibler divergence between two densities of the same
     type.
@@ -173,22 +287,6 @@ def kl_div(model1, model2):
     return _bregman_divergence(model2.log_norm, model1.log_norm,
                                model1.expected_sufficient_statistics,
                                model2.natural_params, model1.natural_params)
-
-
-def DirichletPrior(prior_counts):
-    '''Create a Dirichlet density function.
-
-    Args:
-        prior_counts (Tensor): Prior counts for each category.
-
-    Returns:
-        A Dirichlet density.
-
-    '''
-    natural_params = prior_counts - 1
-
-    natural_params = torch.tensor(natural_params, requires_grad=True)
-    return ExpFamilyPrior(natural_params, _dirichlet_log_norm)
 
 
 def NormalGammaPrior(mean, precision, prior_counts):
@@ -213,7 +311,7 @@ def NormalGammaPrior(mean, precision, prior_counts):
         n_precision,
         2 * g_shapes - 1
     ]), requires_grad=True)
-    return ExpFamilyPrior(natural_params, _normalgamma_log_norm)
+    #return ExpFamilyPrior(natural_params, _normalgamma_log_norm)
 
 
 def JointNormalGammaPrior(means, prec, prior_counts):
@@ -243,8 +341,8 @@ def JointNormalGammaPrior(means, prec, prior_counts):
         (torch.ones(ncomp, dim) * prior_counts).type(means.type()).view(-1),
         2 * prec * prior_counts - 1
     ]), requires_grad=True)
-    return ExpFamilyPrior(natural_params, _jointnormalgamma_log_norm,
-                          args={'ncomp': means.size(0)})
+    #return ExpFamilyPrior(natural_params, _jointnormalgamma_log_norm,
+    #                      args={'ncomp': means.size(0)})
 
 
 def NormalWishartPrior(mean, cov, prior_counts):
@@ -271,7 +369,7 @@ def NormalWishartPrior(mean, cov, prior_counts):
         (torch.ones(1) * prior_counts).type(mean.type()),
         (torch.ones(1) * (dof - D)).type(mean.type())
     ]), requires_grad=True)
-    return ExpFamilyPrior(natural_params, _normalwishart_log_norm)
+    #return ExpFamilyPrior(natural_params, _normalwishart_log_norm)
 
 
 def JointNormalWishartPrior(means, cov, prior_counts):
@@ -305,8 +403,8 @@ def JointNormalWishartPrior(means, cov, prior_counts):
         (torch.ones(means.size(0)) * prior_counts).type(means.type()),
         (torch.ones(1) * (dof - (D))).type(means.type())
     ]), requires_grad=True)
-    return ExpFamilyPrior(natural_params, _jointnormalwishart_log_norm,
-                          args={'ncomp': means.size(0)})
+    #return ExpFamilyPrior(natural_params, _jointnormalwishart_log_norm,
+    #                      args={'ncomp': means.size(0)})
 
 
 ########################################################################
@@ -348,7 +446,7 @@ def NormalFullCovariancePrior(mean, cov):
         -.5 * prec.contiguous().view(-1),
         prec @ mean,
     ]), requires_grad=True)
-    return ExpFamilyPrior(natural_params, _normal_fc_log_norm)
+    #return ExpFamilyPrior(natural_params, _normal_fc_log_norm)
 
 
 ########################################################################
@@ -357,14 +455,14 @@ def NormalFullCovariancePrior(mean, cov):
 
 def _normal_iso_split_nparams(natural_params):
     np1, np2 = natural_params[0], natural_params[1:]
-    return np1, np2
+    #return np1, np2
 
 
 def _normal_iso_log_norm(natural_params):
     np1, np2 = _normal_iso_split_nparams(natural_params)
     inv_np1 = 1 / np1
     logdet = len(np2) * torch.log(-2 * np1)
-    return -.5 * logdet - .25 * inv_np1 * (np2[None, :] @ np2)
+    #return -.5 * logdet - .25 * inv_np1 * (np2[None, :] @ np2)
 
 
 def NormalIsotropicCovariancePrior(mean, variance):
@@ -383,7 +481,7 @@ def NormalIsotropicCovariancePrior(mean, variance):
         -.5 * prec,
         prec * mean,
     ]), requires_grad=True)
-    return ExpFamilyPrior(natural_params, _normal_iso_log_norm)
+    #return ExpFamilyPrior(natural_params, _normal_iso_log_norm)
 
 
 ########################################################################
@@ -393,7 +491,7 @@ def NormalIsotropicCovariancePrior(mean, variance):
 def _matrixnormal_fc_split_nparams(natural_params, dim1, dim2):
     np1, np2 = natural_params[:int(dim1 ** 2)].view(dim1, dim1), \
          natural_params[int(dim1 ** 2):].view(dim1, dim2)
-    return np1, np2
+    #return np1, np2
 
 
 def _matrixnormal_fc_log_norm(natural_params, dim1, dim2):
@@ -401,7 +499,7 @@ def _matrixnormal_fc_log_norm(natural_params, dim1, dim2):
     inv_np1 = torch.inverse(np1)
     #mat1, mat2 = np2.t() @ inv_np1, np2
     #trace_mat1_mat2 = mat1.view(-1) @ mat2.t().contiguous().view(-1)
-    return -.5 * dim2 * _logdet(-2 * np1) - .25 * torch.trace(np2.t() @ inv_np1 @ np2)
+    #return -.5 * dim2 * _logdet(-2 * np1) - .25 * torch.trace(np2.t() @ inv_np1 @ np2)
 
 
 def MatrixNormalPrior(mean, cov):
@@ -425,8 +523,8 @@ def MatrixNormalPrior(mean, cov):
         -.5 * prec.contiguous().view(-1),
         (prec @ mean).view(-1),
     ]), dtype=mean.dtype, requires_grad=True)
-    return ExpFamilyPrior(natural_params, _matrixnormal_fc_log_norm,
-                          args={'dim1': mean.size(0), 'dim2': mean.size(1)})
+    #return ExpFamilyPrior(natural_params, _matrixnormal_fc_log_norm,
+    #                      args={'dim1': mean.size(0), 'dim2': mean.size(1)})
 
 
 ########################################################################
@@ -452,4 +550,4 @@ def GammaPrior(shape, rate):
     '''
     natural_params = torch.tensor(torch.cat([shape - 1, -rate]),
                                   requires_grad=True)
-    return ExpFamilyPrior(natural_params, _gamma_log_norm)
+    #return ExpFamilyPrior(natural_params, _gamma_log_norm)
