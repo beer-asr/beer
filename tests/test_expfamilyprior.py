@@ -7,7 +7,6 @@ import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './tests')
 
-import unittest
 import numpy as np
 from scipy.special import gammaln, psi
 import torch
@@ -38,6 +37,10 @@ class TestDirichletPrior(BaseTest):
     def test_init(self):
         self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
                                      self.concentrations.numpy() - 1)
+
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
 
     def test_exp_sufficient_statistics(self):
         model_s_stats = self.model.expected_sufficient_statistics.numpy()
@@ -97,6 +100,10 @@ class TestNormalGammaPrior(BaseTest):
         ])
         self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
                                      natural_hparams)
+
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
 
     def test_exp_sufficient_statistics(self):
         model_s_stats = self.model.expected_sufficient_statistics.numpy()
@@ -160,6 +167,10 @@ class TestJointNormalGammaPrior(BaseTest):
         self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
                                      natural_hparams)
 
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
+
     def test_log_norm(self):
         log_norm1 = self.model.log_norm(self.model.natural_hparams).numpy()
         natural_hparams = self.model.natural_hparams.numpy()
@@ -217,7 +228,7 @@ class TestNormalWishartPrior(BaseTest):
         self.model = beer.NormalWishartPrior(self.mean, float(self.scale),
                                              self.scale_mat, float(self.dof))
 
-    def test_create(self):
+    def test_init(self):
         mean, scale, scale_mat, dof = self.mean.numpy(), self.scale.numpy(), \
             self.scale_mat.numpy(), self.dof.numpy()
         natural_hparams = np.hstack([
@@ -228,6 +239,10 @@ class TestNormalWishartPrior(BaseTest):
         ])
         self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
                                      natural_hparams)
+
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
 
     def test_exp_sufficient_statistics(self):
         s_stats1 = self.model.expected_sufficient_statistics.numpy()
@@ -296,6 +311,10 @@ class TestJointNormalWishartPrior(BaseTest):
         self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
                                      natural_params)
 
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
+
     def test_log_norm(self):
         log_norm1 = self.model.log_norm(self.model.natural_hparams).numpy()
         natural_hparams = self.model.natural_hparams.numpy()
@@ -339,7 +358,7 @@ class TestNormalFullCovariancePrior(BaseTest):
         self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
         self.model = beer.NormalFullCovariancePrior(self.mean, self.cov)
 
-    def test_create(self):
+    def test_init(self):
         mean, cov = self.mean.numpy(), self.cov.numpy()
         prec = np.linalg.inv(cov)
         natural_hparams = np.hstack([
@@ -348,6 +367,10 @@ class TestNormalFullCovariancePrior(BaseTest):
         ])
         self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
                                      natural_hparams)
+
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
 
     def test_exp_sufficient_statistics(self):
         s_stats1 = self.model.expected_sufficient_statistics.numpy()
@@ -394,7 +417,7 @@ class TestNormalIsotropicCovariancePrior(BaseTest):
         self.model = beer.NormalIsotropicCovariancePrior(self.mean,
                                                          self.var)
 
-    def test_create(self):
+    def test_init(self):
         mean, var = self.mean.numpy(), self.var.numpy()
         prec = 1 / var
         natural_hparams = np.hstack([
@@ -403,6 +426,10 @@ class TestNormalIsotropicCovariancePrior(BaseTest):
         ])
         self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
                                      natural_hparams)
+
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
 
     def test_exp_sufficient_statistics(self):
         s_stats1 = self.model.expected_sufficient_statistics.numpy()
@@ -452,7 +479,7 @@ class TestMatrixNormalPrior(BaseTest):
         self.cov = torch.eye(self.dim1).type(self.type) + torch.ger(cov, cov)
         self.model = beer.MatrixNormalPrior(self.mean, self.cov)
 
-    def test_create(self):
+    def test_init(self):
         mean, cov = self.mean.numpy(), self.cov.numpy()
         prec = np.linalg.inv(cov)
         natural_hparams = np.hstack([
@@ -462,18 +489,22 @@ class TestMatrixNormalPrior(BaseTest):
         self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
                                      natural_hparams)
 
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
+
     def test_exp_sufficient_statistics(self):
         s_stats1 = self.model.expected_sufficient_statistics.numpy()
         natural_hparams = self.model.natural_hparams.numpy()
         s_stats2 = matrixnormal_fc_grad_log_norm(natural_hparams, self.dim1,
-                                                self.dim2)
+                                                 self.dim2)
         self.assertArraysAlmostEqual(s_stats1, s_stats2)
 
     def test_log_norm(self):
         log_norm1 = self.model.log_norm(self.model.natural_hparams).numpy()
         natural_hparams = self.model.natural_hparams.numpy()
         log_norm2 = matrixnormal_fc_log_norm(natural_hparams, self.dim1,
-                                            self.dim2)
+                                             self.dim2)
         self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
 
 
@@ -503,6 +534,10 @@ class TestGammaPrior(BaseTest):
         natural_hparams = np.hstack([shape - 1, -rate])
         self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
                                      natural_hparams)
+
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
 
     def test_exp_sufficient_statistics(self):
         s_stats1 = self.model.expected_sufficient_statistics.numpy()

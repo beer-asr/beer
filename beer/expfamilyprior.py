@@ -1,6 +1,7 @@
 
 # pylint: disable=E1102
 # pylint: disable=C0103
+# pylint: disable=W1401
 
 import abc
 import math
@@ -10,15 +11,6 @@ import torch.autograd as ta
 
 def _bregman_divergence(f_val1, f_val2, grad_f_val2, val1, val2):
     return f_val1 - f_val2 - grad_f_val2 @ (val1 - val2)
-
-def kl_div(model1, model2):
-    '''Kullback-Leibler divergence between two densities of the same
-    type.
-
-    '''
-    return _bregman_divergence(model2.log_norm, model1.log_norm,
-                               model1.expected_sufficient_statistics,
-                               model2.natural_params, model1.natural_params)
 
 
 # The following code compute the log of the determinant of a
@@ -54,6 +46,33 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
 
     '''
 
+    @staticmethod
+    def kl_div(model1, model2):
+        '''Kullback-Leibler divergence between two densities of the same
+        type from the exponential familyt of distribution. For this
+        particular case, the divergence is defined as:
+
+        .. math::
+           D(q || p) = (\\eta_q - \\eta_p) \\langle T(x) \\rangle_q +
+                A(\\eta_p) - A(\\eta_q)
+
+        Args:
+            model1 (:any:`beer.ExpFamilyPrior`): First model.
+            model2 (:any:`beer.ExpFamilyPrior`): Second model.
+
+        Returns
+            float: Value of te KL. divergence between these two models.
+
+        '''
+        # pylint: disable=W0212
+        return _bregman_divergence(
+            model2._log_norm_value,
+            model1._log_norm_value,
+            model1.expected_sufficient_statistics,
+            model2.natural_hparams,
+            model1.natural_hparams
+        )
+
     # pylint: disable=W0102
     def __init__(self, natural_hparams):
         '''Initialize the base class.
@@ -83,6 +102,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         # property.
         self._expected_sufficient_statistics = None
         self._natural_hparams = None
+        self._log_norm_value = None
 
         self.natural_hparams = natural_hparams
 
@@ -106,8 +126,8 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
     def natural_hparams(self, value):
         if value.grad is not None:
             value.grad.zero_()()
-        log_norm_value = self.log_norm(value)
-        ta.backward(log_norm_value)
+        self._log_norm_value = self.log_norm(value)
+        ta.backward(self._log_norm_value)
         self._expected_sufficient_statistics = value.grad
         self._natural_hparams = value
 
@@ -606,13 +626,6 @@ class NormalFullCovariancePrior(ExpFamilyPrior):
             .25 * ((hnp2[None, :] @ inv_hnp1) @ hnp2)[0]
 
 
-def _normal_iso_log_norm(natural_params):
-    np1, np2 = _normal_iso_split_nparams(natural_params)
-    inv_np1 = 1 / np1
-    logdet = len(np2) * torch.log(-2 * np1)
-    #return -.5 * logdet - .25 * inv_np1 * (np2[None, :] @ np2)
-
-
 class NormalIsotropicCovariancePrior(ExpFamilyPrior):
     '''Normal density prior with an isotropic covariance matrix:
 
@@ -672,14 +685,6 @@ class NormalIsotropicCovariancePrior(ExpFamilyPrior):
         inv_hnp1 = 1 / hnp1
         logdet = len(hnp2) * torch.log(-2 * hnp1)
         return -.5 * logdet - .25 * inv_hnp1 * (hnp2[None, :] @ hnp2)
-
-
-def _matrixnormal_fc_log_norm(natural_params, dim1, dim2):
-    np1, np2 = _matrixnormal_fc_split_nparams(natural_params, dim1, dim2)
-    inv_np1 = torch.inverse(np1)
-    #mat1, mat2 = np2.t() @ inv_np1, np2
-    #trace_mat1_mat2 = mat1.view(-1) @ mat2.t().contiguous().view(-1)
-    #return -.5 * dim2 * _logdet(-2 * np1) - .25 * torch.trace(np2.t() @ inv_np1 @ np2)
 
 
 class MatrixNormalPrior(ExpFamilyPrior):
@@ -769,7 +774,7 @@ class GammaPrior(ExpFamilyPrior):
             rate (float): Rate hyper-parameter.
         '''
         natural_hparams = torch.tensor(torch.cat([shape - 1, -rate]),
-                                    requires_grad=True)
+                                       requires_grad=True)
         super().__init__(natural_hparams)
 
     def split_sufficient_statistics(self, s_stats):

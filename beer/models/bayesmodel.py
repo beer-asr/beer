@@ -4,8 +4,6 @@
 import abc
 import torch
 
-from ..expfamilyprior import kl_div
-
 
 class BayesianParameter:
     '''Bayesian parameter is a parameter defined by a prior and a
