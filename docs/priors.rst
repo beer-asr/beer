@@ -1,8 +1,15 @@
-Priors
-======
+Conjugate Priors
+================
 
-Most of the models in ``beer`` uses the conjugacy property of the
-exponential family of distribution.
+Most of the models in ``beer`` are *Bayesian* in the sense that they
+have a distribution over their parameter, usually called the *prior*.
+Also, these models are trained with the Variable Bayes Inference
+framework leading to a *posterior* distribution over the
+aforementioned parameters. The conjugate priors are special distribution
+that have the particularity (given a certain type of model) to have the
+same parametric from as the posterior counterpart. The prior
+distribution object described here can thus be used either as prior
+and posterior.
 
 Base Prior
 ----------
@@ -13,6 +20,28 @@ Base Prior
 
 Concrete Priors
 ---------------
+
++---------------------------------------------+
+| Implemented priors                          |
++=============================================+
+| :any:`beer.DirichletPrior`                  |
++---------------------------------------------+
+| :any:`beer.NormalGammaPrior`                |
++---------------------------------------------+
+| :any:`beer.JointNormalGammaPrior`           |
++---------------------------------------------+
+| :any:`beer.NormalWishartPrior`              |
++---------------------------------------------+
+| :any:`beer.JointNormalWishartPrior`         |
++---------------------------------------------+
+| :any:`beer.NormalFullCovariancePrior`       |
++---------------------------------------------+
+| :any:`beer.NormalIsotropicCovariancePrior`  |
++---------------------------------------------+
+| :any:`beer.MatrixNormalPrior`               |
++---------------------------------------------+
+| :any:`beer.GammaPrior`                      |
++---------------------------------------------+
 
 .. autoclass:: beer.DirichletPrior
    :members:
