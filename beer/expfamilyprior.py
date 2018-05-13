@@ -18,7 +18,8 @@ def _bregman_divergence(f_val1, f_val2, grad_f_val2, val1, val2):
 # Note: the hook is necessary to correct the gradient as pytorch
 # will return upper triangular gradient.
 def _logdet(mat):
-    mat.register_hook(lambda grad: .5 * (grad + grad.t()))
+    if mat.requires_grad:
+        mat.register_hook(lambda grad: .5 * (grad + grad.t()))
     return 2 * torch.log(torch.diag(torch.potrf(mat))).sum()
 
 
@@ -196,7 +197,7 @@ class NormalGammaPrior(ExpFamilyPrior):
     '''The Normal-Gamma density defined as:
 
     .. math::
-       p(\\mu, \\lambda | m, \\kappa) = \\mathcal{N} \\big(\mu | m,
+       p(\\mu, \\lambda | m, \\kappa, a, b) = \\mathcal{N} \\big(\mu | m,
         (\\kappa \; \\text{diag}(\\lambda))^{-1} \\big)
         \\mathcal{G} \\big( \\lambda | a, b \\big)
 
@@ -211,7 +212,7 @@ class NormalGammaPrior(ExpFamilyPrior):
       * :math:`b` is the hyper-parameter rate of the Gamma density.
 
     Note:
-        Strictily speaking, the Normal-Gamma density is a
+        Strictly speaking, the Normal-Gamma density is a
         distribution over a 1 dimensional mean and precision parameter.
         In our case, :math:`\\mu` and :math:`\\lambda` are a
         D-dimensional vector and the diagonal of a :math:`D \\times D`
@@ -270,19 +271,23 @@ class NormalGammaPrior(ExpFamilyPrior):
 
 
 class JointNormalGammaPrior(ExpFamilyPrior):
-    '''Joint NormalGamma defined is the distribution over a set of
+    '''Joint NormalGamma is the distribution over a set of
     :math:`D` dimensional mean vectors :math:`M = (\\mu_1, ...,
     \\mu_K)^T` and the diagonal of a precision matrix :math:`\\lambda`.
     It is defined as:
 
     .. math::
-       p(M, \\lambda | ) = \\big\\lbrack \\prod_{i=1}^K
+       p(M, \\lambda | M, \\kappa, a, b) = \\big\\lbrack \\prod_{i=1}^K
             \\mathcal{N} \\big(\\mu_i | m_i, (\\kappa_i \;
             \\text{diag}(\\lambda))^{-1} \\big)  \\big\\rbrack
             \\mathcal{G} \\big( \\lambda | a, b \\big)
 
     The parameters are defined in the same way as for the
     :any:`beer.NormalGammaPrior`
+
+    Attributes:
+        dim (int): Dimension of the mean parameter.
+        ncomp (int): Number of Normal densities.
     '''
 
     def __init__(self, means, scales, shape, rate):
@@ -343,33 +348,91 @@ class JointNormalGammaPrior(ExpFamilyPrior):
         return lognorm
 
 
+class NormalWishartPrior(ExpFamilyPrior):
+    '''The Normal-Wishart density defined as:
+
+    .. math::
+       p(\\mu, \\Lambda | m, \\kappa, W, \\nu) = \\mathcal{N} \\big(\mu |
+        m, (\\kappa \; \\Lambda)^{-1} \\big)
+        \\mathcal{W} \\big( \\Lambda | w, \\nu \\big)
+
+    where:
+
+      * :math:`\\mu`, :math:`\\Lambda` are the mean and the precision
+        omatrix of a multivariate normal density.
+      * :math:`m` is the hyper-parameter mean of the Normal density.
+      * :math:`\\kappa` is the hyper-parameter scale of the Normal
+        density (scalar).
+      * :math:`W` is the hyper-paramater scale matrix of the Wishart
+        density.
+      * :math:`\\nu` is the hyper-parameter degree of freedom of the
+        Wishart density.
+
+    Attributes:
+        dim (int): Dimension of the mean parameter.
+
+    '''
+
+    def __init__(self, mean, scale, scale_matrix, dof):
+        '''
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal.
+            scale (float): Scale of the normal.
+            scale_matrix (``torch.Tensor``): Scale matrix of the
+                Wishart.
+            dof (float): Degree of freedom of the Wishart.
+        '''
+        self.dim = mean.size(0)
+        inv_scale = torch.inverse(scale_matrix)
+        natural_hparams = torch.tensor(torch.cat([
+            (scale * torch.ger(mean, mean) + inv_scale).view(-1),
+            scale * mean,
+            (torch.ones(1) * scale).type(mean.type()),
+            (torch.ones(1) * (dof - self.dim)).type(mean.type())
+        ]), requires_grad=True)
+        super().__init__(natural_hparams)
+
+    def split_sufficient_statistics(self, s_stats):
+        '''Split the sufficient statistics into 4 groups.
+
+        Args:
+            s_stats (``torch.Tensor``): Sufficients statistics to
+                split
+
+        Returns:
+            ``torch.Tensor``: tuple of sufficient statistics.
+
+        '''
+        grp1, grp2 = s_stats[:self.dim ** 2].view(self.dim, self.dim), \
+            s_stats[self.dim ** 2:-2]
+        grp3, grp4 = s_stats[-2:]
+        return grp1, grp2, grp3, grp4
+
+    def log_norm(self, natural_hparams):
+        '''Log-normalizing function
+
+        Args:
+            natural_hparams (``torch.Tensor``): Natural hyper-parameters
+                of the distribution.
+
+        Returns:
+            ``torch.Tensor`` of size 1: Log-normalization value.
+
+        '''
+        hnp1, hnp2, hnp3, hnp4 = self.split_sufficient_statistics(
+            natural_hparams)
+        lognorm = .5 * ((hnp4 + self.dim) * self.dim * math.log(2) - \
+            self.dim * torch.log(hnp3))
+        lognorm += -.5 * (hnp4 + self.dim) * \
+            _logdet(hnp1 - torch.ger(hnp2, hnp2) / hnp3)
+        seq = torch.arange(1, self.dim + 1, 1).type(natural_hparams.type())
+        lognorm += torch.lgamma(.5 * (hnp4 + self.dim + 1 - seq)).sum()
+        return lognorm
+
+
 ########################################################################
 # Densities log-normalizer functions.
 ########################################################################
-
-
-def _jointnormalgamma_split_nparams(natural_params, ncomp):
-    # Retrieve the 4 natural parameters organized as
-    # follows:
-    #   [ np1_1, ..., np1_D, np2_1_1, ..., np2_k_D, np3_1, ..., np3_1_D,
-    #     np3_k_D, np4_1, ..., np4_D]
-    dim = len(natural_params) // (2 + 2 * ncomp)
-    np1 = natural_params[:dim]
-    np2s = natural_params[dim: dim + dim * ncomp]
-    np3s = natural_params[dim + dim * ncomp: dim + 2 * dim * ncomp]
-    np4 = natural_params[dim + 2 * dim * ncomp:]
-    return np1, np2s.view(ncomp, dim), np3s.view(ncomp, dim), np4, dim
-
-
-def _jointnormalgamma_log_norm(natural_params, ncomp):
-    np1, np2s, np3s, np4, dim = _jointnormalgamma_split_nparams(natural_params,
-                                                                ncomp)
-    lognorm = torch.lgamma(.5 * (np4 + 1)).sum()
-    lognorm += -.5 * torch.log(np3s).sum()
-    tmp = ((np2s ** 2) / np3s).view(ncomp, dim)
-    lognorm += torch.sum(-.5 * (np4 + 1) * \
-        torch.log(.5 * (np1 - tmp.sum(dim=0))))
-    return lognorm
 
 
 def _normalwishart_split_nparams(natural_params):
@@ -430,33 +493,6 @@ def kl_div(model1, model2):
     return _bregman_divergence(model2.log_norm, model1.log_norm,
                                model1.expected_sufficient_statistics,
                                model2.natural_params, model1.natural_params)
-
-
-def NormalWishartPrior(mean, cov, prior_counts):
-    '''Create a NormalWishart density function.
-
-    Args:
-        mean (Tensor): Expected mean of the Normal.
-        cov (Tensor): Expected covariance matrix.
-        prior_counts (float): Strength of the prior.
-
-    Returns:
-        A NormalWishart density.
-
-    '''
-    if len(cov.size()) != 2:
-        raise ValueError('Expect a (D x D) matrix')
-
-    D = mean.size(0)
-    dof = prior_counts + D
-    V = dof * cov
-    natural_params = torch.tensor(torch.cat([
-        (prior_counts * torch.ger(mean, mean) + V).view(-1),
-        prior_counts * mean,
-        (torch.ones(1) * prior_counts).type(mean.type()),
-        (torch.ones(1) * (dof - D)).type(mean.type())
-    ]), requires_grad=True)
-    #return ExpFamilyPrior(natural_params, _normalwishart_log_norm)
 
 
 def JointNormalWishartPrior(means, cov, prior_counts):

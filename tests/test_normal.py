@@ -14,8 +14,6 @@ import torch
 import beer
 from beer import NormalGammaPrior
 from beer import NormalWishartPrior
-from beer.expfamilyprior import _jointnormalgamma_split_nparams
-from beer.expfamilyprior import _jointnormalwishart_split_nparams
 from basetest import BaseTest
 
 

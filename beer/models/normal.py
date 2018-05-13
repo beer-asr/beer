@@ -28,9 +28,6 @@ import torch
 from .bayesmodel import BayesianParameter
 from .bayesmodel import BayesianParameterSet
 from .bayesmodel import BayesianModel
-from ..expfamilyprior import _normalwishart_split_nparams
-from ..expfamilyprior import _jointnormalwishart_split_nparams
-from ..expfamilyprior import _jointnormalgamma_split_nparams
 
 
 #######################################################################

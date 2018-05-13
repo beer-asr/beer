@@ -209,44 +209,37 @@ class TestNormalWishartPrior(BaseTest):
     def setUp(self):
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
         self.mean = torch.randn(self.dim).type(self.type)
-        cov = (1 + torch.randn(self.dim)).type(self.type)
-        self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+        self.scale = (1 + torch.randn(1)**2).type(self.type)
+        scale_mat = (1 + torch.randn(self.dim)).type(self.type)
+        self.scale_mat = torch.eye(self.dim).type(self.type) + \
+            torch.ger(scale_mat, scale_mat)
+        self.dof = (self.dim + 100 + torch.randn(1)**2).type(self.type)
+        self.model = beer.NormalWishartPrior(self.mean, float(self.scale),
+                                             self.scale_mat, float(self.dof))
 
     def test_create(self):
-        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        mean, cov = self.mean.numpy(), self.cov.numpy()
-        dof = self.prior_count + self.dim
-        mean_cov = dof * cov
-        natural_params = np.hstack([
-            (self.prior_count * np.outer(mean, mean) + mean_cov).reshape(-1),
-            self.prior_count * mean,
-            np.asarray([self.prior_count]),
-            np.asarray([dof - self.dim])
+        mean, scale, scale_mat, dof = self.mean.numpy(), self.scale.numpy(), \
+            self.scale_mat.numpy(), self.dof.numpy()
+        natural_hparams = np.hstack([
+            (scale * np.outer(mean, mean) + np.linalg.inv(scale_mat)).reshape(-1),
+            scale * mean,
+            self.scale,
+            dof - self.dim
         ])
-        self.assertArraysAlmostEqual(model.natural_params.numpy(),
-                                     natural_params)
+        self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
+                                     natural_hparams)
 
     def test_exp_sufficient_statistics(self):
-        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        model_s_stats = model.expected_sufficient_statistics.numpy()
-        natural_params = model.natural_params.numpy()
-        s_stats = normalwishart_grad_log_norm(natural_params)
-        self.assertArraysAlmostEqual(model_s_stats, s_stats)
-
-    def test_kl_divergence(self):
-        model1 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        model2 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=self.tolplaces)
+        s_stats1 = self.model.expected_sufficient_statistics.numpy()
+        natural_hparams = self.model.natural_hparams.numpy()
+        s_stats2 = normalwishart_grad_log_norm(natural_hparams)
+        self.assertArraysAlmostEqual(s_stats1, s_stats2)
 
     def test_log_norm(self):
-        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = normalwishart_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm,
-                               places=self.tolplaces)
+        log_norm1 = self.model.log_norm(self.model.natural_hparams).numpy()
+        natural_hparams = self.model.natural_hparams.numpy()
+        log_norm2 = normalwishart_log_norm(natural_hparams)
+        self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
 
 
 ########################################################################
@@ -567,5 +560,6 @@ class TestGammaPrior(BaseTest):
 
 
 __all__ = [
-    'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior'
+    'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior',
+    'TestNormalWishartPrior'
 ]
