@@ -138,44 +138,33 @@ def jointnormalgamma_log_norm(natural_params, ncomp):
 class TestJointNormalGammaPrior(BaseTest):
 
     def setUp(self):
-        self.ncomps = int(1 + torch.randint(100, (1, 1)).item())
+        self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
-        self.means = torch.randn((self.ncomps, self.dim)).type(self.type)
-        self.precision = (1 + torch.randn(self.dim)**2).type(self.type)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+        self.means = torch.randn((self.ncomp, self.dim)).type(self.type)
+        self.scales = (1 + torch.randn((self.ncomp, self.dim))**2).type(
+            self.type)
+        self.shape = (1 + torch.randn(self.dim)**2).type(self.type)
+        self.rate = (1 + torch.randn(self.dim)**2).type(self.type)
+        self.model = beer.JointNormalGammaPrior(self.means, self.scales,
+                                                self.shape, self.rate)
 
-    def test_create(self):
-        model = beer.JointNormalGammaPrior(self.means, self.precision,
-                                           self.prior_count)
-        means, prec, prior_count = self.means.numpy(), \
-            self.precision.numpy(), self.prior_count
-        dim = self.dim
-        ncomps = self.ncomps
-        natural_params = np.hstack([
-            (prior_count * (means**2).sum(axis=0) + 2 * prior_count).reshape(-1),
-            (prior_count * means).reshape(-1),
-            (np.ones((ncomps, dim)) * prior_count).reshape(-1),
-            2 * prec * prior_count - 1
+    def test_init(self):
+        means, scales, shape, rate = self.means.numpy(), self.scales.numpy(), \
+            self.shape.numpy(), self.rate.numpy()
+        natural_hparams = np.hstack([
+            ((scales * means**2).sum(axis=0) + 2 * rate).reshape(-1),
+            (scales * means).reshape(-1),
+            (scales).reshape(-1),
+            2 * shape - 1
         ])
-        self.assertArraysAlmostEqual(model.natural_params.numpy(),
-                                     natural_params)
-
-    def test_kl_divergence(self):
-        model1 = beer.JointNormalGammaPrior(self.means, self.precision,
-                                            self.prior_count)
-        model2 = beer.JointNormalGammaPrior(self.means, self.precision,
-                                            self.prior_count)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(float(div), 0., places=self.tolplaces)
+        self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
+                                     natural_hparams)
 
     def test_log_norm(self):
-        model = beer.JointNormalGammaPrior(self.means, self.precision,
-                                           self.prior_count)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = jointnormalgamma_log_norm(natural_params, ncomp=self.ncomps)
-        self.assertAlmostEqual(model_log_norm, log_norm,
-                               places=self.tolplaces)
+        log_norm1 = self.model.log_norm(self.model.natural_hparams).numpy()
+        natural_hparams = self.model.natural_hparams.numpy()
+        log_norm2 = jointnormalgamma_log_norm(natural_hparams, ncomp=self.ncomp)
+        self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
 
 
 ########################################################################
@@ -578,5 +567,5 @@ class TestGammaPrior(BaseTest):
 
 
 __all__ = [
-    'TestDirichletPrior', 'TestNormalGammaPrior'
+    'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior'
 ]

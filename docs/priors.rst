@@ -21,3 +21,7 @@ Concrete Priors
 .. autoclass:: beer.NormalGammaPrior
    :members:
    :special-members: __init__
+
+.. autoclass:: beer.JointNormalGammaPrior
+   :members:
+   :special-members: __init__
