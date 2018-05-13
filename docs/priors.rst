@@ -33,3 +33,11 @@ Concrete Priors
 .. autoclass:: beer.JointNormalWishartPrior
    :members:
    :special-members: __init__
+
+.. autoclass:: beer.NormalFullCovariancePrior
+   :members:
+   :special-members: __init__
+
+.. autoclass:: beer.NormalIsotropicCovariancePrior
+   :members:
+   :special-members: __init__

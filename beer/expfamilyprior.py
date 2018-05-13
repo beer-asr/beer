@@ -512,25 +512,6 @@ class JointNormalWishartPrior(ExpFamilyPrior):
         return lognorm
 
 
-
-########################################################################
-# Densities log-normalizer functions.
-########################################################################
-
-def kl_div(model1, model2):
-    '''Kullback-Leibler divergence between two densities of the same
-    type.
-
-    '''
-    return _bregman_divergence(model2.log_norm, model1.log_norm,
-                               model1.expected_sufficient_statistics,
-                               model2.natural_params, model1.natural_params)
-
-
-########################################################################
-# Normal Prior (full cov).
-########################################################################
-
 def _normal_fc_split_nparams(natural_params):
     # We need to retrieve the 2 natural parameters organized as
     # follows:
@@ -550,32 +531,70 @@ def _normal_fc_log_norm(natural_params):
     return -.5 * _logdet(-2 * np1) - .25 * ((np2[None, :] @ inv_np1) @ np2)[0]
 
 
-def NormalFullCovariancePrior(mean, cov):
-    '''Create a Normal density prior.
+class NormalFullCovariancePrior(ExpFamilyPrior):
+    '''Normal density prior:
 
-    Args:
-        mean (Tensor): Expected mean.
-        cov (Tensor): Expected covariance of the mean.
+    .. math::
+       p(\\mu | m, \\Sigma) = \\mathcal{N} \\big( \\mu | m, \\Sigma
+            \\big)
 
-    Returns:
-        ``NormalFullCovariancePrior``: A Normal density.
+    where:
+
+      * :math:`\\mu` is the mean of multivariate Normal density.
+      * :math:`m` is the hyper-parameter mean of the Normal prior.
+      * :math:`\\Sigma` is the hyper-parameter covariance matrix of the
+         Normal prior.
+
+    Attributes:
+        dim (int): Dimension of the mean parameter.
 
     '''
-    prec = torch.inverse(cov)
-    natural_params = torch.tensor(torch.cat([
-        -.5 * prec.contiguous().view(-1),
-        prec @ mean,
-    ]), requires_grad=True)
-    #return ExpFamilyPrior(natural_params, _normal_fc_log_norm)
 
+    def __init__(self, mean, cov):
+        '''
+        Args:
+            mean (``torch.Tensor``): Hyper-parameter mean.
+            cov (``torch.Tensor``): Hyper-parameter covariance matrix.
+        '''
+        self.dim = len(mean)
+        prec = torch.inverse(cov)
+        natural_hparams = torch.tensor(torch.cat([
+            -.5 * prec.contiguous().view(-1),
+            prec @ mean,
+        ]), requires_grad=True)
+        super().__init__(natural_hparams)
 
-########################################################################
-# Normal Prior (isotropic cov).
-########################################################################
+    def split_sufficient_statistics(self, s_stats):
+        '''Split the sufficient statistics into 2 groups.
 
-def _normal_iso_split_nparams(natural_params):
-    np1, np2 = natural_params[0], natural_params[1:]
-    #return np1, np2
+        Args:
+            s_stats (``torch.Tensor``): Sufficients statistics to
+                split
+
+        Returns:
+            ``torch.Tensor``: tuple of sufficient statistics.
+
+        '''
+        grp1, grp2 = s_stats[:self.dim ** 2].view(self.dim, self.dim), \
+            s_stats[self.dim ** 2:]
+        return grp1, grp2
+
+    def log_norm(self, natural_hparams):
+        '''Log-normalizing function
+
+        Args:
+            natural_hparams (``torch.Tensor``): Natural hyper-parameters
+                of the distribution.
+
+        Returns:
+            ``torch.Tensor`` of size 1: Log-normalization value.
+
+        '''
+        hnp1, hnp2 = self.split_sufficient_statistics(
+            natural_hparams)
+        inv_hnp1 = torch.inverse(hnp1)
+        return -.5 * _logdet(-2 * hnp1) - \
+            .25 * ((hnp2[None, :] @ inv_hnp1) @ hnp2)[0]
 
 
 def _normal_iso_log_norm(natural_params):
@@ -585,23 +604,90 @@ def _normal_iso_log_norm(natural_params):
     #return -.5 * logdet - .25 * inv_np1 * (np2[None, :] @ np2)
 
 
-def NormalIsotropicCovariancePrior(mean, variance):
-    '''Create a Normal density prior with isotropic covariance matrix.
+class NormalIsotropicCovariancePrior(ExpFamilyPrior):
+    '''Normal density prior with an isotropic covariance matrix:
 
-    Args:
-        mean (Tensor): Expected mean.
-        variance (Tensor): The variance parameter.
+    .. math::
+       p(\\mu | m, \\tau) = \\mathcal{N} \\big( \\mu | m, \\tau I \\big)
 
-    Returns:
-        ``NormalIsotropicPrior``: A Normal density.
+    where:
+
+      * :math:`\\mu` is the mean of multivariate Normal density.
+      * :math:`m` is the hyper-parameter mean of the Normal prior.
+      * :math:`\\tau` is the hyper-parameter variance of the
+        Normal prior.
+
+    Attributes:
+        dim (int): Dimension of the mean parameter.
+    '''
+
+    def __init__(self, mean, variance):
+        '''
+        Args:
+            mean (``torch.Tensor``): Mean hyper-parameter of the prior.
+            variance (float): Globale variance hyper-parameter of the
+                prior.
+
+        '''
+        prec = 1 / variance
+        natural_hparams = torch.tensor(torch.cat([
+            -.5 * prec,
+            prec * mean,
+        ]), requires_grad=True)
+        super().__init__(natural_hparams)
+
+    def split_sufficient_statistics(self, s_stats):
+        '''Split the sufficient statistics into 2 groups.
+
+        Args:
+            s_stats (``torch.Tensor``): Sufficients statistics to
+                split
+
+        Returns:
+            ``torch.Tensor``: tuple of sufficient statistics.
+
+        '''
+        return s_stats[0], s_stats[1:]
+
+    def log_norm(self, natural_hparams):
+        '''Log-normalizing function
+
+        Args:
+            natural_hparams (``torch.Tensor``): Natural hyper-parameters
+                of the distribution.
+
+        Returns:
+            ``torch.Tensor`` of size 1: Log-normalization value.
+
+        '''
+        hnp1, hnp2 = self.split_sufficient_statistics(natural_hparams)
+        inv_hnp1 = 1 / hnp1
+        logdet = len(hnp2) * torch.log(-2 * hnp1)
+        return -.5 * logdet - .25 * inv_hnp1 * (hnp2[None, :] @ hnp2)
+
+
+########################################################################
+# Densities log-normalizer functions.
+########################################################################
+
+def kl_div(model1, model2):
+    '''Kullback-Leibler divergence between two densities of the same
+    type.
 
     '''
-    prec = 1 / variance
-    natural_params = torch.tensor(torch.cat([
-        -.5 * prec,
-        prec * mean,
-    ]), requires_grad=True)
-    #return ExpFamilyPrior(natural_params, _normal_iso_log_norm)
+    return _bregman_divergence(model2.log_norm, model1.log_norm,
+                               model1.expected_sufficient_statistics,
+                               model2.natural_params, model1.natural_params)
+
+
+########################################################################
+# Normal Prior (full cov).
+########################################################################
+
+
+########################################################################
+# Normal Prior (isotropic cov).
+########################################################################
 
 
 ########################################################################
