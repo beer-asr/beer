@@ -22,6 +22,7 @@ import test_mixture
 import test_normal
 import test_subspacemodels
 import test_utils
+import test_vbi
 
 
 testcases = {
@@ -31,7 +32,8 @@ testcases = {
     'test_mixture': test_mixture,
     'test_normal': test_normal,
     'test_subspacemodels': test_subspacemodels,
-    'test_utils': test_utils
+    'test_utils': test_utils,
+    'test_vbi': test_vbi
 }
 
 
@@ -64,7 +66,8 @@ def run():
             test_mixture,
             test_normal,
             #test_subspacemodels,
-            test_utils
+            test_utils,
+            test_vbi
         ]
 
     suite = unittest.TestSuite()

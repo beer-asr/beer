@@ -44,9 +44,9 @@ class EvidenceLowerBoundInstance:
         '''
         for parameter in self._parameters:
             acc_stats = self._acc_stats[parameter]
-            parameter.natural_grad += parameter.prior.natural_params +  \
+            parameter.natural_grad += parameter.prior.natural_hparams +  \
                 self._scale * acc_stats - \
-                parameter.posterior.natural_params
+                parameter.posterior.natural_hparams
 
 
 class EvidenceLowerBound:
@@ -156,8 +156,8 @@ class BayesianModelOptimizer:
         if self._std_optim is not None:
             self._std_optim.step()
         for parameter in self._parameters:
-            parameter.posterior.natural_params = ta.Variable(
-                parameter.posterior.natural_params + \
+            parameter.posterior.natural_hparams = ta.Variable(
+                parameter.posterior.natural_hparams + \
                 self._lrate * parameter.natural_grad,
                 requires_grad=True
             )
