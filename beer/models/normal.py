@@ -41,6 +41,19 @@ class NormalDiagonalCovariance(BayesianModel):
     Attributes:
         mean (``torch.Tensor``): Expected mean.
         cov (``torch.Tensor``): Expected (diagonal) covariance matrix.
+
+    Example:
+        >>> # Create a Normal with zero mean and identity covariamce
+        >>> # matrix.
+        >>> mean = torch.zeros(2)
+        >>> diav_cov = torch.ones(2)
+        >>> normal = beer.NormalDiagonalCovariance.create(mean, diag_cov)
+        >>> normal.mean
+        tensor([ 0.,  0.])
+        >>> model.cov
+        tensor([[ 1.,  0.],
+                [ 0.,  1.]])
+
     '''
 
     def __init__(self, prior, posterior):
@@ -148,6 +161,19 @@ class NormalFullCovariance(BayesianModel):
     Attributes:
         mean (``torch.Tensor``): Expected mean.
         cov (``torch.Tensor``): Expected covariance matrix.
+
+    Example:
+        >>> # Create a Normal with zero mean and identity covariamce
+        >>> # matrix.
+        >>> mean = torch.zeros(2)
+        >>> cov = torch.eye(2)
+        >>> normal = beer.NormalFullCovariance.create(mean, cov)
+        >>> normal.mean
+        tensor([ 0.,  0.])
+        >>> model.cov
+        tensor([[ 1.,  0.],
+                [ 0.,  1.]])
+
     '''
 
     def __init__(self, prior, posterior):
@@ -225,6 +251,14 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
     Note:
         All the Normal models of the set will share the same prior
         distribution.
+
+    Example:
+        >>> # Create a set of Normal densities.
+        >>> mean = torch.zeros(2)
+        >>> diav_cov = torch.ones(2)
+        >>> normalset = beer.NormalDiagonalCovarianceSet.create(mean, diag_cov, 3)
+        >>> len(normalset)
+        3
 
     '''
 
@@ -321,6 +355,14 @@ class NormalFullCovarianceSet(BayesianModelSet):
         All the Normal models of the set will share the same prior
         distribution.
 
+    Example:
+        >>> # Create a set of Normal densities.
+        >>> mean = torch.zeros(2)
+        >>> cov = torch.eye(2)
+        >>> normalset = beer.NormalFullCovarianceSet.create(mean, cov, 3)
+        >>> len(normalset)
+        3
+
     '''
 
     def __init__(self, prior, posteriors):
@@ -401,8 +443,16 @@ class NormalFullCovarianceSet(BayesianModelSet):
 
 
 class NormalSetSharedDiagonalCovariance(BayesianModelSet):
-    '''Set of Normal density models with a globale shared full
+    '''Set of Normal density models with a global shared full
     covariance matrix.
+
+    Example:
+        >>> # Create a set of Normal densities.
+        >>> mean = torch.zeros(2)
+        >>> diag_cov = torch.ones(2)
+        >>> normalset = beer.NormalSetSharedDiagonalCovariance.create(mean, diag_cov, 3)
+        >>> len(normalset)
+        3
 
     '''
 
@@ -516,6 +566,14 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
 class NormalSetSharedFullCovariance(BayesianModelSet):
     '''Set of Normal density models with a globale shared full
     covariance matrix.
+
+    Example:
+        >>> # Create a set of Normal densities.
+        >>> mean = torch.zeros(2)
+        >>> cov = torch.eye(2)
+        >>> normalset = beer.NormalSetSharedFullCovariance.create(mean, cov, 3)
+        >>> len(normalset)
+        3
 
     '''
 

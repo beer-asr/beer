@@ -5,18 +5,16 @@
 import torch.autograd as ta
 from .models import BayesianModel
 
-class VariationalBayesLossInstance:
-    '''Generic loss term.
+class EvidenceLowerBoundInstance:
+    '''Evidence Lower Bound of a data set given a model.
 
     Note:
         This object should not be created directly.
 
     '''
 
-    # pylint: disable=R0913
     def __init__(self, expected_llh, kl_div, parameters, acc_stats, scale):
-        self._exp_llh = expected_llh.sum()
-        self._loss = scale * self._exp_llh - kl_div
+        self._elbo = scale * expected_llh.sum() - kl_div
         self._exp_llh_per_frame = expected_llh
         self._kl_div = kl_div
         self._parameters = parameters
@@ -24,42 +22,26 @@ class VariationalBayesLossInstance:
         self._scale = scale
 
     def __str__(self):
-        return str(self._loss)
+        return str(self._elbo)
 
     def __float__(self):
-        return float(self.value)
+        return float(self._elbo)
 
     def scale(self, scale):
-        self._loss *= scale
-
-    @property
-    def value(self):
-        'Value of the loss.'
-        return self._loss
-
-    @property
-    def exp_llh(self):
-        'Expected log-likelihood.'
-        return self._exp_llh
-
-    @property
-    def exp_llh_per_frame(self):
-        'Per-frame expected log-likelihood.'
-        return self._exp_llh_per_frame
-
-    @property
-    def kl_div(self):
-        'Kullback-Leibler divergence.'
-        return self._kl_div
+        self._elbo *= scale
 
     def backward(self):
+        '''Compute the gradient of the loss w.r.t. to standard
+        ``pytorch`` parameters.
+        '''
         # Pytorch minimizes the loss ! We change the sign of the ELBO
         # just before to compute the gradient.
-        try:
-            (-self._exp_llh).backward()
-        except RuntimeError:
-            pass
+        (-self._elbo).backward()
 
+    def natural_backward(self):
+        '''Compute the natural gradient of the loss w.r.t. to all the
+        :any:`BayesianParameter`.
+        '''
         for parameter in self._parameters:
             acc_stats = self._acc_stats[parameter]
             parameter.natural_grad += parameter.prior.natural_params +  \
@@ -67,29 +49,54 @@ class VariationalBayesLossInstance:
                 parameter.posterior.natural_params
 
 
-# pylint: disable=R0903
-class StochasticVariationalBayesLoss:
-    '''Standard Variational Bayes Loss function.
+class EvidenceLowerBound:
+    '''Evidence Lower Bound function.
 
-    ln p(X) >= E[ ln p(X | Z) ] - KL(q(Z) || p(Z) )
+    Args:
+        model (:any:`BayesianModel`): The Bayesian model with which to
+            compute the ELBO.
+        data (``torch.Tensor``): The data set on which to evaluate the
+            ELBO.
+        latent_variables (object): Provide latent_variables to the model
+            when computing the ELBO.
+
+    Returns:
+        ``EvidenceLowerBoundInstance``
+
+
+    Example:
+        >>> # Assume X is our data set and "model" is the model to be
+        >>> # trained.
+        >>> elbo_fn = beer.EvidenceLowerBound(len(X))
+        >>> elbo = elbo_fn(model, X)
+        ...
+        >>> # Compute gradient of the Baysian parameters.
+        >>> elbo.natural_backward()
+        ...
+        >>> # Compute gradient of standard pytorch parameters.
+        >>> elbo.backward()
+        ...
+        >>> round(float(elbo), 3)
+        >>> -10.983
+
+
+    Note:
+        Practically speaking, ``beer`` implements a stochastic version
+        of the traditional ELBO. This allows to do stochastic training
+        of the models with small batches. It is therefore necessary
+        to provide the total length (in frames) of the data when
+        creating the loss function as it will scale the natural
+        gradient accordingly.
 
     '''
 
     def __init__(self, datasize):
-        '''Initialize the loss
-
-        Args:
-            model (``BayesianModel``): The model to use to compute the
-                loss.
-            datasize (int): Number of data point in the data set.
-
-        '''
         self.datasize = datasize
 
-    def __call__(self, model, data, labels=None):
+    def __call__(self, model, data, latent_variables=None):
         s_stats = model.sufficient_statistics(data)
-        return VariationalBayesLossInstance(
-            expected_llh=model(s_stats, labels),
+        return EvidenceLowerBoundInstance(
+            expected_llh=model(s_stats, latent_variables),
             kl_div=BayesianModel.kl_div_posterior_prior(model.parameters),
             parameters=model.parameters,
             acc_stats=model.accumulate(s_stats),
@@ -98,30 +105,54 @@ class StochasticVariationalBayesLoss:
 
 
 class BayesianModelOptimizer:
-    'Bayesian Model Optimizer.'
+    '''Generic optimizer for :any:`BayesianModel` subclasses.
+
+    Args:
+        parameters (list): List of :any:`BayesianParameter`.
+        lrate (float): Learning rate for the :any:`BayesianParameter`.
+        std_optim (``torch.Optimizer``): pytorch optimizer.
+
+    Note:
+        For models that require some standard gradient descent (for
+        instance Variational AutoEncoder), it is possible to combined
+        natural and standard gradient descent by providing a pytorch
+        optimizer through the keyword argument ``std_optim``.
+
+    Example:
+        >>> # Assume "model" is a BayesianModel to be trained and X is
+        >>> # the dataset.
+        >>> elbo_fn = beer.EvidenceLowerBound(len(X))
+        >>> optim = beer.BayesianModelOptimizer(model.parameters)
+        >>> for epoch in range(10):
+        >>>     optim.zero_grad()
+        >>>     elbo = elbo_fn(model, X)
+        >>>     elbo.natural_backward()
+        >>>     optim.step()
+
+    '''
 
     def __init__(self, parameters, lrate=1., std_optim=None):
-        '''Initialize the optimizer.
-
+        '''
         Args:
             parameters (list): List of ``BayesianParameters``.
             lrate (float): learning rate.
             std_optim (``torch.optim.Optimizer``): Optimizer for
-                non-Bayesian parameters (i.e. parameters that don't
-                have a distribution).
-
+                non-Bayesian parameters (i.e. standard ``pytorch``
+                parameters)
         '''
         self._parameters = parameters
         self._lrate = lrate
         self._std_optim = std_optim
 
     def zero_grad(self):
+        'Set all the standard/Bayesian parameters gradient to zero.'
         if self._std_optim is not None:
             self._std_optim.zero_grad()
         for parameter in self._parameters:
             parameter.zero_natural_grad()
 
     def step(self):
+        'Update all the standard/Bayesian parameters.'
         if self._std_optim is not None:
             self._std_optim.step()
         for parameter in self._parameters:

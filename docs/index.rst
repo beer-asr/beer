@@ -7,3 +7,4 @@ BEER -- the Bayesian spEEch Recognizer
    priors
    models
    utilities
+   training

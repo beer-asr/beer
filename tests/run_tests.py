@@ -63,7 +63,7 @@ def run():
             test_features,
             test_mixture,
             test_normal,
-            test_subspacemodels,
+            #test_subspacemodels,
             test_utils
         ]
 

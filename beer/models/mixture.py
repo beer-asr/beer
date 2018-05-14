@@ -11,7 +11,19 @@ from ..utils import logsumexp
 
 
 class Mixture(BayesianModel):
-    'Bayesian Mixture Model.'
+    '''Bayesian Mixture Model.
+
+    Example:
+            >>> # Create a set of Normal densities.
+            >>> mean = torch.zeros(2)
+            >>> cov = torch.eye(2)
+            >>> normalset = beer.NormalSetSharedFullCovariance.create(mean, cov, 3, noise_std=0.1)
+            >>> weights = torch.ones(3) / 3.
+            >>> # Create a Gaussian Mixture Model with shared cov. matrix.
+            >>> gmm = beer.Mixture.create(weights, normalset)
+            >>> gmm.weights
+            tensor([ 0.3333,  0.3333,  0.3333])
+    '''
 
     def __init__(self, prior_weights, posterior_weights, modelset):
         '''

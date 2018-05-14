@@ -36,7 +36,7 @@ from .models import VAE
 from . import features
 
 # Variational Bayes Inference.
-from .vbi import StochasticVariationalBayesLoss
+from .vbi import EvidenceLowerBound
 from .vbi import BayesianModelOptimizer
 
 # Utility functions.
