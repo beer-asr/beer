@@ -24,8 +24,8 @@ from .models import NormalSetSharedFullCovariance
 from .models import Mixture
 
 from .models import VAE
-from .models import NormalDiagonalCovariance_MLP
-from .models import Bernoulli_MLP
+from .models import NormalDiagonalCovarianceMLP
+from .models import BernoulliMLP
 from .models import kl_div_posterior_prior
 
 #from .models import Mixture

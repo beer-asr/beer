@@ -1,9 +1,7 @@
 
-'''Implementation of various Multi-Layer Perceptron with specific
-final layer corresponding to the parameters of a distribution.
-This kind of MLP are used with model combining deep neural network
-and bayesian model (Variational Auto-Encoder and its variant).
-
+''' Implementation of distributions to be used by the 
+    VAE's encoder and decoder. User defined transformations 
+    (neural networks) are expected to produce them.
 '''
 
 import torch
@@ -13,7 +11,12 @@ from .normal import NormalDiagonalCovariance
 from .normal import normal_diag_natural_params
 
 
-class NormalDiagonalCovariance_MLP:
+class NormalDiagonalCovarianceMLP:
+    ''' Normal distribution with diagonal covariance, to be an output of a MLP.
+        It can be used both in observed and latent space, when a (conditionally)
+        normal distribution is used in the latent space.
+
+    '''
     def __init__(self, mean, var):
         self.mean = mean
         self.var = var
@@ -21,7 +24,6 @@ class NormalDiagonalCovariance_MLP:
 
     def entropy(self):
         'Compute the per-frame entropy of the posterior distribution.'
-        nparams = normal_diag_natural_params(self.mean, self.var)
         exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
             self.mean, self.var)
         return - (self._nparams * exp_T).sum(dim=-1)
@@ -42,8 +44,10 @@ class NormalDiagonalCovariance_MLP:
         return (-distance_term - precision_term).sum(dim=-1).mean(dim=0)
 
 
-class Bernoulli_MLP:
+class BernoulliMLP:
     ''' Bernoulli distribution, to be an output of a MLP.
+        Can only be used for modeling in the observed space, as it does not support
+        sampling of KLD computation.
 
     '''
     def __init__(self, mu):
@@ -52,4 +56,3 @@ class Bernoulli_MLP:
     def log_likelihood(self, X):
         per_pixel_bce = X * self.mu.log() + (1.0 - X) * (1 - self.mu).log()
         return per_pixel_bce.sum(dim=-1)
-

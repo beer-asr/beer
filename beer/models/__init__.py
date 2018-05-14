@@ -17,8 +17,8 @@ from .normal import NormalSetSharedFullCovariance
 
 from .mixture import Mixture
 
-from .mlpmodel import NormalDiagonalCovariance_MLP
-from .mlpmodel import Bernoulli_MLP
+from .mlpmodel import NormalDiagonalCovarianceMLP
+from .mlpmodel import BernoulliMLP
 
 from .vae import VAE
 
