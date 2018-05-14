@@ -1,6 +1,10 @@
 Models
 ======
 
+
+Base Model
+----------
+
 ``beer`` provides a collection of generative models that can be used in
 various condition.
 
@@ -16,3 +20,45 @@ various condition.
 
 .. autoclass:: beer.BayesianParameterSet
    :members:
+
+
+Normal Models
+-------------
+
++-----------------------------------------------+
+| :any:`beer.NormalDiagonalCovariance`          |
++-----------------------------------------------+
+| :any:`beer.NormalFullCovariance`              |
++-----------------------------------------------+
+| :any:`beer.NormalDiagonalCovarianceSet`       |
++-----------------------------------------------+
+| :any:`beer.NormalFullCovarianceSet`           |
++-----------------------------------------------+
+| :any:`beer.NormalSetSharedDiagonalCovariance` |
++-----------------------------------------------+
+| :any:`beer.NormalSetSharedDiagonalCovariance` |
++-----------------------------------------------+
+
+.. autoclass:: beer.NormalDiagonalCovariance
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.NormalFullCovariance
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.NormalDiagonalCovarianceSet
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.NormalFullCovarianceSet
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.NormalSetSharedDiagonalCovariance
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.NormalSetSharedFullCovariance
+   :show-inheritance:
+   :members: create

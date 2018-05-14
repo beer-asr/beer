@@ -36,14 +36,38 @@ from ..expfamilyprior import JointNormalWishartPrior
 
 
 class NormalDiagonalCovariance(BayesianModel):
-    '''Bayesian Normal distribution with diagonal covariance matrix.'''
+    '''Bayesian Normal density with diagonal covariance matrix.
+
+    Attributes:
+        mean (``torch.Tensor``): Expected mean.
+        cov (``torch.Tensor``): Expected (diagonal) covariance matrix.
+    '''
 
     def __init__(self, prior, posterior):
+        '''
+        Args:
+            prior (:any:`beer.NormalGammaPrior`): Prior over the mean
+                and the diagonal of the precision matrix
+            posterior (:any:`beer.NormalGammaPrior`): Posterior over the
+                mean and the diagonal of the precision matrix.
+        '''
         super().__init__()
         self.mean_prec_param = BayesianParameter(prior, posterior)
 
     @classmethod
     def create(cls, mean, diag_cov, pseudo_counts=1.):
+        '''Create a :any:`NormalDiagonalCovariance`.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            diag_cov (``torch.Tensor``): Diagonal of the covariance
+                matrix of the Normal to create.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+
+        Returns:
+            :any:`NormalDiagonalCovariance`
+        '''
         scale = torch.ones_like(mean) * pseudo_counts
         shape = torch.ones_like(mean) * pseudo_counts
         rate = pseudo_counts * diag_cov
@@ -119,7 +143,12 @@ class NormalDiagonalCovariance(BayesianModel):
 
 
 class NormalFullCovariance(BayesianModel):
-    'Bayesian Normal distribution with diagonal covariance matrix.'
+    '''Bayesian Normal distribution with a full covariance matrix.
+
+    Attributes:
+        mean (``torch.Tensor``): Expected mean.
+        cov (``torch.Tensor``): Expected covariance matrix.
+    '''
 
     def __init__(self, prior, posterior):
         super().__init__()
@@ -127,6 +156,18 @@ class NormalFullCovariance(BayesianModel):
 
     @classmethod
     def create(cls, mean, cov, pseudo_counts=1.):
+        '''Create a :any:`NormalFullCovariance`.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            cov (``torch.Tensor``): Covariance matrix of the Normal to
+                create.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+
+        Returns:
+            :any:`NormalFullCovariance`
+        '''
         scale = pseudo_counts
         dof = pseudo_counts + len(mean) - 1
         scale_matrix = torch.inverse(cov *  dof)
@@ -178,9 +219,14 @@ class NormalFullCovariance(BayesianModel):
 
 NormalSetElement = namedtuple('NormalSetElement', ['mean', 'cov'])
 
-
 class NormalDiagonalCovarianceSet(BayesianModelSet):
-    'Set Normal density models with diagonal covariance.'
+    '''Set of Normal density models with diagonal covariance.
+
+    Note:
+        All the Normal models of the set will share the same prior
+        distribution.
+
+    '''
 
     def __init__(self, prior, posteriors):
         super().__init__()
@@ -195,6 +241,20 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
 
     @classmethod
     def create(cls, mean, diag_cov, ncomp, pseudo_counts=1., noise_std=0.):
+        '''Create a :any:`NormalDiagonalCovarianceSet`.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            diag_cov (``torch.Tensor``): Diagonal of the covariance
+                matrix of the Normal to create.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+            noise_std (float): Standard deviation of the noise when
+                initializing the mean of the posterior distribution.
+
+        Returns:
+            :any:`NormalDiagonalCovarianceSet`
+        '''
         scale = torch.ones_like(mean) * pseudo_counts
         shape = torch.ones_like(mean) * pseudo_counts
         rate = pseudo_counts * diag_cov
@@ -253,7 +313,13 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
 
 
 class NormalFullCovarianceSet(BayesianModelSet):
-    'Set Normal density models with full covariance.'
+    '''Set Normal density models with full covariance matrix.
+
+    Note:
+        All the Normal models of the set will share the same prior
+        distribution.
+
+    '''
 
     def __init__(self, prior, posteriors):
         super().__init__()
@@ -268,6 +334,20 @@ class NormalFullCovarianceSet(BayesianModelSet):
 
     @classmethod
     def create(cls, mean, cov, ncomp, pseudo_counts=1., noise_std=0.):
+        '''Create a :any:`NormalFullCovarianceSet`.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            cov (``torch.Tensor``): Covariance matrix of the Normal to
+                create.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+            noise_std (float): Standard deviation of the noise when
+                initializing the mean of the posterior distribution.
+
+        Returns:
+            :any:`NormalFullCovarianceSet`
+        '''
         scale = pseudo_counts
         dof = pseudo_counts + len(mean) - 1
         scale_matrix = torch.inverse(cov *  dof)
@@ -329,6 +409,20 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
 
     @classmethod
     def create(cls, means, diag_cov, pseudo_counts=1., noise_std=0.):
+        '''Create a :any:`NormalSetSharedDiagonalCovariance`.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            diag_cov (``torch.Tensor``): Diagonal of the covariance
+                matrix of the Normal to create.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+            noise_std (float): Standard deviation of the noise when
+                initializing the mean of the posterior distribution.
+
+        Returns:
+            :any:`NormalSetSharedDiagonalCovariance`
+        '''
         scales = torch.ones_like(means) * pseudo_counts
         shape = torch.ones_like(diag_cov) * pseudo_counts
         rate = diag_cov * pseudo_counts
@@ -427,6 +521,20 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
 
     @classmethod
     def create(cls, means, cov, pseudo_counts=1., noise_std=0.):
+        '''Create a :any:`NormalSetSharedFullCovariance`.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            cov (``torch.Tensor``): Covariance matrix of the Normal to
+                create.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+            noise_std (float): Standard deviation of the noise when
+                initializing the mean of the posterior distribution.
+
+        Returns:
+            :any:`NormalSetSharedFullCovariance`
+        '''
         ncomp, dim = means.size()
         scales = torch.ones_like(means[:, 0]) * pseudo_counts
         dof = pseudo_counts + means.size(1) - 1
