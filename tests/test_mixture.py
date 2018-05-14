@@ -12,7 +12,6 @@ import numpy as np
 from scipy.special import logsumexp
 import torch
 import beer
-from beer.models.mixture import _expand_labels
 from basetest import BaseTest
 
 
