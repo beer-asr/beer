@@ -247,6 +247,7 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
             mean (``torch.Tensor``): Mean of the Normal to create.
             diag_cov (``torch.Tensor``): Diagonal of the covariance
                 matrix of the Normal to create.
+            ncomp (int): Number of component in the set.
             pseudo_counts (``torch.Tensor``): Strength of the prior.
                 Should be greater than 0.
             noise_std (float): Standard deviation of the noise when
@@ -260,9 +261,10 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
         rate = pseudo_counts * diag_cov
         prior = NormalGammaPrior(mean, scale, shape, rate)
         posteriors = [
-            NormalGammaPrior(mean + noise_std * torch.randn(len(mean)),
-                             scale, shape, rate)
-            for _ in range(ncomp)
+            NormalGammaPrior(
+                mean + noise_std * torch.randn(len(mean)).type(mean.type()),
+                scale, shape, rate
+            ) for _ in range(ncomp)
         ]
         return cls(prior, posteriors)
 
@@ -340,6 +342,7 @@ class NormalFullCovarianceSet(BayesianModelSet):
             mean (``torch.Tensor``): Mean of the Normal to create.
             cov (``torch.Tensor``): Covariance matrix of the Normal to
                 create.
+            ncomp (int): Number of component in the set.
             pseudo_counts (``torch.Tensor``): Strength of the prior.
                 Should be greater than 0.
             noise_std (float): Standard deviation of the noise when
@@ -353,9 +356,10 @@ class NormalFullCovarianceSet(BayesianModelSet):
         scale_matrix = torch.inverse(cov *  dof)
         prior = NormalWishartPrior(mean, scale, scale_matrix, dof)
         posteriors = [
-            NormalWishartPrior(mean + noise_std * torch.randn(len(mean)),
-                               scale, scale_matrix, dof)
-            for _ in range(ncomp)
+            NormalWishartPrior(
+                mean + noise_std * torch.randn(len(mean)).type(mean.type()),
+                scale, scale_matrix, dof
+            ) for _ in range(ncomp)
         ]
         return cls(prior, posteriors)
 
@@ -408,13 +412,14 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
         self.means_prec_param = BayesianParameter(prior, posterior)
 
     @classmethod
-    def create(cls, means, diag_cov, pseudo_counts=1., noise_std=0.):
+    def create(cls, mean, diag_cov, ncomp, pseudo_counts=1., noise_std=0.):
         '''Create a :any:`NormalSetSharedDiagonalCovariance`.
 
         Args:
             mean (``torch.Tensor``): Mean of the Normal to create.
             diag_cov (``torch.Tensor``): Diagonal of the covariance
                 matrix of the Normal to create.
+            ncomp (int): Number of component in the set.
             pseudo_counts (``torch.Tensor``): Strength of the prior.
                 Should be greater than 0.
             noise_std (float): Standard deviation of the noise when
@@ -423,14 +428,14 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
         Returns:
             :any:`NormalSetSharedDiagonalCovariance`
         '''
-        scales = torch.ones_like(means) * pseudo_counts
+        dim = len(mean)
+        scales = torch.ones(ncomp, dim).type(mean.type()) * pseudo_counts
         shape = torch.ones_like(diag_cov) * pseudo_counts
         rate = diag_cov * pseudo_counts
-        prior = JointNormalGammaPrior(means, scales, shape, rate)
-        posterior = JointNormalGammaPrior(
-            means + noise_std * torch.randn(*means.size()),
-            scales, shape, rate
-        )
+        p_means = mean + torch.zeros_like(scales).type(mean.type())
+        means = mean +  noise_std * torch.randn(ncomp, dim).type(mean.type())
+        prior = JointNormalGammaPrior(p_means, scales, shape, rate)
+        posterior = JointNormalGammaPrior(means, scales, shape, rate)
         return cls(prior, posterior)
 
     ####################################################################
@@ -520,13 +525,14 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
         self.means_prec_param = BayesianParameter(prior, posterior)
 
     @classmethod
-    def create(cls, means, cov, pseudo_counts=1., noise_std=0.):
+    def create(cls, mean, cov, ncomp, pseudo_counts=1., noise_std=0.):
         '''Create a :any:`NormalSetSharedFullCovariance`.
 
         Args:
             mean (``torch.Tensor``): Mean of the Normal to create.
             cov (``torch.Tensor``): Covariance matrix of the Normal to
                 create.
+            ncomp (int): Number of component in the set.
             pseudo_counts (``torch.Tensor``): Strength of the prior.
                 Should be greater than 0.
             noise_std (float): Standard deviation of the noise when
@@ -535,15 +541,14 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
         Returns:
             :any:`NormalSetSharedFullCovariance`
         '''
-        ncomp, dim = means.size()
-        scales = torch.ones_like(means[:, 0]) * pseudo_counts
-        dof = pseudo_counts + means.size(1) - 1
+        dim = len(mean)
+        scales = torch.ones(ncomp).type(mean.type()) * pseudo_counts
+        dof = pseudo_counts + dim - 1
         scale_matrix = torch.inverse(cov *  dof)
-        prior = JointNormalWishartPrior(means, scales, scale_matrix, dof)
-        posteriors = JointNormalWishartPrior(
-            means + noise_std * torch.randn(ncomp, dim),
-            scales, scale_matrix, dof
-        )
+        p_means = mean + torch.zeros(ncomp, dim).type(mean.type())
+        means = mean + noise_std * torch.randn(ncomp, dim).type(mean.type())
+        prior = JointNormalWishartPrior(p_means, scales, scale_matrix, dof)
+        posteriors = JointNormalWishartPrior(means, scales, scale_matrix, dof)
         return cls(prior, posteriors)
 
     def _expected_nparams(self):

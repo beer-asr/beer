@@ -22,8 +22,8 @@ various condition.
    :members:
 
 
-Normal Models
--------------
+Concrete Models
+---------------
 
 +-----------------------------------------------+
 | :any:`beer.NormalDiagonalCovariance`          |
@@ -37,6 +37,8 @@ Normal Models
 | :any:`beer.NormalSetSharedDiagonalCovariance` |
 +-----------------------------------------------+
 | :any:`beer.NormalSetSharedDiagonalCovariance` |
++-----------------------------------------------+
+| :any:`beer.Mixture`                           |
 +-----------------------------------------------+
 
 .. autoclass:: beer.NormalDiagonalCovariance
@@ -60,5 +62,9 @@ Normal Models
    :members: create
 
 .. autoclass:: beer.NormalSetSharedFullCovariance
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.Mixture
    :show-inheritance:
    :members: create

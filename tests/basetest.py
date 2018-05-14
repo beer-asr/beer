@@ -52,7 +52,8 @@ class BaseTest(unittest.TestCase):
     def assertArraysAlmostEqual(self, arr1, arr2):
         try:
             fail = False
-            self.assertTrue(np.allclose(arr1, arr2, atol=self.tol))
+            self.assertTrue(np.allclose(arr1, arr2, rtol=self.tol,
+                                        atol=self.tol))
         except AssertionError as error:
             fail = True
             raise error

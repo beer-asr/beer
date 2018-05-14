@@ -241,16 +241,16 @@ class TestNormalSetSharedDiagonalCovariance(BaseTest):
         self.diag_cov = 1 + (torch.randn(self.dim)**2).type(self.type)
         self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
         self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
-        self.prior_means = torch.randn(self.ncomp, self.dim).type(self.type)
+        self.prior_mean = torch.randn(self.dim).type(self.type)
         self.model = beer.NormalSetSharedDiagonalCovariance.create(
-            self.prior_means, self.diag_cov, self.pseudo_counts,
+            self.prior_mean, self.diag_cov, self.ncomp, self.pseudo_counts,
             noise_std=0.
         )
 
     def test_create(self):
         self.assertEqual(len(self.model), self.ncomp)
         for i, comp in enumerate(self.model):
-            mean1, mean2 = self.prior_means[i].numpy(), comp.mean.numpy()
+            mean1, mean2 = self.prior_mean.numpy(), comp.mean.numpy()
             self.assertArraysAlmostEqual(mean1, mean2)
             cov1, cov2 = np.diag(self.diag_cov.numpy()), comp.cov.numpy()
             self.assertArraysAlmostEqual(cov1, cov2)
@@ -331,16 +331,16 @@ class TestNormalSetSharedFullCovariance(BaseTest):
         self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
         self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
         self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
-        self.prior_means = torch.randn(self.ncomp, self.dim).type(self.type)
+        self.prior_mean = torch.randn(self.dim).type(self.type)
         self.model = beer.NormalSetSharedFullCovariance.create(
-            self.prior_means, self.cov, self.pseudo_counts,
+            self.prior_mean, self.cov, self.ncomp, self.pseudo_counts,
             noise_std=0.
         )
 
     def test_create(self):
         self.assertEqual(len(self.model), self.ncomp)
         for i, comp in enumerate(self.model):
-            mean1, mean2 = self.prior_means[i].numpy(), comp.mean.numpy()
+            mean1, mean2 = self.prior_mean.numpy(), comp.mean.numpy()
             self.assertArraysAlmostEqual(mean1, mean2)
             cov1, cov2 = self.cov.numpy(), comp.cov.numpy()
             self.assertArraysAlmostEqual(cov1, cov2)

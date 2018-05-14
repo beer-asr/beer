@@ -6,4 +6,4 @@ BEER -- the Bayesian spEEch Recognizer
 
    priors
    models
-   utils
+   utilities
