@@ -20,7 +20,6 @@ NormalSet
 
 '''
 
-import abc
 from collections import namedtuple
 import math
 import torch
@@ -96,7 +95,6 @@ class NormalDiagonalCovariance(BayesianModel):
                           torch.ones_like(mean)], dim=-1)
 
     # pylint: disable=W0613
-    # Unused arguments (labels and nsamples).
     def expected_natural_params(self, mean, var, labels=None, nsamples=1):
         '''Interface for the VAE model. Returns the expected value of the
         natural params of the latent model given the per-frame means
@@ -164,7 +162,7 @@ class NormalFullCovariance(BayesianModel):
             torch.ones(data.size(0), 1).type(data.type())
         ], dim=-1)
 
-    def forward(self, s_stats, labels=None):
+    def forward(self, s_stats, latent_variables=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - s_stats.size(1))))
         exp_llh = s_stats @ self.mean_prec_param.expected_value
         exp_llh -= .5 * feadim * math.log(2 * math.pi)
@@ -239,7 +237,6 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
     def __len__(self):
         return len(self._components)
 
-    # pylint: disable=C0103
     # Invalid method name.
     def expected_natural_params_as_matrix(self):
         return torch.cat([param.expected_value[None]
@@ -313,7 +310,6 @@ class NormalFullCovarianceSet(BayesianModelSet):
     def __len__(self):
         return len(self._components)
 
-    # pylint: disable=C0103
     # Invalid method name.
     def expected_natural_params_as_matrix(self):
         return torch.cat([param.expected_value[None]
@@ -390,7 +386,6 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
     def __len__(self):
         return self.means_prec_param.posterior.ncomp
 
-    # pylint: disable=C0103
     # Invalid method name.
     def expected_natural_params_as_matrix(self):
         np1, np2, np3, np4 = \
@@ -500,7 +495,6 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
     def __len__(self):
         return self.means_prec_param.posterior.ncomp
 
-    # pylint: disable=C0103
     def expected_natural_params_as_matrix(self):
         dim = self.means_prec_param.posterior.dim
         np1, np2, np3, np4 = \

@@ -10,11 +10,9 @@ sys.path.insert(0, './')
 sys.path.insert(0, './tests')
 
 import math
-import unittest
 import numpy as np
 import torch
 import beer
-from beer import NormalWishartPrior
 from basetest import BaseTest
 
 

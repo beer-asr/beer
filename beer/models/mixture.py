@@ -6,19 +6,6 @@ from .bayesmodel import BayesianModel
 from .bayesmodel import BayesianParameter
 
 
-def _expand_labels(labels, ncomp):
-    retval = torch.zeros(len(labels), ncomp)
-    idxs = torch.range(0, len(labels) - 1).long()
-    retval[idxs, labels] = 1
-    return retval
-
-
-def _logsumexp(tensor):
-    'Equivatent to: scipy.special.logsumexp(tensor, axis=1)'
-    tmax, _ = torch.max(tensor, dim=1, keepdim=True)
-    return tmax + (tensor - tmax).exp().sum(dim=1, keepdim=True).log()
-
-
 class Mixture(BayesianModel):
     'Bayesian Mixture Model.'
 
@@ -47,8 +34,6 @@ class Mixture(BayesianModel):
     def sufficient_statistics(self, data):
         return self.components.sufficient_statistics(data)
 
-    # pylint: disable=C0103
-    # Invalid method name.
     def sufficient_statistics_from_mean_var(self, mean, var):
         return self.components.sufficient_statistics_from_mean_var(mean, var)
 
