@@ -3,7 +3,6 @@
 
 import torch
 from .bayesmodel import BayesianModel
-from .bayesmodel import BayesianModelSet
 from .bayesmodel import BayesianParameter
 from ..expfamilyprior import DirichletPrior
 from ..utils import onehot

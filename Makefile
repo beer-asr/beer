@@ -18,6 +18,7 @@ install:
 clean:
 	@rm -rf *.egg* build dist
 	@find . -depth -type d -name "__pycache__" -exec rm -fr "{}" \;
+	@$(MAKE) -C docs clean
 
 doc:
 	@$(MAKE) -C docs html
