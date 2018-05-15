@@ -68,7 +68,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         return _bregman_divergence(
             model2._log_norm_value,
             model1._log_norm_value,
-            model1.expected_sufficient_statistics,
+            model1._expected_sufficient_statistics,
             model2.natural_hparams,
             model1.natural_hparams
         )
@@ -115,21 +115,22 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
                 A\\big(\\eta(\\theta) \\big)
 
         '''
-        return self._expected_sufficient_statistics.data
+        return self._expected_sufficient_statistics.detach()
 
     @property
     def natural_hparams(self):
         '``torch.Tensor``: Natural hyper-parameters vector.'
-        return self._natural_hparams.data
+        return self._natural_hparams.detach()
 
     @natural_hparams.setter
     def natural_hparams(self, value):
         if value.grad is not None:
             value.grad.zero_()()
-        self._log_norm_value = self.log_norm(value)
-        ta.backward(self._log_norm_value)
+        log_norm_value = self.log_norm(value)
+        ta.backward(log_norm_value)
         self._expected_sufficient_statistics = value.grad
         self._natural_hparams = value
+        self._log_norm_value = log_norm_value.detach()
 
     @abc.abstractmethod
     def split_sufficient_statistics(self, s_stats):
