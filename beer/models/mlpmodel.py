@@ -13,7 +13,22 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 from .normal import NormalDiagonalCovariance
-from .normal import normal_diag_natural_params
+
+
+def normal_diag_natural_params(mean, var):
+    '''Transform the standard parameters of a Normal (diag. cov.) into
+    their canonical forms.
+
+    Note:
+        The (negative) log normalizer is appended to it.
+
+    '''
+    return torch.cat([
+        -1. / (2 * var),
+        mean / var,
+        -(mean ** 2) / (2 * var),
+        -.5 * torch.log(var)
+    ], dim=-1)
 
 
 def _structure_output_dim(structure):

@@ -1,5 +1,4 @@
 
-
 # Conjugate priors for the Bayesian models.
 from .expfamilyprior import ExpFamilyPrior
 from .expfamilyprior import DirichletPrior
@@ -11,10 +10,10 @@ from .expfamilyprior import NormalFullCovariancePrior
 from .expfamilyprior import NormalIsotropicCovariancePrior
 from .expfamilyprior import GammaPrior
 from .expfamilyprior import MatrixNormalPrior
-from .expfamilyprior import kl_div
 
 # Bayesian models.
 from .models import BayesianModel
+from .models import BayesianModelSet
 from .models import BayesianParameter
 from .models import BayesianParameterSet
 from .models import NormalDiagonalCovariance
@@ -28,7 +27,6 @@ from .models import PPCA
 from .models import MLPNormalDiag
 from .models import MLPNormalIso
 from .models import VAE
-from .models import kl_div_posterior_prior
 
 #from .models import Mixture
 #from .models import DiscriminativeVariationalModel
@@ -38,5 +36,8 @@ from .models import kl_div_posterior_prior
 from . import features
 
 # Variational Bayes Inference.
-from .vbi import StochasticVariationalBayesLoss
+from .vbi import EvidenceLowerBound
 from .vbi import BayesianModelOptimizer
+
+# Utility functions.
+from .utils import *

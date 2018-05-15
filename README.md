@@ -4,19 +4,17 @@ BEER: the Bayesian Speech Recognizer
 Beer is a toolkit that provide Bayesian machine learning tools for
 speech technologies.
 
-Beer is currently under construction and many things are subject to change !
+Beer is currently under construction and many things are subject to
+change !
 
 Requirements
 ------------
 
 Beer is built upon the [pytorch](http://pytorch.org)
-library. Note that we need pytorch to be installed from the source
-master branch as some features are not yet present in the Anaconda
-package.  Beside, it also requires [numpy](http://www.numpy.org) and
+library. Beside, it also requires [numpy](http://www.numpy.org) and
 [scipy](https://www.scipy.org/scipylib/index.html).  Finally, the
 examples use [bokeh](https://bokeh.pydata.org/en/latest/) for
 visualization.
-
 
 Installation
 ------------
@@ -25,7 +23,6 @@ In a terminal type.
 
 ```
   $ python setup.py install
-
 ```
 
 This will install ``beer`` and eventually ``numpy`` and ``sicpy``

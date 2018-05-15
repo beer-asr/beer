@@ -9,8 +9,6 @@ import torch
 from .bayesmodel import BayesianParameter
 from .bayesmodel import BayesianParameterSet
 from .bayesmodel import BayesianModel
-from ..expfamilyprior import _matrixnormal_fc_split_nparams
-from ..expfamilyprior import _normal_iso_split_nparams
 
 
 ########################################################################

@@ -25,7 +25,7 @@ def plot_normal(fig, mean, cov, alpha=1., color='blue'):
 
 def plot_gmm(fig, gmm, alpha=1., color='blue'):
     'Plot a Normal density'
-    for weight, comp in zip(gmm.weights, gmm.components):
+    for weight, comp in zip(gmm.weights, gmm.modelset):
         plot_normal(fig, comp.mean.numpy(), comp.cov.numpy(),
             alpha * weight.numpy(), color)
 
@@ -34,7 +34,7 @@ def plot_latent_model(fig, latent_model, alpha=1., color='blue'):
     if 'Mixture' in str(type(latent_model)):
         plot_gmm(fig, latent_model, alpha, color)
     elif 'Normal' in str(type(latent_model)):
-        plot_normal(fig, latent_model.mean.numpy(), 
+        plot_normal(fig, latent_model.mean.numpy(),
                     latent_model.cov.numpy(), alpha, color)
     else:
         raise ValueError

@@ -1,8 +1,8 @@
 
 from .bayesmodel import BayesianModel
+from .bayesmodel import BayesianModelSet
 from .bayesmodel import BayesianParameter
 from .bayesmodel import BayesianParameterSet
-from .bayesmodel import kl_div_posterior_prior
 
 from .normal import NormalDiagonalCovariance
 from .normal import NormalFullCovariance
