@@ -7,13 +7,13 @@ to allow to run the tests for various conditions.
 
 '''
 
+import unittest
 
 import numpy as np
 import torch
-import unittest
 
 
-FLOAT_TOLPLACES = 2
+FLOAT_TOLPLACES = 1
 FLOAT_TOL = 10 ** (-FLOAT_TOLPLACES)
 
 DOUBLE_TOLPLACES = 6
@@ -32,12 +32,12 @@ class BaseTest(unittest.TestCase):
     @property
     def tol(self):
         return FLOAT_TOL if self.tensor_type == 'float' else DOUBLE_TOL
-    
+
     @property
     def tolplaces(self):
         return FLOAT_TOLPLACES if self.tensor_type == 'float' else \
             DOUBLE_TOLPLACES
-    
+
     @property
     def type(self):
         return torch.FloatTensor if self.tensor_type == 'float' else \
@@ -48,8 +48,20 @@ class BaseTest(unittest.TestCase):
         if self.gpu:
             torch.cuda.manual_seed(seed)
 
+    # pylint: disable=C0103
     def assertArraysAlmostEqual(self, arr1, arr2):
-        self.assertTrue(np.allclose(arr1, arr2, atol=self.tol))
+        try:
+            fail = False
+            self.assertTrue(np.allclose(arr1, arr2, rtol=self.tol,
+                                        atol=self.tol))
+        except AssertionError as error:
+            fail = True
+            raise error
+        finally:
+            if fail:
+                print(arr1, arr2)
+
+
 
     @staticmethod
     def get_testsuite(class_name, tensor_type='float', gpu=False, seed=13):

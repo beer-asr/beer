@@ -14,13 +14,12 @@ covariance matrix.
 NormalSet
 ---------
    The ``NormalSet`` object is not a model but rather a component of
-   more comple model (e.g. GMM). It allows to have a set of Normal
-   densities to have a shared prior distribution.
+   more comple model (e.g. GMM). For example, it allows to have a set of
+   Normal densities to with a shared prior distribution for ex.
 
 
 '''
 
-import abc
 from collections import namedtuple
 import math
 import torch
@@ -28,98 +27,111 @@ import torch
 from .bayesmodel import BayesianParameter
 from .bayesmodel import BayesianParameterSet
 from .bayesmodel import BayesianModel
-from ..expfamilyprior import _normalwishart_split_nparams
-from ..expfamilyprior import _jointnormalwishart_split_nparams
-from ..expfamilyprior import _jointnormalgamma_split_nparams
+from .bayesmodel import BayesianModelSet
+
+from ..expfamilyprior import NormalGammaPrior
+from ..expfamilyprior import JointNormalGammaPrior
+from ..expfamilyprior import NormalWishartPrior
+from ..expfamilyprior import JointNormalWishartPrior
 
 
-#######################################################################
-# Normal model
-#######################################################################
+class NormalDiagonalCovariance(BayesianModel):
+    '''Bayesian Normal density with diagonal covariance matrix.
 
-class Normal(BayesianModel, metaclass=abc.ABCMeta):
-    'Abstract Base Class for the Normal distribution model.'
+    Attributes:
+        mean (``torch.Tensor``): Expected mean.
+        cov (``torch.Tensor``): Expected (diagonal) covariance matrix.
 
-    @staticmethod
-    @abc.abstractmethod
-    def sufficient_statistics(data):
-        '''Compute the sufficient statistics of the data.
+    Example:
+        >>> # Create a Normal with zero mean and identity covariamce
+        >>> # matrix.
+        >>> mean = torch.zeros(2)
+        >>> diav_cov = torch.ones(2)
+        >>> normal = beer.NormalDiagonalCovariance.create(mean, diag_cov)
+        >>> normal.mean
+        tensor([ 0.,  0.])
+        >>> model.cov
+        tensor([[ 1.,  0.],
+                [ 0.,  1.]])
+
+    '''
+
+    def __init__(self, prior, posterior):
+        '''
+        Args:
+            prior (:any:`beer.NormalGammaPrior`): Prior over the mean
+                and the diagonal of the precision matrix
+            posterior (:any:`beer.NormalGammaPrior`): Posterior over the
+                mean and the diagonal of the precision matrix.
+        '''
+        super().__init__()
+        self.mean_prec_param = BayesianParameter(prior, posterior)
+
+    @classmethod
+    def create(cls, mean, diag_cov, pseudo_counts=1.):
+        '''Create a :any:`NormalDiagonalCovariance`.
 
         Args:
-            data (Tensor): Data.
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            diag_cov (``torch.Tensor``): Diagonal of the covariance
+                matrix of the Normal to create.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
 
         Returns:
-            (Tensor): Sufficient statistics of the data.
-
+            :any:`NormalDiagonalCovariance`
         '''
-        raise NotImplementedError
-
-    @staticmethod
-    @abc.abstractmethod
-    # pylint: disable=c0103
-    # Invalid method name.
-    def sufficient_statistics_from_mean_var(mean, var):
-        '''Compute the sufficient statistics of the data specified
-        in term of a mean and variance for each data point.
-
-        Args:
-            mean (Tensor): Means for each point of the data.
-            var (Tensor): Variances for each point (and
-                dimension) of the data.
-
-        Returns:
-            (Tensor): Sufficient statistics of the data.
-
-        '''
-        raise NotImplementedError
+        scale = torch.ones_like(mean) * pseudo_counts
+        shape = torch.ones_like(mean) * pseudo_counts
+        rate = pseudo_counts * diag_cov
+        prior = NormalGammaPrior(mean, scale, shape, rate)
+        posterior = NormalGammaPrior(mean, scale, shape, rate)
+        return cls(prior, posterior)
 
     @property
-    @abc.abstractmethod
     def mean(self):
-        'Expected value of the mean w.r.t. posterior distribution.'
-        raise NotImplementedError
+        np1, np2, _, _ = \
+            self.mean_prec_param.posterior.split_sufficient_statistics(
+                self.mean_prec_param.expected_value
+            )
+        return np2 / (-2 * np1)
 
     @property
-    @abc.abstractmethod
     def cov(self):
-        '''Expected value of the covariance matrix w.r.t posterior
-         distribution.
+        np1, _, _, _ = \
+            self.mean_prec_param.posterior.split_sufficient_statistics(
+                self.mean_prec_param.expected_value
+            )
+        return torch.diag(1/(-2 * np1))
 
-        '''
-        raise NotImplementedError
-
-
-class NormalDiagonalCovariance(Normal):
-    'Bayesian Normal distribution with diagonal covariance matrix.'
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
 
     @staticmethod
     def sufficient_statistics(data):
         return torch.cat([data ** 2, data, torch.ones_like(data),
                           torch.ones_like(data)], dim=-1)
 
+    def forward(self, s_stats, latent_variables=None):
+        feadim = .25 * s_stats.size(1)
+        exp_llh = s_stats @ self.mean_prec_param.expected_value
+        exp_llh -= .5 * feadim * math.log(2 * math.pi)
+        return exp_llh
+
+    def accumulate(self, s_stats, parent_msg=None):
+        return {self.mean_prec_param: s_stats.sum(dim=0)}
+
+    ####################################################################
+    # VAELatentPrior interface.
+    ####################################################################
+
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
         return torch.cat([(mean ** 2) + var, mean, torch.ones_like(mean),
                           torch.ones_like(mean)], dim=-1)
 
-    def __init__(self, prior, posterior):
-        super().__init__()
-        self.mean_prec_param = BayesianParameter(prior, posterior)
-
-    @property
-    def mean(self):
-        evalue = self.mean_prec_param.expected_value
-        np1, np2, _, _ = evalue.view(4, -1)
-        return np2 / (-2 * np1)
-
-    @property
-    def cov(self):
-        evalue = self.mean_prec_param.expected_value
-        np1, _, _, _ = evalue.view(4, -1)
-        return torch.diag(1/(-2 * np1))
-
     # pylint: disable=W0613
-    # Unused arguments (labels and nsamples).
     def expected_natural_params(self, mean, var, labels=None, nsamples=1):
         '''Interface for the VAE model. Returns the expected value of the
         natural params of the latent model given the per-frame means
@@ -142,18 +154,72 @@ class NormalDiagonalCovariance(Normal):
         ones = torch.ones(s_stats.size(0), nparams.size(0)).type(s_stats.type())
         return ones * nparams
 
-    def forward(self, s_stats, labels=None):
-        feadim = .25 * s_stats.size(1)
-        exp_llh = s_stats @ self.mean_prec_param.expected_value
-        exp_llh -= .5 * feadim * math.log(2 * math.pi)
-        return exp_llh
 
-    def accumulate(self, s_stats, parent_msg=None):
-        return {self.mean_prec_param: s_stats.sum(dim=0)}
+class NormalFullCovariance(BayesianModel):
+    '''Bayesian Normal distribution with a full covariance matrix.
 
+    Attributes:
+        mean (``torch.Tensor``): Expected mean.
+        cov (``torch.Tensor``): Expected covariance matrix.
 
-class NormalFullCovariance(Normal):
-    'Bayesian Normal distribution with diagonal covariance matrix.'
+    Example:
+        >>> # Create a Normal with zero mean and identity covariamce
+        >>> # matrix.
+        >>> mean = torch.zeros(2)
+        >>> cov = torch.eye(2)
+        >>> normal = beer.NormalFullCovariance.create(mean, cov)
+        >>> normal.mean
+        tensor([ 0.,  0.])
+        >>> model.cov
+        tensor([[ 1.,  0.],
+                [ 0.,  1.]])
+
+    '''
+
+    def __init__(self, prior, posterior):
+        super().__init__()
+        self.mean_prec_param = BayesianParameter(prior, posterior)
+
+    @classmethod
+    def create(cls, mean, cov, pseudo_counts=1.):
+        '''Create a :any:`NormalFullCovariance`.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            cov (``torch.Tensor``): Covariance matrix of the Normal to
+                create.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+
+        Returns:
+            :any:`NormalFullCovariance`
+        '''
+        scale = pseudo_counts
+        dof = pseudo_counts + len(mean) - 1
+        scale_matrix = torch.inverse(cov *  dof)
+        prior = NormalWishartPrior(mean, scale, scale_matrix, dof)
+        posterior = NormalWishartPrior(mean, scale, scale_matrix, dof)
+        return cls(prior, posterior)
+
+    @property
+    def mean(self):
+        np1, np2, _, _ = \
+            self.mean_prec_param.posterior.split_sufficient_statistics(
+                self.mean_prec_param.expected_value
+            )
+        return torch.inverse(-2 * np1) @ np2
+
+    @property
+    def cov(self):
+        np1, _, _, _ = \
+            self.mean_prec_param.posterior.split_sufficient_statistics(
+                self.mean_prec_param.expected_value
+            )
+        return torch.inverse(-2 * np1)
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
 
     @staticmethod
     def sufficient_statistics(data):
@@ -163,27 +229,7 @@ class NormalFullCovariance(Normal):
             torch.ones(data.size(0), 1).type(data.type())
         ], dim=-1)
 
-    @staticmethod
-    def sufficient_statistics_from_mean_var(mean, var):
-        raise NotImplementedError
-
-    def __init__(self, prior, posterior):
-        super().__init__()
-        self.mean_prec_param = BayesianParameter(prior, posterior)
-
-    @property
-    def mean(self):
-        evalue = self.mean_prec_param.expected_value
-        np1, np2, _, _, _ = _normalwishart_split_nparams(evalue)
-        return torch.inverse(-2 * np1) @ np2
-
-    @property
-    def cov(self):
-        evalue = self.mean_prec_param.expected_value
-        np1, _, _, _, _ = _normalwishart_split_nparams(evalue)
-        return torch.inverse(-2 * np1)
-
-    def forward(self, s_stats, labels=None):
+    def forward(self, s_stats, latent_variables=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - s_stats.size(1))))
         exp_llh = s_stats @ self.mean_prec_param.expected_value
         exp_llh -= .5 * feadim * math.log(2 * math.pi)
@@ -197,47 +243,78 @@ class NormalFullCovariance(Normal):
 # NormalSet model
 #######################################################################
 
-
 NormalSetElement = namedtuple('NormalSetElement', ['mean', 'cov'])
 
+class NormalDiagonalCovarianceSet(BayesianModelSet):
+    '''Set of Normal density models with diagonal covariance.
 
-class NormalSet(BayesianModel, metaclass=abc.ABCMeta):
-    'Set Normal density models.'
+    Note:
+        All the Normal models of the set will share the same prior
+        distribution.
 
-    @staticmethod
-    @abc.abstractmethod
-    def sufficient_statistics(data):
-        raise NotImplementedError
+    Example:
+        >>> # Create a set of Normal densities.
+        >>> mean = torch.zeros(2)
+        >>> diav_cov = torch.ones(2)
+        >>> normalset = beer.NormalDiagonalCovarianceSet.create(mean, diag_cov, 3)
+        >>> len(normalset)
+        3
 
-    @staticmethod
-    @abc.abstractmethod
-    # pylint: disable=C0103
-    def sufficient_statistics_from_mean_var(mean, var):
-        raise NotImplementedError
+    '''
 
-    def __init__(self, components):
+    def __init__(self, prior, posteriors):
         super().__init__()
-        self._components = components
+        self._components = [
+            NormalDiagonalCovariance(prior, post) for post in posteriors
+        ]
         self._parameters = BayesianParameterSet([
             BayesianParameter(comp.parameters[0].prior,
                               comp.parameters[0].posterior)
             for comp in self._components
         ])
 
-    def __getitem__(self, key):
-        if not isinstance(key, int):
-            raise TypeError('expected integer key')
-        return NormalSetElement(mean=self._components[key].mean,
-                                cov=self._components[key].cov)
+    @classmethod
+    def create(cls, mean, diag_cov, ncomp, pseudo_counts=1., noise_std=0.):
+        '''Create a :any:`NormalDiagonalCovarianceSet`.
 
-    def __len__(self):
-        return len(self._components)
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            diag_cov (``torch.Tensor``): Diagonal of the covariance
+                matrix of the Normal to create.
+            ncomp (int): Number of component in the set.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+            noise_std (float): Standard deviation of the noise when
+                initializing the mean of the posterior distribution.
 
-    # pylint: disable=C0103
-    # Invalid method name.
-    def expected_natural_params_as_matrix(self):
-        return torch.cat([param.expected_value[None]
-                          for param in self._parameters], dim=0)
+        Returns:
+            :any:`NormalDiagonalCovarianceSet`
+        '''
+        scale = torch.ones_like(mean) * pseudo_counts
+        shape = torch.ones_like(mean) * pseudo_counts
+        rate = pseudo_counts * diag_cov
+        prior = NormalGammaPrior(mean, scale, shape, rate)
+        posteriors = [
+            NormalGammaPrior(
+                mean + noise_std * torch.randn(len(mean)).type(mean.type()),
+                scale, shape, rate
+            ) for _ in range(ncomp)
+        ]
+        return cls(prior, posteriors)
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
+
+    @staticmethod
+    def sufficient_statistics(data):
+        return NormalDiagonalCovariance.sufficient_statistics(data)
+
+    def forward(self, s_stats, latent_variables=None):
+        feadim = .25 * s_stats.size(1)
+        retval = s_stats @ self.expected_natural_params_as_matrix().t()
+        retval -= .5 * feadim * math.log(2 * math.pi)
+        return retval
 
     def accumulate(self, s_stats, parent_msg=None):
         if parent_msg is None:
@@ -245,108 +322,175 @@ class NormalSet(BayesianModel, metaclass=abc.ABCMeta):
         weights = parent_msg
         return dict(zip(self.parameters, weights.t() @ s_stats))
 
+    ####################################################################
+    # BayesianModelSet interface.
+    ####################################################################
 
-class NormalDiagonalCovarianceSet(NormalSet):
-    'Set Normal density models with diagonal covariance.'
+    def __getitem__(self, key):
+        return NormalSetElement(mean=self._components[key].mean,
+                                cov=self._components[key].cov)
 
-    def __init__(self, prior, posteriors):
-        components = [
-            NormalDiagonalCovariance(prior, post) for post in posteriors
-        ]
-        super().__init__(components)
+    def __len__(self):
+        return len(self._components)
 
-    @staticmethod
-    def sufficient_statistics(data):
-        return NormalDiagonalCovariance.sufficient_statistics(data)
+    # Invalid method name.
+    def expected_natural_params_as_matrix(self):
+        return torch.cat([param.expected_value[None]
+                          for param in self.parameters], dim=0)
+
+    ####################################################################
+    # VAELatentPrior interface.
+    ####################################################################
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
         return NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
             mean, var)
 
-    def forward(self, s_stats, labels=None):
-        feadim = .25 * s_stats.size(1)
-        retval = s_stats @ self.expected_natural_params_as_matrix().t()
-        retval -= .5 * feadim * math.log(2 * math.pi)
-        return retval
 
+class NormalFullCovarianceSet(BayesianModelSet):
+    '''Set Normal density models with full covariance matrix.
 
-class NormalFullCovarianceSet(NormalSet):
-    'Set Normal density models with full covariance.'
+    Note:
+        All the Normal models of the set will share the same prior
+        distribution.
+
+    Example:
+        >>> # Create a set of Normal densities.
+        >>> mean = torch.zeros(2)
+        >>> cov = torch.eye(2)
+        >>> normalset = beer.NormalFullCovarianceSet.create(mean, cov, 3)
+        >>> len(normalset)
+        3
+
+    '''
 
     def __init__(self, prior, posteriors):
-        components = [
+        super().__init__()
+        self._components = [
             NormalFullCovariance(prior, post) for post in posteriors
         ]
-        super().__init__(components)
+        self._parameters = BayesianParameterSet([
+            BayesianParameter(comp.parameters[0].prior,
+                              comp.parameters[0].posterior)
+            for comp in self._components
+        ])
+
+    @classmethod
+    def create(cls, mean, cov, ncomp, pseudo_counts=1., noise_std=0.):
+        '''Create a :any:`NormalFullCovarianceSet`.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            cov (``torch.Tensor``): Covariance matrix of the Normal to
+                create.
+            ncomp (int): Number of component in the set.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+            noise_std (float): Standard deviation of the noise when
+                initializing the mean of the posterior distribution.
+
+        Returns:
+            :any:`NormalFullCovarianceSet`
+        '''
+        scale = pseudo_counts
+        dof = pseudo_counts + len(mean) - 1
+        scale_matrix = torch.inverse(cov *  dof)
+        prior = NormalWishartPrior(mean, scale, scale_matrix, dof)
+        posteriors = [
+            NormalWishartPrior(
+                mean + noise_std * torch.randn(len(mean)).type(mean.type()),
+                scale, scale_matrix, dof
+            ) for _ in range(ncomp)
+        ]
+        return cls(prior, posteriors)
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
 
     @staticmethod
     def sufficient_statistics(data):
         return NormalFullCovariance.sufficient_statistics(data)
 
-    @staticmethod
-    def sufficient_statistics_from_mean_var(mean, var):
-        return NormalFullCovariance.sufficient_statistics_from_mean_var(mean,
-                                                                        var)
-
-    def forward(self, s_stats, labels=None):
+    def forward(self, s_stats, latent_variables=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - s_stats.size(1))))
         retval = s_stats @ self.expected_natural_params_as_matrix().t()
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
 
+    def accumulate(self, s_stats, parent_msg=None):
+        if parent_msg is None:
+            raise ValueError('"parent_msg" should not be None')
+        weights = parent_msg
+        return dict(zip(self.parameters, weights.t() @ s_stats))
 
-def normal_diag_natural_params(mean, var):
-    '''Transform the standard parameters of a Normal (diag. cov.) into
-    their canonical forms.
+    ####################################################################
+    # BayesianModelSet interface.
+    ####################################################################
 
-    Note:
-        The (negative) log normalizer is appended to it.
-
-    '''
-    return torch.cat([
-        -1. / (2 * var),
-        mean / var,
-        -(mean ** 2) / (2 * var),
-        -.5 * torch.log(var)
-    ], dim=-1)
-
-
-#######################################################################
-# NormalSet model with shared covariance.
-#######################################################################
-
-class NormalSetSharedCovariance(BayesianModel, metaclass=abc.ABCMeta):
-    '''Set of Normal density models with a globale shared covariance
-    matrix.
-
-    '''
-
-    @staticmethod
-    @abc.abstractmethod
-    def sufficient_statistics(data):
-        raise NotImplementedError
-
-    @staticmethod
-    @abc.abstractmethod
-    # pylint: disable=C0103
-    def sufficient_statistics_from_mean_var(mean, var):
-        raise NotImplementedError
-
-    def __init__(self, prior, posterior, ncomp):
-        super().__init__()
-        self._ncomp = ncomp
-        self.means_prec_param = BayesianParameter(prior, posterior)
+    def __getitem__(self, key):
+        return NormalSetElement(mean=self._components[key].mean,
+                                cov=self._components[key].cov)
 
     def __len__(self):
-        return self._ncomp
+        return len(self._components)
+
+    # Invalid method name.
+    def expected_natural_params_as_matrix(self):
+        return torch.cat([param.expected_value[None]
+                          for param in self.parameters], dim=0)
 
 
-class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
-    '''Set of Normal density models with a globale shared full
+class NormalSetSharedDiagonalCovariance(BayesianModelSet):
+    '''Set of Normal density models with a global shared full
     covariance matrix.
 
+    Example:
+        >>> # Create a set of Normal densities.
+        >>> mean = torch.zeros(2)
+        >>> diag_cov = torch.ones(2)
+        >>> normalset = beer.NormalSetSharedDiagonalCovariance.create(mean, diag_cov, 3)
+        >>> len(normalset)
+        3
+
     '''
+
+    def __init__(self, prior, posterior):
+        super().__init__()
+        self._ncomp = prior.ncomp
+        self.means_prec_param = BayesianParameter(prior, posterior)
+
+    @classmethod
+    def create(cls, mean, diag_cov, ncomp, pseudo_counts=1., noise_std=0.):
+        '''Create a :any:`NormalSetSharedDiagonalCovariance`.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            diag_cov (``torch.Tensor``): Diagonal of the covariance
+                matrix of the Normal to create.
+            ncomp (int): Number of component in the set.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+            noise_std (float): Standard deviation of the noise when
+                initializing the mean of the posterior distribution.
+
+        Returns:
+            :any:`NormalSetSharedDiagonalCovariance`
+        '''
+        dim = len(mean)
+        scales = torch.ones(ncomp, dim).type(mean.type()) * pseudo_counts
+        shape = torch.ones_like(diag_cov) * pseudo_counts
+        rate = diag_cov * pseudo_counts
+        p_means = mean + torch.zeros_like(scales).type(mean.type())
+        means = mean +  noise_std * torch.randn(ncomp, dim).type(mean.type())
+        prior = JointNormalGammaPrior(p_means, scales, shape, rate)
+        posterior = JointNormalGammaPrior(means, scales, shape, rate)
+        return cls(prior, posterior)
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
 
     @staticmethod
     def sufficient_statistics(data):
@@ -354,39 +498,7 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
         s_stats2 = torch.cat([data, torch.ones_like(data)], dim=1)
         return s_stats1, s_stats2
 
-    @staticmethod
-    def sufficient_statistics_from_mean_var(mean, var):
-        s_stats1 = torch.cat([mean ** 2 + var, torch.ones_like(mean)], dim=1)
-        s_stats2 = torch.cat([mean, torch.ones_like(mean)], dim=1)
-        return s_stats1, s_stats2
-
-    def __getitem__(self, key):
-        if not isinstance(key, int):
-            raise TypeError('expected integer key')
-        exp_param = self.means_prec_param.expected_value
-        param1, param2, _, _, _ = _jointnormalgamma_split_nparams(
-            exp_param, self._ncomp)
-        cov = 1 / (-2 * param1)
-        mean = cov * param2[key]
-        return NormalSetElement(mean=mean, cov=torch.diag(cov))
-
-    def _expected_nparams(self):
-        exp_param = self.means_prec_param.expected_value
-        param1, param2, param3, param4, _ = _jointnormalgamma_split_nparams(
-            exp_param, self._ncomp)
-        return torch.cat([param1.view(-1), param4.view(-1)]), \
-            torch.cat([param2, param3], dim=1)
-
-    # pylint: disable=C0103
-    # Invalid method name.
-    def expected_natural_params_as_matrix(self):
-        exp_param = self.means_prec_param.expected_value
-        param1, param2, param3, param4, _ = _jointnormalgamma_split_nparams(
-            exp_param, self._ncomp)
-        ones = torch.ones_like(param2)
-        return torch.cat([ones * param1, param2, param3, ones * param4], dim=1)
-
-    def forward(self, s_stats, labels=None):
+    def forward(self, s_stats, latent_variables=None):
         s_stats1, s_stats2 = s_stats
         feadim = s_stats1.size(1) // 2
         params = self._expected_nparams()
@@ -407,12 +519,107 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
         ])
         return {self.means_prec_param: acc_stats}
 
+    ####################################################################
+    # BayesianModelSet interface.
+    ####################################################################
 
-class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
+    def __getitem__(self, key):
+        np1, np2, _, _ = \
+            self.means_prec_param.posterior.split_sufficient_statistics(
+                self.means_prec_param.expected_value
+            )
+        cov = 1 / (-2 * np1)
+        mean = cov * np2[key]
+        return NormalSetElement(mean=mean, cov=torch.diag(cov))
+
+    def __len__(self):
+        return self.means_prec_param.posterior.ncomp
+
+    # Invalid method name.
+    def expected_natural_params_as_matrix(self):
+        np1, np2, np3, np4 = \
+            self.means_prec_param.posterior.split_sufficient_statistics(
+                self.means_prec_param.expected_value
+            )
+        ones = torch.ones_like(np2)
+        return torch.cat([ones * np1, np2, np3, ones * np4], dim=1)
+
+    ####################################################################
+    # VAELatentPrior interface.
+    ####################################################################
+
+    def _expected_nparams(self):
+        np1, np2, np3, np4 = \
+            self.means_prec_param.posterior.split_sufficient_statistics(
+                self.means_prec_param.expected_value
+            )
+        return torch.cat([np1.view(-1), np4.view(-1)]), \
+            torch.cat([np2, np3], dim=1)
+
+    @staticmethod
+    def sufficient_statistics_from_mean_var(mean, var):
+        s_stats1 = torch.cat([mean ** 2 + var, torch.ones_like(mean)], dim=1)
+        s_stats2 = torch.cat([mean, torch.ones_like(mean)], dim=1)
+        return s_stats1, s_stats2
+
+
+class NormalSetSharedFullCovariance(BayesianModelSet):
     '''Set of Normal density models with a globale shared full
     covariance matrix.
 
+    Example:
+        >>> # Create a set of Normal densities.
+        >>> mean = torch.zeros(2)
+        >>> cov = torch.eye(2)
+        >>> normalset = beer.NormalSetSharedFullCovariance.create(mean, cov, 3)
+        >>> len(normalset)
+        3
+
     '''
+
+    def __init__(self, prior, posterior):
+        super().__init__()
+        self._ncomp = prior.ncomp
+        self.means_prec_param = BayesianParameter(prior, posterior)
+
+    @classmethod
+    def create(cls, mean, cov, ncomp, pseudo_counts=1., noise_std=0.):
+        '''Create a :any:`NormalSetSharedFullCovariance`.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the Normal to create.
+            cov (``torch.Tensor``): Covariance matrix of the Normal to
+                create.
+            ncomp (int): Number of component in the set.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+            noise_std (float): Standard deviation of the noise when
+                initializing the mean of the posterior distribution.
+
+        Returns:
+            :any:`NormalSetSharedFullCovariance`
+        '''
+        dim = len(mean)
+        scales = torch.ones(ncomp).type(mean.type()) * pseudo_counts
+        dof = pseudo_counts + dim - 1
+        scale_matrix = torch.inverse(cov *  dof)
+        p_means = mean + torch.zeros(ncomp, dim).type(mean.type())
+        means = mean + noise_std * torch.randn(ncomp, dim).type(mean.type())
+        prior = JointNormalWishartPrior(p_means, scales, scale_matrix, dof)
+        posteriors = JointNormalWishartPrior(means, scales, scale_matrix, dof)
+        return cls(prior, posteriors)
+
+    def _expected_nparams(self):
+        np1, np2, np3, np4 = \
+            self.means_prec_param.posterior.split_sufficient_statistics(
+                self.means_prec_param.expected_value
+            )
+        return np1.view(-1), \
+            torch.cat([np2, np3[:, None]], dim=1), np4
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
 
     @staticmethod
     def sufficient_statistics(data):
@@ -421,38 +628,7 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
                              dim=1)
         return s_stats1, s_stats2
 
-    @staticmethod
-    def sufficient_statistics_from_mean_var(mean, var):
-        raise NotImplementedError()
-
-    def __getitem__(self, key):
-        if not isinstance(key, int):
-            raise TypeError('expected integer key')
-        exp_param = self.means_prec_param.expected_value
-        param1, param2, _, _, _ = _jointnormalwishart_split_nparams(
-            exp_param, self._ncomp)
-        cov = torch.inverse(-2 * param1)
-        mean = cov @ param2[key]
-        return NormalSetElement(mean=mean, cov=cov)
-
-    def _expected_nparams(self):
-        exp_param = self.means_prec_param.expected_value
-        param1, param2, param3, param4, _ = _jointnormalwishart_split_nparams(
-            exp_param, self._ncomp)
-        return param1.view(-1), \
-            torch.cat([param2, param3[:, None]], dim=1), param4
-
-    # pylint: disable=C0103
-    def expected_natural_params_as_matrix(self):
-        exp_param = self.means_prec_param.expected_value
-        param1, param2, param3, param4, D = _jointnormalwishart_split_nparams(
-            exp_param, self._ncomp)
-        ones1 = torch.ones(self._ncomp, D**2).type(param1.type())
-        ones2 = torch.ones(self._ncomp, 1).type(param1.type())
-        return torch.cat([ones1 * param1.view(-1)[None, :],
-                          param2, param3.view(-1, 1), ones2 * param4], dim=1)
-
-    def forward(self, s_stats, labels=None):
+    def forward(self, s_stats, latent_variables=None):
         s_stats1, s_stats2 = s_stats
         feadim = int(math.sqrt(s_stats1.size(1)))
         params = self._expected_nparams()
@@ -473,3 +649,30 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
             len(weights) * torch.ones(1).type(weights.type())
         ])
         return {self.means_prec_param: acc_stats}
+
+    ####################################################################
+    # BayesianModelSet interface.
+    ####################################################################
+
+    def __getitem__(self, key):
+        np1, np2, _, _ = \
+            self.means_prec_param.posterior.split_sufficient_statistics(
+                self.means_prec_param.expected_value
+            )
+        cov = torch.inverse(-2 * np1)
+        mean = cov @ np2[key]
+        return NormalSetElement(mean=mean, cov=cov)
+
+    def __len__(self):
+        return self.means_prec_param.posterior.ncomp
+
+    def expected_natural_params_as_matrix(self):
+        dim = self.means_prec_param.posterior.dim
+        np1, np2, np3, np4 = \
+            self.means_prec_param.posterior.split_sufficient_statistics(
+                self.means_prec_param.expected_value
+            )
+        ones1 = torch.ones(self._ncomp, dim ** 2).type(np1.type())
+        ones2 = torch.ones(self._ncomp, 1).type(np1.type())
+        return torch.cat([ones1 * np1.view(-1)[None, :],
+                          np2, np3.view(-1, 1), ones2 * np4], dim=1)

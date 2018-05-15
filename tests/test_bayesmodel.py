@@ -9,30 +9,97 @@ sys.path.insert(0, './tests')
 
 import numpy as np
 import torch
+
 import beer
 from basetest import BaseTest
+
+
+def create_dirichlet(t_type):
+    dim = int(1 + torch.randint(100, (1, 1)).item())
+    concentrations = (torch.randn(dim) ** 2).type(t_type)
+    return beer.DirichletPrior(concentrations)
+
+def create_normalgamma(t_type):
+    dim = int(1 + torch.randint(100, (1, 1)).item())
+    mean = torch.randn(dim).type(t_type)
+    scale = (1 + torch.randn(dim)**2).type(t_type)
+    shape = (1 + torch.randn(dim)**2).type(t_type)
+    rate = (1 + torch.randn(dim)**2).type(t_type)
+    return beer.NormalGammaPrior(mean, scale, shape, rate)
+
+def create_jointnormalgamma(t_type):
+    ncomp = int(1 + torch.randint(100, (1, 1)).item())
+    dim = int(1 + torch.randint(100, (1, 1)).item())
+    means = torch.randn((ncomp, dim)).type(t_type)
+    scales = (1 + torch.randn((ncomp, dim))**2).type(t_type)
+    shape = (1 + torch.randn(dim)**2).type(t_type)
+    rate = (1 + torch.randn(dim)**2).type(t_type)
+    return beer.JointNormalGammaPrior(means, scales, shape, rate)
+
+def create_normalwishart(t_type):
+    dim = int(1 + torch.randint(100, (1, 1)).item())
+    mean = torch.randn(dim).type(t_type)
+    scale = (1 + torch.randn(1)**2).type(t_type)
+    scale_mat = (1 + torch.randn(dim)).type(t_type)
+    scale_mat = torch.eye(dim).type(t_type) + \
+        torch.ger(scale_mat, scale_mat)
+    dof = (dim + 100 + torch.randn(1)**2).type(t_type)
+    return beer.NormalWishartPrior(mean, float(scale), scale_mat, float(dof))
+
+def create_jointnormalwishart(t_type):
+    ncomp = int(1 + torch.randint(100, (1, 1)).item())
+    dim = int(1 + torch.randint(100, (1, 1)).item())
+    means = torch.randn((ncomp, dim)).type(t_type)
+    scales = (1 + torch.randn((ncomp))**2).type(t_type)
+    scale_mat = (1 + torch.randn(dim)).type(t_type)
+    scale_mat = torch.eye(dim).type(t_type) + \
+        torch.ger(scale_mat, scale_mat)
+    dof = (dim + 100 + torch.randn(1)**2).type(t_type)
+    return beer.JointNormalWishartPrior(means, scales, scale_mat, float(dof))
+
+def create_normalfull(t_type):
+    dim = int(1 + torch.randint(100, (1, 1)).item())
+    mean = torch.randn(dim).type(t_type)
+    cov = (1 + torch.randn(dim)).type(t_type)
+    cov = torch.eye(dim).type(t_type) + torch.ger(cov, cov)
+    return beer.NormalFullCovariancePrior(mean, cov)
+
+def create_normaliso(t_type):
+    dim = int(1 + torch.randint(100, (1, 1)).item())
+    mean = torch.randn(dim).type(t_type)
+    var = (1 + torch.randn(dim)**2).type(t_type)
+    return beer.NormalIsotropicCovariancePrior(mean, var)
+
+def create_matrixnormal(t_type):
+    dim1 = int(1 + torch.randint(100, (1, 1)).item())
+    dim2 = int(1 + torch.randint(100, (1, 1)).item())
+    mean = torch.randn(dim1, dim2).type(t_type)
+    cov = (1 + torch.randn(dim1)).type(t_type)
+    cov = torch.eye(dim1).type(t_type) + torch.ger(cov, cov)
+    return beer.MatrixNormalPrior(mean, cov)
+
+def create_gamma(t_type):
+    shape = (1 + torch.randn(1) ** 2).type(t_type)
+    rate = (1 + torch.randn(1) ** 2).type(t_type)
+    return beer.GammaPrior(shape, rate)
 
 
 class TestBayesianParameter(BaseTest):
 
     def setUp(self):
-        self.dim = int(1 + torch.randint(100, (1, 1)).item())
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
         self.priors = [
-            beer.DirichletPrior(torch.ones(self.dim).type(self.type)),
-            beer.NormalGammaPrior(torch.randn(self.dim).type(self.type),
-                                  (torch.randn(self.dim)**2).type(self.type),
-                                  self.prior_count)
+            create_dirichlet(self.type),
+            create_normalgamma(self.type),
+            create_jointnormalgamma(self.type),
+            create_normalwishart(self.type),
+            create_jointnormalwishart(self.type),
+            create_normalfull(self.type),
+            create_normaliso(self.type),
+            create_matrixnormal(self.type),
+            create_gamma(self.type),
         ]
+        self.posteriors = self.priors
 
-        self.posteriors = [
-            beer.DirichletPrior(torch.ones(self.dim).type(self.type)),
-            beer.NormalGammaPrior(torch.randn(self.dim).type(self.type),
-                                  (torch.randn(self.dim)**2).type(self.type),
-                                  self.prior_count)
-        ]
-        #self.ng_prior = beer.NormalGammaPrior(torch.zeros(2), torch.ones(2), 1.)
-        #nw_prior = beer.NormalWishartPrior(torch.zeros(2), torch.eye(2), 1.)
 
     def test_create(self):
         for i, pdfs in enumerate(zip(self.priors, self.posteriors)):
@@ -70,7 +137,7 @@ class TestBayesianParameter(BaseTest):
         for i, pdfs in enumerate(zip(self.priors, self.posteriors)):
             prior, posterior = pdfs
             with self.subTest(i=i):
-                kl_div = beer.kl_div_posterior_prior(
+                kl_div = beer.BayesianModel.kl_div_posterior_prior(
                     [beer.BayesianParameter(prior, posterior)
                      for _ in range(10)]
                 )
@@ -80,24 +147,26 @@ class TestBayesianParameter(BaseTest):
 class TestBayesianParameterSet(BaseTest):
 
     def setUp(self):
-        self.nparams = int(1 + torch.randint(100, (1, 1)).item())
+        self.nparams = int(1 + torch.randint(20, (1, 1)).item())
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+        self.concentrations = (torch.randn(self.dim) ** 2).type(self.type)
+        self.shape = (1 + torch.randn(1) ** 2).type(self.type)
+        self.rate = (1 + torch.randn(1) ** 2).type(self.type)
         self.priors, self.posteriors = [], []
         for _ in range(self.nparams):
             self.priors.append([
-                beer.DirichletPrior(torch.ones(self.dim).type(self.type)),
-                beer.NormalGammaPrior(torch.randn(self.dim).type(self.type),
-                                      (torch.randn(self.dim)**2).type(self.type),
-                                      self.prior_count)
+                create_dirichlet(self.type),
+                create_normalgamma(self.type),
+                create_jointnormalgamma(self.type),
+                create_normalwishart(self.type),
+                create_jointnormalwishart(self.type),
+                create_normalfull(self.type),
+                create_normaliso(self.type),
+                create_matrixnormal(self.type),
+                create_gamma(self.type),
             ])
 
-            self.posteriors.append([
-                beer.DirichletPrior(torch.ones(self.dim).type(self.type)),
-                beer.NormalGammaPrior(torch.randn(self.dim).type(self.type),
-                                      (torch.randn(self.dim)**2).type(self.type),
-                                      self.prior_count)
-            ])
+            self.posteriors.append(self.priors[-1])
 
     def test_create(self):
         for i in range(self.nparams):
