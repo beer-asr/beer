@@ -15,31 +15,51 @@ def _logsumexp(tensor, dim=1):
 
 
 class HMM(BayesianModel):
-    'Bayesian Mixture Model.'
+    'HMM Model.'
 
-    def __init__(self, init_states, final_states, trans_mat, normalset):
-        '''Initialie the HMM model.
-
+    def __init__(self, init_states, final_states, trans_mat, modelset):
+        '''
         Args:
-            init_states : List of indices of states whose weight are non-zero.
-            trans_mat (Tensor): Transition matrix of HMM states.
-            normalset (``NormalSet``): Set of normal distribution.
+            init_states  (list): Indices of initial states who have 
+                non-zero probability.
+            final_states  (list): Indices of final states who have 
+                non-zero probability.
+            trans_mat (``torch.Tensor``): Transition matrix of HMM states.
+            modelset (:any:`BayesianModelSet`): Set of emission density.
 
         '''
         super().__init__()
         self.init_states = init_states
         self.final_states = final_states
         self.trans_mat = trans_mat
-        self.components = normalset
+        self.modelset = modelset
         self._resps = None
+    
+    @classmethod
+    def create(cls, init_states, final_states, trans_mat, modelset):
+        '''Create a :any:`HMM` model.
+
+        Args:
+            init_states  (list): Indices of initial states who have 
+                non-zero probability.
+            final_states  (list): Indices of final states who have 
+                non-zero probability.
+            trans_mat (``torch.Tensor``): Transition matrix of HMM states.
+            modelset (:any:`BayesianModelSet`): Set of emission density.
+
+        Returns:
+            :any:`HMM`
+
+        '''
+        return cls(init_states, final_states, trans_mat, modelset)
 
     def sufficient_statistics(self, data):
-        return self.components.sufficient_statistics(data)
+        return self.modelset.sufficient_statistics(data)
 
     # pylint: disable=C0103
     # Invalid method name.
     def sufficient_statistics_from_mean_var(self, mean, var):
-        return self.components.sufficient_statistics_from_mean_var(mean, var)
+        return self.modelset.sufficient_statistics_from_mean_var(mean, var)
 
     @staticmethod
     def baum_welch_forward(init_states, trans_mat, llhs):
@@ -84,7 +104,7 @@ class HMM(BayesianModel):
 
 
     def forward(self, s_stats, labels=None):
-        pc_exp_llh = self.components(s_stats)
+        pc_exp_llh = self.modelset(s_stats)
         log_alphas = HMM.baum_welch_forward(self.init_states, self.trans_mat, pc_exp_llh)
         log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat, pc_exp_llh)
 
@@ -97,7 +117,7 @@ class HMM(BayesianModel):
 
     def accumulate(self, s_stats, parent_msg=None):
         retval = {
-            **self.components.accumulate(s_stats, self._resps)
+            **self.modelset.accumulate(s_stats, self._resps)
         }
         self._resps = None
         return retval
