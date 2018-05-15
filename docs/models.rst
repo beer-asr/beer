@@ -1,31 +1,70 @@
-Bayesian Models
-===============
+Models
+======
 
-The ``models`` package contains all the Bayesian models.
 
-    >>> from beer import models
-    >>> import numpy as np
+Base Model
+----------
 
-Bayesian Normal distribution  with diagonal covariance
-------------------------------------------------------
+``beer`` provides a collection of generative models that can be used in
+various condition.
 
-Creation
-^^^^^^^^
+.. autoclass:: beer.BayesianModel
+   :members:
 
-    >>> from beer import models
-    >>> model = models.NormalDiagonalCovariance.create(dim=2)
+.. autoclass:: beer.BayesianModelSet
+   :members:
 
-Learning
-^^^^^^^^
 
-    >>> np.random.seed(1)
-    >>> mean = np.ones(2) + 3.
-    >>> cov = np.identity(2) * 2.
-    >>> data = np.random.multivariate_normal(mean, cov, size=1000).T
-    >>> for i in range(10):
-    ...     exp_llh, acc_stats = model.exp_llh(data)
-    ...     model.natural_grad_update(acc_stats, scale=1.0, lrate=1.0)
+.. autoclass:: beer.BayesianParameter
+   :members:
 
-    >>> model.exp_mean, model.exp_precision
-    (array([ 4.05585577,  4.03766098]), array([ 0.49125323,  0.49625441]))
+.. autoclass:: beer.BayesianParameterSet
+   :members:
 
+
+Concrete Models
+---------------
+
++-----------------------------------------------+
+| :any:`beer.NormalDiagonalCovariance`          |
++-----------------------------------------------+
+| :any:`beer.NormalFullCovariance`              |
++-----------------------------------------------+
+| :any:`beer.NormalDiagonalCovarianceSet`       |
++-----------------------------------------------+
+| :any:`beer.NormalFullCovarianceSet`           |
++-----------------------------------------------+
+| :any:`beer.NormalSetSharedDiagonalCovariance` |
++-----------------------------------------------+
+| :any:`beer.NormalSetSharedDiagonalCovariance` |
++-----------------------------------------------+
+| :any:`beer.Mixture`                           |
++-----------------------------------------------+
+
+.. autoclass:: beer.NormalDiagonalCovariance
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.NormalFullCovariance
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.NormalDiagonalCovarianceSet
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.NormalFullCovarianceSet
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.NormalSetSharedDiagonalCovariance
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.NormalSetSharedFullCovariance
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.Mixture
+   :show-inheritance:
+   :members: create

@@ -1,3 +1,4 @@
+
 'Test the Normal model.'
 
 
@@ -12,10 +13,6 @@ import math
 import numpy as np
 import torch
 import beer
-from beer import NormalGammaPrior
-from beer import NormalWishartPrior
-from beer.expfamilyprior import _jointnormalgamma_split_nparams
-from beer.expfamilyprior import _jointnormalwishart_split_nparams
 from basetest import BaseTest
 
 
@@ -25,26 +22,20 @@ class TestNormalDiagonalCovariance(BaseTest):
     def setUp(self):
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
+        self.mean = torch.randn(self.dim).type(self.type)
+        self.diag_cov = 1 + torch.randn(self.dim).type(self.type) ** 2
+        self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
         self.means = torch.randn(self.npoints, self.dim).type(self.type)
         self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
-        self.mean = torch.randn(self.dim).type(self.type)
-        self.prec = 1 + (torch.randn(self.dim)**2).type(self.type)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+        self.model = beer.NormalDiagonalCovariance.create(self.mean,
+                                                          self.diag_cov,
+                                                          self.pseudo_counts)
 
     def test_create(self):
-        model = beer.NormalDiagonalCovariance(
-            NormalGammaPrior(self.mean, self.prec, self.prior_count),
-            NormalGammaPrior(self.mean, self.prec, self.prior_count)
-        )
-        mean1, mean2 = self.mean.numpy(), model.mean.numpy()
+        mean1, mean2 = self.mean.numpy(), self.model.mean.numpy()
         self.assertArraysAlmostEqual(mean1, mean2)
-        cov1, cov2 = (1. / self.prec.numpy()), model.cov.numpy()
-        if len(cov1.shape) == 1:
-            cov1 = np.diag(cov1)
-        #print(np.diag(cov1) - np.diag(cov2))
-        #import pdb
-        #pdb.set_trace()
+        cov1, cov2 = np.diag(self.diag_cov.numpy()), self.model.cov.numpy()
         self.assertArraysAlmostEqual(cov1, cov2)
 
     def test_sufficient_statistics(self):
@@ -64,24 +55,16 @@ class TestNormalDiagonalCovariance(BaseTest):
         self.assertArraysAlmostEqual(stats1.numpy(), stats2)
 
     def test_exp_llh(self):
-        model = beer.NormalDiagonalCovariance(
-            NormalGammaPrior(self.mean, self.prec, self.prior_count),
-            NormalGammaPrior(self.mean, self.prec, self.prior_count)
-        )
-        stats = model.sufficient_statistics(self.data)
-        nparams = model.parameters[0].expected_value
+        stats = self.model.sufficient_statistics(self.data)
+        nparams = self.model.parameters[0].expected_value
         exp_llh1 = stats @ nparams
         exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)
-        exp_llh2 = model(stats)
+        exp_llh2 = self.model(stats)
         self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
 
     def test_expected_natural_params(self):
-        model = beer.NormalDiagonalCovariance(
-            NormalGammaPrior(self.mean, self.prec, self.prior_count),
-            NormalGammaPrior(self.mean, self.prec, self.prior_count)
-        )
-        np1 = model.expected_natural_params(self.means, self.vars).numpy()
-        np2 = model.parameters[0].expected_value.numpy()
+        np1 = self.model.expected_natural_params(self.means, self.vars).numpy()
+        np2 = self.model.parameters[0].expected_value.numpy()
         np2 = np.ones((self.means.size(0), len(np2))) * np2
         self.assertArraysAlmostEqual(np1, np2)
 
@@ -98,16 +81,15 @@ class TestNormalFullCovariance(BaseTest):
         self.mean = torch.randn(self.dim).type(self.type)
         cov = (1 + torch.randn(self.dim)).type(self.type)
         self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+        self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
+        self.model = beer.NormalFullCovariance.create(self.mean,
+                                                      self.cov,
+                                                      self.pseudo_counts)
 
     def test_create(self):
-        model = beer.NormalFullCovariance(
-            NormalWishartPrior(self.mean, self.cov, self.prior_count),
-            NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        )
-        mean1, mean2 = self.mean.numpy(), model.mean.numpy()
+        mean1, mean2 = self.mean.numpy(), self.model.mean.numpy()
         self.assertArraysAlmostEqual(mean1, mean2)
-        cov1, cov2 = self.cov.numpy(), model.cov.numpy()
+        cov1, cov2 = self.cov.numpy(), self.model.cov.numpy()
         self.assertArraysAlmostEqual(cov1, cov2)
 
     def test_sufficient_statistics(self):
@@ -118,15 +100,11 @@ class TestNormalFullCovariance(BaseTest):
         self.assertArraysAlmostEqual(stats1, stats2.numpy())
 
     def test_exp_llh(self):
-        model = beer.NormalFullCovariance(
-            NormalWishartPrior(self.mean, self.cov, self.prior_count),
-            NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        )
-        stats = model.sufficient_statistics(self.data)
-        nparams = model.parameters[0].expected_value
+        stats = self.model.sufficient_statistics(self.data)
+        nparams = self.model.parameters[0].expected_value
         exp_llh1 = stats @ nparams
         exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)
-        exp_llh2 = model(stats)
+        exp_llh2 = self.model(stats)
         self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
 
 
@@ -140,22 +118,20 @@ class TestNormalDiagonalCovarianceSet(BaseTest):
         self.means = torch.randn(self.npoints, self.dim).type(self.type)
         self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
         self.mean = torch.randn(self.dim).type(self.type)
-        self.prec = 1 + (torch.randn(self.dim)**2).type(self.type)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+        self.diag_cov = 1 + torch.randn(self.dim).type(self.type) ** 2
+        self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
         self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
+        self.model = beer.NormalDiagonalCovarianceSet.create(
+            self.mean, self.diag_cov, self.ncomp, self.pseudo_counts,
+            noise_std=0.
+        )
 
     def test_create(self):
-        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
-                 for _ in range(self.ncomp)]
-        model = beer.NormalDiagonalCovarianceSet(
-            NormalGammaPrior(self.mean, self.prec, self.prior_count),
-            posts
-        )
-        self.assertEqual(len(model), self.ncomp)
+        self.assertEqual(len(self.model), self.ncomp)
         for i in range(self.ncomp):
-            mean1, mean2 = self.mean.numpy(), model[i].mean.numpy()
+            mean1, mean2 = self.mean.numpy(), self.model[i].mean.numpy()
             self.assertArraysAlmostEqual(mean1, mean2)
-            cov1, cov2 = (1. / self.prec.numpy()), torch.diag(model[i].cov).numpy()
+            cov1, cov2 = self.diag_cov.numpy(), torch.diag(self.model[i].cov).numpy()
             self.assertArraysAlmostEqual(cov1, cov2)
 
     def test_sufficient_statistics(self):
@@ -172,43 +148,25 @@ class TestNormalDiagonalCovarianceSet(BaseTest):
         self.assertArraysAlmostEqual(stats1.numpy(), stats2.numpy())
 
     def test_expected_natural_params_as_matrix(self):
-        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
-                 for _ in range(self.ncomp)]
-        model = beer.NormalDiagonalCovarianceSet(
-            NormalGammaPrior(self.mean, self.prec, self.prior_count),
-            posts
-        )
-        matrix1 = model.expected_natural_params_as_matrix()
+        matrix1 = self.model.expected_natural_params_as_matrix()
         matrix2 = torch.cat([param.expected_value[None]
-                             for param in model.parameters])
+                             for param in self.model.parameters])
         self.assertArraysAlmostEqual(matrix1.numpy(), matrix2.numpy())
 
     def test_forward(self):
-        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
-                 for _ in range(self.ncomp)]
-        model = beer.NormalDiagonalCovarianceSet(
-            NormalGammaPrior(self.mean, self.prec, self.prior_count),
-            posts
-        )
         matrix = torch.cat([param.expected_value[None]
-                            for param in model.parameters], dim=0)
-        T = model.sufficient_statistics(self.data)
+                            for param in self.model.parameters], dim=0)
+        T = self.model.sufficient_statistics(self.data)
         exp_llh1 = T @ matrix.t()
         exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)
-        exp_llh2 = model(T)
+        exp_llh2 = self.model(T)
         self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
 
     def test_accumulate(self):
-        posts = [NormalGammaPrior(self.mean, self.prec, self.prior_count)
-                 for _ in range(self.ncomp)]
-        model = beer.NormalDiagonalCovarianceSet(
-            NormalGammaPrior(self.mean, self.prec, self.prior_count),
-            posts
-        )
         weights = torch.ones(len(self.data), self.ncomp).type(self.data.type())
-        T = model.sufficient_statistics(self.data)
+        T = self.model.sufficient_statistics(self.data)
         acc_stats1 = list(weights.t() @ T)
-        acc_stats2 = [value for key, value in model.accumulate(T, weights).items()]
+        acc_stats2 = [value for key, value in self.model.accumulate(T, weights).items()]
         for s1, s2 in zip(acc_stats1, acc_stats2):
             self.assertArraysAlmostEqual(s1.numpy(), s2.numpy())
 
@@ -225,21 +183,19 @@ class TestNormalFullCovarianceSet(BaseTest):
         self.mean = torch.randn(self.dim).type(self.type)
         cov = (1 + torch.randn(self.dim)).type(self.type)
         self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+        self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
         self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
+        self.model = beer.NormalFullCovarianceSet.create(
+            self.mean, self.cov, self.ncomp, self.pseudo_counts,
+            noise_std=0.
+        )
 
     def test_create(self):
-        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
-                 for _ in range(self.ncomp)]
-        model = beer.NormalFullCovarianceSet(
-            NormalWishartPrior(self.mean, self.cov, self.prior_count),
-            posts
-        )
-        self.assertEqual(len(model), self.ncomp)
+        self.assertEqual(len(self.model), self.ncomp)
         for i in range(self.ncomp):
-            mean1, mean2 = self.mean.numpy(), model[i].mean.numpy()
+            mean1, mean2 = self.mean.numpy(), self.model[i].mean.numpy()
             self.assertArraysAlmostEqual(mean1, mean2)
-            cov1, cov2 = self.cov.numpy(), model[i].cov.numpy()
+            cov1, cov2 = self.cov.numpy(), self.model[i].cov.numpy()
             self.assertArraysAlmostEqual(cov1, cov2)
 
     def test_sufficient_statistics(self):
@@ -249,43 +205,25 @@ class TestNormalFullCovarianceSet(BaseTest):
 
     # pylint: disable=C0103
     def test_expected_natural_params_as_matrix(self):
-        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
-                 for _ in range(self.ncomp)]
-        model = beer.NormalFullCovarianceSet(
-            NormalWishartPrior(self.mean, self.cov, self.prior_count),
-            posts
-        )
-        matrix1 = model.expected_natural_params_as_matrix()
+        matrix1 = self.model.expected_natural_params_as_matrix()
         matrix2 = torch.cat([param.expected_value[None]
-                             for param in model.parameters])
+                             for param in self.model.parameters])
         self.assertArraysAlmostEqual(matrix1.numpy(), matrix2.numpy())
 
     def test_forward(self):
-        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
-                 for _ in range(self.ncomp)]
-        model = beer.NormalFullCovarianceSet(
-            NormalWishartPrior(self.mean, self.cov, self.prior_count),
-            posts
-        )
         matrix = torch.cat([param.expected_value[None]
-                            for param in model.parameters], dim=0)
-        T = model.sufficient_statistics(self.data)
+                            for param in self.model.parameters], dim=0)
+        T = self.model.sufficient_statistics(self.data)
         exp_llh1 = T @ matrix.t()
         exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)
-        exp_llh2 = model(T)
+        exp_llh2 = self.model(T)
         self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
 
     def test_accumulate(self):
-        posts = [NormalWishartPrior(self.mean, self.cov, self.prior_count)
-                 for _ in range(self.ncomp)]
-        model = beer.NormalFullCovarianceSet(
-            NormalWishartPrior(self.mean, self.cov, self.prior_count),
-            posts
-        )
         weights = torch.ones(len(self.data), self.ncomp).type(self.data.type())
-        T = model.sufficient_statistics(self.data)
+        T = self.model.sufficient_statistics(self.data)
         acc_stats1 = list(weights.t() @ T)
-        acc_stats2 = [value for key, value in model.accumulate(T, weights).items()]
+        acc_stats2 = [value for key, value in self.model.accumulate(T, weights).items()]
         for s1, s2 in zip(acc_stats1, acc_stats2):
             self.assertArraysAlmostEqual(s1.numpy(), s2.numpy())
 
@@ -300,24 +238,21 @@ class TestNormalSetSharedDiagonalCovariance(BaseTest):
         self.means = torch.randn(self.npoints, self.dim).type(self.type)
         self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
         self.mean = torch.randn(self.dim).type(self.type)
-        self.prec = 1 + (torch.randn(self.dim)**2).type(self.type)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+        self.diag_cov = 1 + (torch.randn(self.dim)**2).type(self.type)
+        self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
         self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
-        self.prior_means = torch.randn(self.ncomp, self.dim).type(self.type)
-        self.posterior_means = torch.randn(self.ncomp, self.dim).type(self.type)
+        self.prior_mean = torch.randn(self.dim).type(self.type)
+        self.model = beer.NormalSetSharedDiagonalCovariance.create(
+            self.prior_mean, self.diag_cov, self.ncomp, self.pseudo_counts,
+            noise_std=0.
+        )
 
     def test_create(self):
-        prior = beer.JointNormalGammaPrior(self.prior_means,
-                                           self.prec, self.prior_count)
-        posterior = beer.JointNormalGammaPrior(self.posterior_means,
-                                               self.prec, self.prior_count)
-        model = beer.NormalSetSharedDiagonalCovariance(prior, posterior,
-                                                       self.ncomp)
-        self.assertEqual(len(model), self.ncomp)
-        for i, comp in enumerate(model):
-            mean1, mean2 = self.posterior_means[i].numpy(), comp.mean.numpy()
+        self.assertEqual(len(self.model), self.ncomp)
+        for i, comp in enumerate(self.model):
+            mean1, mean2 = self.prior_mean.numpy(), comp.mean.numpy()
             self.assertArraysAlmostEqual(mean1, mean2)
-            cov1, cov2 = np.diag(1/self.prec.numpy()), comp.cov.numpy()
+            cov1, cov2 = np.diag(self.diag_cov.numpy()), comp.cov.numpy()
             self.assertArraysAlmostEqual(cov1, cov2)
 
     def test_sufficient_statistics(self):
@@ -342,16 +277,10 @@ class TestNormalSetSharedDiagonalCovariance(BaseTest):
 
     # pylint: disable=C0103
     def test_expected_natural_params_as_matrix(self):
-        prior = beer.JointNormalGammaPrior(self.prior_means,
-                                           self.prec, self.prior_count)
-        posterior = beer.JointNormalGammaPrior(self.posterior_means,
-                                               self.prec, self.prior_count)
-        model = beer.NormalSetSharedDiagonalCovariance(prior, posterior,
-                                                       self.ncomp)
-        matrix1 = model.expected_natural_params_as_matrix()
-        nparams = model.parameters[0].expected_value
-        param1, param2, param3, param4, _ = _jointnormalgamma_split_nparams(
-            nparams, self.ncomp)
+        matrix1 = self.model.expected_natural_params_as_matrix()
+        post = self.model.means_prec_param.posterior
+        param1, param2, param3, param4 = \
+            post.split_sufficient_statistics(post.expected_sufficient_statistics)
         ones = torch.ones_like(param2)
         matrix2 = torch.cat([
             ones * param1[None, :],
@@ -361,17 +290,10 @@ class TestNormalSetSharedDiagonalCovariance(BaseTest):
         self.assertArraysAlmostEqual(matrix1.numpy(), matrix2.numpy())
 
     def test_forward(self):
-        prior = beer.JointNormalGammaPrior(self.prior_means,
-                                           self.prec, self.prior_count)
-        posterior = beer.JointNormalGammaPrior(self.posterior_means,
-                                               self.prec, self.prior_count)
-        model = beer.NormalSetSharedDiagonalCovariance(prior, posterior,
-                                                       self.ncomp)
-
-        stats1, stats2 = model.sufficient_statistics(self.data)
+        stats1, stats2 = self.model.sufficient_statistics(self.data)
         # pylint: disable=W0212
-        params = model._expected_nparams()
-        exp_llh1 = model((stats1, stats2))
+        params = self.model._expected_nparams()
+        exp_llh1 = self.model((stats1, stats2))
         self.assertEqual(exp_llh1.size(0), self.data.size(0))
         self.assertEqual(exp_llh1.size(1), self.ncomp)
 
@@ -380,19 +302,12 @@ class TestNormalSetSharedDiagonalCovariance(BaseTest):
         self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
 
     def test_accumulate(self):
-        prior = beer.JointNormalGammaPrior(self.prior_means,
-                                           self.prec, self.prior_count)
-        posterior = beer.JointNormalGammaPrior(self.posterior_means,
-                                               self.prec, self.prior_count)
-        model = beer.NormalSetSharedDiagonalCovariance(prior, posterior,
-                                                       self.ncomp)
-
         weights = torch.ones(len(self.data), self.ncomp).type(self.data.type())
         feadim = self.data.size(1)
-        stats = model.sufficient_statistics(self.data)
-        acc_stats1 = model.accumulate(stats, weights)[model.means_prec_param]
+        stats = self.model.sufficient_statistics(self.data)
+        acc_stats1 = self.model.accumulate(stats, weights)[self.model.means_prec_param]
         self.assertEqual(len(acc_stats1),
-                         len(model.means_prec_param.posterior.natural_params))
+                         len(self.model.means_prec_param.posterior.natural_hparams))
         acc_stats2 = torch.cat([
             stats[0][:, :feadim].sum(dim=0),
             (weights.t() @ stats[1][:, :feadim]).view(-1),
@@ -414,20 +329,18 @@ class TestNormalSetSharedFullCovariance(BaseTest):
         self.mean = torch.randn(self.dim).type(self.type)
         cov = (1 + torch.randn(self.dim)).type(self.type)
         self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+        self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
         self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
-        self.prior_means = torch.randn(self.ncomp, self.dim).type(self.type)
-        self.posterior_means = torch.randn(self.ncomp, self.dim).type(self.type)
+        self.prior_mean = torch.randn(self.dim).type(self.type)
+        self.model = beer.NormalSetSharedFullCovariance.create(
+            self.prior_mean, self.cov, self.ncomp, self.pseudo_counts,
+            noise_std=0.
+        )
 
     def test_create(self):
-        prior = beer.JointNormalWishartPrior(self.prior_means,
-                                             self.cov, self.prior_count)
-        posterior = beer.JointNormalWishartPrior(self.posterior_means,
-                                                 self.cov, self.prior_count)
-        model = beer.NormalSetSharedFullCovariance(prior, posterior, self.ncomp)
-        self.assertEqual(len(model), self.ncomp)
-        for i, comp in enumerate(model):
-            mean1, mean2 = self.posterior_means[i].numpy(), comp.mean.numpy()
+        self.assertEqual(len(self.model), self.ncomp)
+        for i, comp in enumerate(self.model):
+            mean1, mean2 = self.prior_mean.numpy(), comp.mean.numpy()
             self.assertArraysAlmostEqual(mean1, mean2)
             cov1, cov2 = self.cov.numpy(), comp.cov.numpy()
             self.assertArraysAlmostEqual(cov1, cov2)
@@ -442,17 +355,11 @@ class TestNormalSetSharedFullCovariance(BaseTest):
 
     # pylint: disable=C0103
     def test_expected_natural_params_as_matrix(self):
-        prior = beer.JointNormalWishartPrior(self.prior_means,
-                                             self.cov, self.prior_count)
-        posterior = beer.JointNormalWishartPrior(self.posterior_means,
-                                                 self.cov, self.prior_count)
-        model = beer.NormalSetSharedFullCovariance(prior, posterior, self.ncomp)
-
-        matrix1 = model.expected_natural_params_as_matrix()
-        nparams = model.parameters[0].expected_value
-        param1, param2, param3, param4, D = _jointnormalwishart_split_nparams(
-            nparams, self.ncomp)
-        ones1 = torch.ones(self.ncomp, D**2).type(param2.type())
+        matrix1 = self.model.expected_natural_params_as_matrix()
+        post = self.model.means_prec_param.posterior
+        param1, param2, param3, param4 = \
+            post.split_sufficient_statistics(post.expected_sufficient_statistics)
+        ones1 = torch.ones(self.ncomp, self.dim**2).type(param2.type())
         ones2 = torch.ones(self.ncomp, 1).type(param2.type())
         matrix2 = torch.cat([
             ones1 * param1.view(-1)[None, :],
@@ -462,35 +369,23 @@ class TestNormalSetSharedFullCovariance(BaseTest):
         self.assertArraysAlmostEqual(matrix1.numpy(), matrix2.numpy())
 
     def test_forward(self):
-        prior = beer.JointNormalWishartPrior(self.prior_means,
-                                             self.cov, self.prior_count)
-        posterior = beer.JointNormalWishartPrior(self.posterior_means,
-                                                 self.cov, self.prior_count)
-        model = beer.NormalSetSharedFullCovariance(prior, posterior, self.ncomp)
-
-        stats1, stats2 = model.sufficient_statistics(self.data)
-        exp_llh1 = model((stats1, stats2))
+        stats1, stats2 = self.model.sufficient_statistics(self.data)
+        exp_llh1 = self.model((stats1, stats2))
         self.assertEqual(exp_llh1.size(0), self.data.size(0))
         self.assertEqual(exp_llh1.size(1), self.ncomp)
 
         # pylint: disable=W0212
-        params = model._expected_nparams()
+        params = self.model._expected_nparams()
         exp_llh2 = (stats1 @ params[0])[:, None] + stats2 @ params[1].t() + params[2]
         exp_llh2 -= .5 * self.data.size(1) * math.log(2 * math.pi)
         self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
 
     def test_accumulate(self):
-        prior = beer.JointNormalWishartPrior(self.prior_means,
-                                             self.cov, self.prior_count)
-        posterior = beer.JointNormalWishartPrior(self.posterior_means,
-                                                 self.cov, self.prior_count)
-        model = beer.NormalSetSharedFullCovariance(prior, posterior, self.ncomp)
         weights = torch.ones(len(self.data), self.ncomp).type(self.data.type())
-
-        T = model.sufficient_statistics(self.data)
-        acc_stats1 = model.accumulate(T, weights)[model.means_prec_param]
+        T = self.model.sufficient_statistics(self.data)
+        acc_stats1 = self.model.accumulate(T, weights)[self.model.means_prec_param]
         self.assertEqual(len(acc_stats1),
-                         len(model.means_prec_param.posterior.natural_params))
+                         len(self.model.means_prec_param.posterior.natural_hparams))
         acc_stats2 = torch.cat([
             T[0].sum(dim=0), (weights.t() @ self.data).view(-1),
             weights.sum(dim=0),
@@ -503,3 +398,8 @@ __all__ = ['TestNormalDiagonalCovariance', 'TestNormalFullCovariance',
            'TestNormalDiagonalCovarianceSet', 'TestNormalFullCovarianceSet',
            'TestNormalSetSharedDiagonalCovariance',
            'TestNormalSetSharedFullCovariance']
+
+#__all__ = ['TestNormalDiagonalCovariance', 'TestNormalFullCovariance',
+#           'TestNormalDiagonalCovarianceSet', 'TestNormalFullCovarianceSet',
+#           'TestNormalSetSharedDiagonalCovariance',
+#           'TestNormalSetSharedFullCovariance']
