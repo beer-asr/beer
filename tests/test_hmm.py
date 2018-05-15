@@ -199,20 +199,19 @@ class TestHMM(BaseTest):
                 exp_llh2 = hmm(stats).numpy()
                 self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
-    @unittest.skip('Not implemented')
     def test_exp_llh_labels(self):
-        model = beer.Mixture(self.dir_prior, self.dir_posterior, self.modelset)
-        labels = torch.zeros(self.data.size(0)).long()
-        elabels = _expand_labels(labels, len(model.components))
-        mask = torch.log(elabels).numpy()
-        elabels = elabels.numpy()
-        stats = model.sufficient_statistics(self.data)
-        pc_exp_llh = (model.components(stats) + \
-            self.dir_posterior.expected_sufficient_statistics.view(1, -1))
-        pc_exp_llh = pc_exp_llh.numpy()
-        pc_exp_llh += mask
-        exp_llh1 = logsumexp(pc_exp_llh, axis=1)
-        exp_llh2 = model(stats, labels).numpy()
-        self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
+        for i, model in enumerate(self.hmms):
+            with self.subTest(i=i):
+                label_idxs = torch.zeros(self.data.size(0)).long()
+                elabels = beer.onehot(label_idxs, len(model.modelset))
+                mask = torch.log(elabels).numpy()
+                elabels = elabels.numpy()
+                stats = model.sufficient_statistics(self.data)
+                pc_exp_llh = model.modelset(stats)
+                pc_exp_llh = pc_exp_llh.numpy()
+                pc_exp_llh += mask
+                exp_llh1 = logsumexp(pc_exp_llh, axis=1)
+                exp_llh2 = model(stats, label_idxs).numpy()
+                self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
 __all__ = ['TestHMM', 'TestForwardBackwardViterbi']
