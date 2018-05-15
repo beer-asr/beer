@@ -24,13 +24,9 @@ from .models import NormalSetSharedDiagonalCovariance
 from .models import NormalSetSharedFullCovariance
 from .models import Mixture
 from .models import PPCA
-from .models import MLPNormalDiag
-from .models import MLPNormalIso
 from .models import VAE
-
-#from .models import Mixture
-#from .models import DiscriminativeVariationalModel
-#from .models import MLPNormalDiag, MLPNormalIso
+from .models import NormalDiagonalCovarianceMLP
+from .models import BernoulliMLP
 
 # Features extraction.
 from . import features

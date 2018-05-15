@@ -13,11 +13,8 @@ from .normal import NormalSetSharedFullCovariance
 
 from .mixture import Mixture
 
+from .mlpmodel import NormalDiagonalCovarianceMLP
+from .mlpmodel import BernoulliMLP
 from .subspace import PPCA
-
-
-from .mlpmodel import MLPNormalDiag
-from .mlpmodel import MLPNormalIso
-from .mlpmodel import MLPBernoulli
 
 from .vae import VAE

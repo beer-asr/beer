@@ -48,8 +48,10 @@ class VAE(BayesianModel):
             self.latent_model.sufficient_statistics_from_mean_var(mean, var)
         exp_np_params = self.latent_model.expected_natural_params(
             mean.data, var.data, labels=labels, nsamples=self.nsamples)
-        samples = mean + torch.sqrt(var) * \
-            torch.randn(self.nsamples, *data.size())
+        samples = mean + torch.sqrt(var) * torch.randn(self.nsamples,
+                                                       data.size(0),
+                                                       mean.size(1))
+
         llh = self.decoder(samples).log_likelihood(data)
         return llh - enc_state.kl_div(exp_np_params)
 
