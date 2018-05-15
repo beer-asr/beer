@@ -1,6 +1,6 @@
 
-''' Implementation of distributions to be used by the 
-    VAE's encoder and decoder. User defined transformations 
+''' Implementation of distributions to be used by the
+    VAE's encoder and decoder. User defined transformations
     (neural networks) are expected to produce them.
 '''
 
@@ -17,6 +17,7 @@ class NormalDiagonalCovarianceMLP:
         normal distribution is used in the latent space.
 
     '''
+
     def __init__(self, mean, var):
         self.mean = mean
         self.var = var
@@ -30,16 +31,17 @@ class NormalDiagonalCovarianceMLP:
 
     def kl_div(self, nparams_other):
         nparams = normal_diag_natural_params(self.mean, self.var)
-        exp_T = NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
-            self.mean, self.var)
-        return ((nparams - nparams_other) * exp_T).sum(dim=-1)
+        exp_s_stats = \
+            NormalDiagonalCovariance.sufficient_statistics_from_mean_var(\
+                self.mean, self.var)
+        return ((nparams - nparams_other) * exp_s_stats).sum(dim=-1)
 
     def sample(self):
         noise = Variable(torch.randn(*self.mean.size()))
         return self.mean + noise * torch.sqrt(self.var)
 
-    def log_likelihood(self, X):
-        distance_term = 0.5 * (X - self.mean).pow(2) / self.var
+    def log_likelihood(self, data):
+        distance_term = 0.5 * (data - self.mean).pow(2) / self.var
         precision_term = 0.5 * self.var.log()
         return (-distance_term - precision_term).sum(dim=-1).mean(dim=0)
 

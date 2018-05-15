@@ -1,15 +1,18 @@
 'Test the features module.'
 
-
+# pylint: disable=C0413
+# Not all the modules can be placed at the top of the files as we need
+# first to change the PYTHONPATH before to import the modules.
 import sys
 sys.path.insert(0, './')
-import unittest
+sys.path.insert(0, './tests')
+
 import beer
 import numpy as np
-from scipy.io.wavfile import read
+from basetest import BaseTest
 
 
-class TestFbank(unittest.TestCase):
+class TestFbank(BaseTest):
 
     def test_fbank(self):
         ref_fea = np.load('tests/fbank.npy')
@@ -25,6 +28,4 @@ class TestFbank(unittest.TestCase):
         self.assertTrue(np.allclose(ref_fea, fea_d_dd))
 
 
-if __name__ == '__main__':
-    unittest.main()
-
+__all__ = ['TestFbank']

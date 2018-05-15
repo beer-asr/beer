@@ -7,18 +7,18 @@ import numpy as np
 import scipy.signal
 
 
-def hz2mel(hz):
+def hz2mel(freq_hz):
     'Convert Hertz to Mel value(s).'
-    return 2595 * np.log10(1+hz/700.)
+    return 2595 * np.log10(1 + freq_hz / 700.)
 
 def mel2hz(mel):
     'Convert Mel value(s) to Hertz.'
     return 700*(10**(mel/2595.0)-1)
 
 
-def hz2bark(hz):
+def hz2bark(freq_hz):
     'Convert Hertz to Bark value(s).'
-    return (29.81 * hz) / (1960 + hz) - 0.53
+    return (29.81 * freq_hz) / (1960 + freq_hz) - 0.53
 
 
 def bark2hz(bark):
@@ -26,18 +26,24 @@ def bark2hz(bark):
     return (1960 * (bark + .53)) / (29.81 - bark - .53)
 
 
-def __triangle(center, a, b, x):
+def __triangle(center, start, end, freqs):
     'Create triangular filter.'
-    slopes = 1. / (center - a), 1./ (b - center)
-    retval = np.zeros_like(x).astype(np.float)
-    idxs = np.logical_and(x >= a, x <= center)
-    retval[idxs] = np.linspace(slopes[0] * (x[idxs][0] - a), slopes[0] * (x[idxs][-1] - a), len(x[idxs]))
-    idxs = np.logical_and(x >= center, x <= b)
-    retval[idxs] = np.linspace(slopes[1] * (b - x[idxs][0]), slopes[1] * (b -x[idxs][-1]), len(x[idxs]))
+    slopes = 1. / (center - start), 1./ (end - center)
+    retval = np.zeros_like(freqs).astype(np.float)
+    idxs = np.logical_and(freqs >= start, freqs <= center)
+    retval[idxs] = np.linspace(slopes[0] * (freqs[idxs][0] - start),
+                               slopes[0] * (freqs[idxs][-1] - start),
+                               len(freqs[idxs]))
+    idxs = np.logical_and(freqs >= center, freqs <= end)
+    retval[idxs] = np.linspace(slopes[1] * (end - freqs[idxs][0]),
+                               slopes[1] * (end - freqs[idxs][-1]),
+                               len(freqs[idxs]))
     return retval
 
 
 @lru_cache(maxsize=8)
+# pylint: disable=R0913
+# too many arguments
 def create_fbank(nfilters, fft_len=512, srate=16000, lowfreq=0, highfreq=None,
                  hz2scale=hz2mel, scale2hz=mel2hz, align_filt_center=True):
     '''Create a set of triangular filter.
@@ -67,12 +73,13 @@ def create_fbank(nfilters, fft_len=512, srate=16000, lowfreq=0, highfreq=None,
         centers = fft_len * scale2hz(centers) / srate
     filters = np.zeros((nfilters, fft_len // 2))
     for i in range(1, nfilters + 1):
-        filters[i - 1, :] = __triangle(centers[i], centers[i - 1], centers[i + 1],
-            np.arange(0, fft_len // 2))
+        filters[i - 1, :] = __triangle(centers[i], centers[i - 1],
+                                       centers[i + 1],
+                                       np.arange(0, fft_len // 2))
     return filters
 
 
-def add_deltas(fea, winlens=(2,2)):
+def add_deltas(fea, winlens=(2, 2)):
     '''Add derivatives to features (deltas, double deltas, triple_delas, ...)
 
     Args:
@@ -87,15 +94,16 @@ def add_deltas(fea, winlens=(2,2)):
     for wlen in winlens:
         dfilter = -np.arange(-wlen, wlen+1)
         dfilter = dfilter / (2 * dfilter.dot(dfilter))
-        fea = np.r_[fea[[0]].repeat(wlen,0), fea, fea[[-1]].repeat(wlen,0)]
+        fea = np.r_[fea[[0]].repeat(wlen, 0), fea, fea[[-1]].repeat(wlen, 0)]
         fea = scipy.signal.lfilter(dfilter, 1, fea, 0)[2*wlen:]
         fea_list.append(fea)
     return np.hstack(fea_list)
 
 
-def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, hz2scale=hz2mel,
-          lowfreq=20, nfilters=26, preemph=0.97, scale2hz=mel2hz, srate=16000,
-          window=np.hamming):
+# pylint: disable=R0913,R0914
+# too many arguments, too many local variables
+def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, lowfreq=20, nfilters=26,
+          preemph=0.97, srate=16000):
     '''Extract the FBANK features.
 
     The features are extracted according to the following scheme:
@@ -139,7 +147,9 @@ def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, hz2scale=hz2mel,
     # Extract the overlapping frames.
     isize = s_t.dtype.itemsize
     sframes = np.lib.stride_tricks.as_strided(s_t, shape=(nframes, flen_samp),
-        strides=(frate_samp * isize, isize), writeable=False)
+                                              strides=(frate_samp * isize,
+                                                       isize),
+                                              writeable=False)
 
     # Apply the window function.
     frames = sframes * np.hamming(flen_samp)[None, :]
@@ -153,4 +163,3 @@ def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, hz2scale=hz2mel,
     melspec = magspec @ filters.T
 
     return np.log(melspec + 1e-30)
-

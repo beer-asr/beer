@@ -1,25 +1,22 @@
-'Test the expfamily module.'
+'Test the expfamilyprior module.'
 
+# pylint: disable=C0413
+# Not all the modules can be placed at the top of the files as we need
+# first to change the PYTHONPATH before to import the modules.
+import sys
+sys.path.insert(0, './')
+sys.path.insert(0, './tests')
 
 import numpy as np
 from scipy.special import gammaln, psi
-import sys
 import torch
-import unittest
-
-sys.path.insert(0, './')
 import beer
+from basetest import BaseTest
 
 
-torch.manual_seed(10)
-
-TOLPLACES = 4
-TOL = 10 ** (-TOLPLACES)
-
-
-#######################################################################
-# Computations using numpy for testing.
-#######################################################################
+########################################################################
+# Dirichlet prior.
+########################################################################
 
 def dirichlet_log_norm(natural_params):
     return -gammaln(np.sum(natural_params + 1)) \
@@ -29,6 +26,42 @@ def dirichlet_log_norm(natural_params):
 def dirichlet_grad_log_norm(natural_params):
     return -psi(np.sum(natural_params + 1)) + psi(natural_params + 1)
 
+
+class TestDirichletPrior(BaseTest):
+
+    def setUp(self):
+        dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.prior_counts = (torch.randn(dim) ** 2).type(self.type)
+
+    def test_create(self):
+        model = beer.DirichletPrior(self.prior_counts)
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     self.prior_counts.numpy() - 1)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.DirichletPrior(self.prior_counts)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = dirichlet_grad_log_norm(natural_params)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.DirichletPrior(self.prior_counts)
+        model2 = beer.DirichletPrior(self.prior_counts)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.DirichletPrior(self.prior_counts)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = dirichlet_log_norm(natural_params)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+
+
+########################################################################
+# Normal-Gamma prior.
+########################################################################
 
 def normalgamma_log_norm(natural_params):
     np1, np2, np3, np4 = natural_params.reshape(4, -1)
@@ -49,6 +82,59 @@ def normalgamma_grad_log_norm(natural_params):
     return np.hstack([grad1, grad2, grad3, grad4])
 
 
+class TestNormalGammaPrior(BaseTest):
+
+    def setUp(self):
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.mean = torch.randn(self.dim).type(self.type)
+        self.precision = (torch.randn(self.dim)**2).type(self.type)
+        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+
+    def test_create(self):
+        model = beer.NormalGammaPrior(self.mean, self.precision,
+                                      self.prior_count)
+        n_mean = self.mean.numpy()
+        n_precision = self.prior_count * np.ones_like(n_mean)
+        g_shapes = self.precision.numpy() * self.prior_count
+        g_rates = self.prior_count
+        natural_params = np.hstack([
+            n_precision * (n_mean ** 2) + 2 * g_rates,
+            n_precision * n_mean,
+            n_precision,
+            2 * g_shapes - 1
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.NormalGammaPrior(self.mean, self.precision,
+                                      self.prior_count)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = normalgamma_grad_log_norm(natural_params)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.NormalGammaPrior(self.mean, self.precision,
+                                       self.prior_count)
+        model2 = beer.NormalGammaPrior(self.mean, self.precision,
+                                       self.prior_count)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.NormalGammaPrior(self.mean, self.precision,
+                                      self.prior_count)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = normalgamma_log_norm(natural_params)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+
+
+########################################################################
+# Joint Normal-Gamma prior.
+########################################################################
+
 def jointnormalgamma_split_nparams(natural_params, ncomp):
     dim = len(natural_params) // (2 + 2 * ncomp)
     np1 = natural_params[:dim]
@@ -60,7 +146,7 @@ def jointnormalgamma_split_nparams(natural_params, ncomp):
 
 def jointnormalgamma_log_norm(natural_params, ncomp):
     np1, np2s, np3s, np4, dim = jointnormalgamma_split_nparams(natural_params,
-        ncomp)
+                                                               ncomp)
     lognorm = gammaln(.5 * (np4 + 1)).sum()
     lognorm += -.5 * np.log(np3s).sum()
     tmp = ((np2s ** 2) / np3s).reshape((ncomp, dim))
@@ -69,67 +155,217 @@ def jointnormalgamma_log_norm(natural_params, ncomp):
     return lognorm
 
 
+class TestJointNormalGammaPrior(BaseTest):
+
+    def setUp(self):
+        self.ncomps = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.means = torch.randn((self.ncomps, self.dim)).type(self.type)
+        self.precision = (1 + torch.randn(self.dim)**2).type(self.type)
+        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+
+    def test_create(self):
+        model = beer.JointNormalGammaPrior(self.means, self.precision,
+                                           self.prior_count)
+        means, prec, prior_count = self.means.numpy(), \
+            self.precision.numpy(), self.prior_count
+        dim = self.dim
+        ncomps = self.ncomps
+        natural_params = np.hstack([
+            (prior_count * (means**2).sum(axis=0) + 2 * prior_count).reshape(-1),
+            (prior_count * means).reshape(-1),
+            (np.ones((ncomps, dim)) * prior_count).reshape(-1),
+            2 * prec * prior_count - 1
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
+
+    def test_kl_divergence(self):
+        model1 = beer.JointNormalGammaPrior(self.means, self.precision,
+                                            self.prior_count)
+        model2 = beer.JointNormalGammaPrior(self.means, self.precision,
+                                            self.prior_count)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(float(div), 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.JointNormalGammaPrior(self.means, self.precision,
+                                           self.prior_count)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = jointnormalgamma_log_norm(natural_params, ncomp=self.ncomps)
+        self.assertAlmostEqual(model_log_norm, log_norm,
+                               places=self.tolplaces)
+
+
+########################################################################
+# Normal Wishart prior.
+########################################################################
+
 def normalwishart_split_np(natural_params):
-    D = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params[:-2]))))
-    np1, np2 = natural_params[:int(D**2)].reshape(D, D), \
-         natural_params[int(D**2):-2]
+    dim = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params[:-2]))))
+    np1, np2 = natural_params[:int(dim ** 2)].reshape(dim, dim), \
+         natural_params[int(dim ** 2):-2]
     np3, np4 = natural_params[-2:]
-    return np1, np2, np3, np4, D
+    return np1, np2, np3, np4, dim
 
 
 def normalwishart_log_norm(natural_params):
-    np1, np2, np3, np4, D = normalwishart_split_np(natural_params)
-    lognorm = .5 * ((np4 + D) * D * np.log(2) - D * np.log(np3))
+    np1, np2, np3, np4, dim = normalwishart_split_np(natural_params)
+    lognorm = .5 * ((np4 + dim) * dim * np.log(2) - dim * np.log(np3))
     sign, logdet = np.linalg.slogdet(np1 - np.outer(np2, np2) / np3)
-    lognorm += -.5 * (np4 + D) * sign * logdet
-    lognorm += np.sum(gammaln(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
+    lognorm += -.5 * (np4 + dim) * sign * logdet
+    lognorm += np.sum(gammaln(.5 * (np4 + dim + 1 - np.arange(1, dim + 1, 1))))
     return lognorm
 
 
 def normalwishart_grad_log_norm(natural_params):
-    np1, np2, np3, np4, D = normalwishart_split_np(natural_params)
+    np1, np2, np3, np4, dim = normalwishart_split_np(natural_params)
     outer = np.outer(np2, np2) / np3
     matrix = (np1 - outer)
     sign, logdet = np.linalg.slogdet(matrix)
     inv_matrix = np.linalg.inv(matrix)
 
-    grad1 = -.5 * (np4 + D) * inv_matrix
-    grad2 = (np4 + D) * inv_matrix @ (np2 / np3)
-    grad3 = - D / (2 * np3) - .5 * (np4 + D) \
+    grad1 = -.5 * (np4 + dim) * inv_matrix
+    grad2 = (np4 + dim) * inv_matrix @ (np2 / np3)
+    grad3 = - dim / (2 * np3) - .5 * (np4 + dim) \
         * np.trace(inv_matrix @ (outer / np3))
-    grad4 = .5 * np.sum(psi(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
-    grad4 += -.5 * sign * logdet + .5 * D * np.log(2)
+    grad4 = .5 * np.sum(psi(.5 * (np4 + dim + 1 - np.arange(1, dim + 1, 1))))
+    grad4 += -.5 * sign * logdet + .5 * dim * np.log(2)
     return np.hstack([grad1.reshape(-1), grad2, grad3, grad4])
 
 
+class TestNormalWishartPrior(BaseTest):
+
+    def setUp(self):
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.mean = torch.randn(self.dim).type(self.type)
+        cov = (1 + torch.randn(self.dim)).type(self.type)
+        self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
+        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+
+    def test_create(self):
+        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        mean, cov = self.mean.numpy(), self.cov.numpy()
+        dof = self.prior_count + self.dim
+        mean_cov = dof * cov
+        natural_params = np.hstack([
+            (self.prior_count * np.outer(mean, mean) + mean_cov).reshape(-1),
+            self.prior_count * mean,
+            np.asarray([self.prior_count]),
+            np.asarray([dof - self.dim])
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = normalwishart_grad_log_norm(natural_params)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        model2 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = normalwishart_log_norm(natural_params)
+        self.assertAlmostEqual(model_log_norm, log_norm,
+                               places=self.tolplaces)
+
+
+########################################################################
+# Joint Normal-Whishart prior.
+########################################################################
+
 def jointnormalwishart_split_np(natural_params, ncomp=1):
-    D = int(.5 * (-ncomp + np.sqrt(ncomp**2 + 4 * len(natural_params[:-(ncomp + 1)]))))
-    np1, np2s = natural_params[:int(D**2)].reshape(D, D), \
-         natural_params[int(D**2):-(ncomp+1)].reshape(ncomp, D)
+    dim = int(.5 * (-ncomp + np.sqrt(ncomp**2 + \
+        4 * len(natural_params[:-(ncomp + 1)]))))
+    np1, np2s = natural_params[:int(dim ** 2)].reshape(dim, dim), \
+         natural_params[int(dim ** 2):-(ncomp+1)].reshape(ncomp, dim)
     np3s = natural_params[-(ncomp+1): -1]
     np4 = natural_params[-1]
-    return np1, np2s, np3s, np4, D
+    return np1, np2s, np3s, np4, dim
 
 
 def jointnormalwishart_log_norm(natural_params, ncomp):
-    np1, np2s, np3s, np4, D = jointnormalwishart_split_np(natural_params, ncomp)
-    lognorm = .5 * ((np4 + D) * D * np.log(2) - D * np.log(np3s).sum())
-    quad_exp = ((np2s[:, None, :] * np2s[:, :, None]) / np3s[:, None, None]).sum(axis=0)
+    np1, np2s, np3s, np4, dim = jointnormalwishart_split_np(natural_params, ncomp)
+    lognorm = .5 * ((np4 + dim) * dim * np.log(2) - dim * np.log(np3s).sum())
+    quad_exp = ((np2s[:, None, :] * np2s[:, :, None]) / \
+        np3s[:, None, None]).sum(axis=0)
     sign, logdet = np.linalg.slogdet(np1 - quad_exp)
-    lognorm += -.5 * (np4 + D) * sign * logdet
-    lognorm += np.sum(gammaln(.5 * (np4 + D + 1 - np.arange(1, D + 1, 1))))
+    lognorm += -.5 * (np4 + dim) * sign * logdet
+    lognorm += np.sum(gammaln(.5 * (np4 + dim + 1 - np.arange(1, dim + 1, 1))))
     return lognorm
 
 
+class TestJointNormalWishartPrior(BaseTest):
+
+    def setUp(self):
+        self.ncomps = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.means = torch.randn((self.ncomps, self.dim)).type(self.type)
+        cov = (1 + torch.randn(self.dim)).type(self.type)
+        self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
+        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
+
+    def test_create(self):
+        model = beer.JointNormalWishartPrior(self.means, self.cov,
+                                             self.prior_count)
+        means, cov = self.means.numpy(), self.cov.numpy()
+        dof = self.prior_count + self.dim
+        mean_cov = dof * cov
+        quad_mean = (means[:, None, :] * means[:, :, None]).sum(axis=0)
+        natural_params = np.hstack([
+            (self.prior_count * quad_mean + mean_cov).reshape(-1),
+            self.prior_count * means.reshape(-1),
+            np.ones(self.ncomps) * self.prior_count,
+            np.asarray([dof - self.dim])
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
+
+    def test_kl_divergence(self):
+        model1 = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
+        model2 = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = jointnormalwishart_log_norm(natural_params,
+                                               ncomp=self.ncomps)
+        self.assertAlmostEqual(model_log_norm, log_norm,
+                               places=self.tolplaces)
+
+    # We don't test the automatic differentiation of the
+    # log-normalizer. As long as the log-normlizer is correct, then
+    # pytorch should gives us the right gradient.
+    #def test_exp_sufficient_statistics(self):
+    #   pass
+
+
+########################################################################
+# Normal prior (full cov).
+########################################################################
+
 def normal_fc_split_np(natural_params):
-    D = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params))))
-    np1, np2 = natural_params[:int(D**2)].reshape(D, D), \
-         natural_params[int(D**2):]
-    return np1, np2, D
+    dim = int(.5 * (-1 + np.sqrt(1 + 4 * len(natural_params))))
+    np1, np2 = natural_params[:int(dim ** 2)].reshape(dim, dim), \
+         natural_params[int(dim ** 2):]
+    return np1, np2, dim
 
 
 def normal_fc_log_norm(natural_params):
-    np1, np2, D = normal_fc_split_np(natural_params)
+    np1, np2, _ = normal_fc_split_np(natural_params)
     inv_np1 = np.linalg.inv(np1)
     sign, logdet = np.linalg.slogdet(-2 * np1)
     lognorm = -.5 * sign * logdet - .25 * (np2[None, :] @ inv_np1) @ np2
@@ -137,326 +373,233 @@ def normal_fc_log_norm(natural_params):
 
 
 def normal_fc_grad_log_norm(natural_params):
-    np1, np2, D = normal_fc_split_np(natural_params)
+    np1, np2, _ = normal_fc_split_np(natural_params)
     cov = np.linalg.inv(-2 * np1)
     mean = cov @ np2
     return np.hstack([(cov + np.outer(mean, mean)).reshape(-1), mean])
 
 
-#######################################################################
-# Abstract base class for implementing the logic of the tests.
-#######################################################################
+class TestNormalFullCovariancePrior(BaseTest):
 
-
-class TestDirichletPrior:
+    def setUp(self):
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.mean = torch.randn(self.dim).type(self.type)
+        cov = (1 + torch.randn(self.dim)).type(self.type)
+        self.cov = torch.eye(self.dim).type(self.type) + torch.ger(cov, cov)
 
     def test_create(self):
-        model = beer.DirichletPrior(self.prior_counts)
-        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
-        self.assertTrue(np.allclose(model.natural_params.numpy(),
-            self.prior_counts.numpy() - 1, rtol=TOL, atol=TOL))
+        model = beer.NormalFullCovariancePrior(self.mean, self.cov)
+        mean, cov = self.mean.numpy(), self.cov.numpy()
+        prec = np.linalg.inv(cov)
+        natural_params = np.hstack([
+            -.5 * prec.reshape(-1),
+            prec @ mean,
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
 
     def test_exp_sufficient_statistics(self):
-        model = beer.DirichletPrior(self.prior_counts)
-        model_s_stats = model.expected_sufficient_statistics.numpy()
-        natural_params = model.natural_params.numpy()
-        s_stats = dirichlet_grad_log_norm(natural_params)
-        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
-
-    def test_kl_divergence(self):
-        model1 = beer.DirichletPrior(self.prior_counts)
-        model2 = beer.DirichletPrior(self.prior_counts)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=TOLPLACES)
-
-    def test_log_norm(self):
-        model = beer.DirichletPrior(self.prior_counts)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = dirichlet_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
-
-
-class TestNormalGammaPrior:
-
-    def test_create(self):
-        model = beer.NormalGammaPrior(self.mean, self.precision,
-                                      self.prior_count)
-        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
-
-    def test_exp_sufficient_statistics(self):
-        model = beer.NormalGammaPrior(self.mean, self.precision,
-                                      self.prior_count)
-        model_s_stats = model.expected_sufficient_statistics.numpy()
-        natural_params = model.natural_params.numpy()
-        s_stats = normalgamma_grad_log_norm(natural_params)
-        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
-
-    def test_kl_divergence(self):
-        model1 = beer.NormalGammaPrior(self.mean, self.precision,
-                                       self.prior_count)
-        model2 = beer.NormalGammaPrior(self.mean, self.precision,
-                                       self.prior_count)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=TOLPLACES)
-
-    def test_log_norm(self):
-        model = beer.NormalGammaPrior(self.mean, self.precision,
-                                      self.prior_count)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = normalgamma_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
-
-
-class TestJointNormalGammaPrior:
-
-    def test_create(self):
-        model = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
-        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
-
-    def test_kl_divergence(self):
-        model1 = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
-        model2 = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(float(div), 0., places=TOLPLACES)
-
-    def test_log_norm(self):
-        model = beer.JointNormalGammaPrior(self.means, self.precision,
-            self.prior_count)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = jointnormalgamma_log_norm(natural_params, ncomp=self.ncomp)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
-
-    # We don't test the automatic differentiation of the
-    # log-normalizer. As long as the log-normlizer is correct, then
-    # pytorch should gives us the right gradient.
-    #def test_exp_sufficient_statistics(self):
-    #   pass
-
-
-class TestNormalWishartPrior:
-
-    def test_create(self):
-        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
-
-    def test_exp_sufficient_statistics(self):
-        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        model_s_stats = model.expected_sufficient_statistics.numpy()
-        natural_params = model.natural_params.numpy()
-        s_stats = normalwishart_grad_log_norm(natural_params)
-        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
-
-    def test_kl_divergence(self):
-        model1 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        model2 = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=TOLPLACES)
-
-    def test_log_norm(self):
-        model = beer.NormalWishartPrior(self.mean, self.cov, self.prior_count)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = normalwishart_log_norm(natural_params)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
-
-
-class TestJointNormalWishartPrior:
-
-    def test_create(self):
-        model = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
-        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
-
-    def test_kl_divergence(self):
-        model1 = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
-        model2 = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
-        div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=TOLPLACES)
-
-    def test_log_norm(self):
-        model = beer.JointNormalWishartPrior(self.means, self.cov, self.prior_count)
-        model_log_norm = model.log_norm.numpy()
-        natural_params = model.natural_params.numpy()
-        log_norm = jointnormalwishart_log_norm(natural_params, ncomp=self.ncomp)
-        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
-
-    # We don't test the automatic differentiation of the
-    # log-normalizer. As long as the log-normlizer is correct, then
-    # pytorch should gives us the right gradient.
-    #def test_exp_sufficient_statistics(self):
-    #   pass
-
-
-class TestNormalPrior:
-
-    def test_create(self):
-        model = beer.NormalPrior(self.mean, self.cov)
-        self.assertTrue(isinstance(model, beer.ExpFamilyPrior))
-
-    def test_exp_sufficient_statistics(self):
-        model = beer.NormalPrior(self.mean, self.cov)
+        model = beer.NormalFullCovariancePrior(self.mean, self.cov)
         model_s_stats = model.expected_sufficient_statistics.numpy()
         natural_params = model.natural_params.numpy()
         s_stats = normal_fc_grad_log_norm(natural_params)
-        self.assertTrue(np.allclose(model_s_stats, s_stats, rtol=TOL, atol=TOL))
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
 
     def test_kl_divergence(self):
-        model1 = beer.NormalPrior(self.mean, self.cov)
-        model2 = beer.NormalPrior(self.mean, self.cov)
+        model1 = beer.NormalFullCovariancePrior(self.mean, self.cov)
+        model2 = beer.NormalFullCovariancePrior(self.mean, self.cov)
         div = beer.kl_div(model1, model2)
-        self.assertAlmostEqual(div, 0., places=TOLPLACES)
+        self.assertAlmostEqual(div, 0., places=self.tolplaces)
 
     def test_log_norm(self):
-        model = beer.NormalPrior(self.mean, self.cov)
+        model = beer.NormalFullCovariancePrior(self.mean, self.cov)
         model_log_norm = model.log_norm.numpy()
         natural_params = model.natural_params.numpy()
         log_norm = normal_fc_log_norm(natural_params)[0]
-        self.assertAlmostEqual(model_log_norm, log_norm, places=TOLPLACES)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
 
 
-#######################################################################
-# Testing condition.
-#######################################################################
+########################################################################
+# Normal prior (isotropic cov).
+########################################################################
+
+def normal_iso_split_np(natural_params):
+    return natural_params[0], natural_params[1:]
 
 
-tests = [
-    (TestDirichletPrior, {'prior_counts': torch.ones(1).float()}),
-    (TestDirichletPrior, {'prior_counts': torch.ones(1).double()}),
-    (TestDirichletPrior, {'prior_counts': torch.ones(2).float()}),
-    (TestDirichletPrior, {'prior_counts': torch.ones(2).float()}),
-    (TestDirichletPrior, {'prior_counts': torch.ones(10).double()}),
-    (TestDirichletPrior, {'prior_counts': torch.ones(10).double()}),
-    (TestDirichletPrior, {'prior_counts': torch.FloatTensor([1, 2, 3, 4, 5])}),
-    (TestDirichletPrior, {'prior_counts': torch.DoubleTensor([1, 2, 3, 4, 5])}),
+def normal_iso_log_norm(natural_params):
+    np1, np2 = normal_iso_split_np(natural_params)
+    inv_np1 = 1 / np1
+    logdet = np.log(-2 * np1)
+    lognorm = -.5 * len(np2) * logdet - .25 * inv_np1 * (np2[None, :] @ np2)
+    return lognorm
 
-    (TestNormalGammaPrior, {'mean': torch.zeros(2).float(),
-        'precision': torch.ones(2).float(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.zeros(2).double(),
-        'precision': torch.ones(2).double(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
-        'precision': torch.ones(2).float(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
-        'precision': torch.ones(2).double(), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1.}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e-3}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e-8}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e4}),
-    (TestNormalGammaPrior, {'mean': torch.randn(2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e8}),
 
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).float(),
-        'precision': torch.randn(2).float() ** 2, 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
-        'precision': torch.randn(2).double() ** 2, 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).float(),
-        'precision': torch.randn(2).float() ** 2, 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
-        'precision': torch.randn(2).double() ** 2, 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1.,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e-3,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e-8,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).float(),
-        'precision': torch.FloatTensor([1e-4, 2e-4]), 'prior_count': 1e4,
-        'ncomp': 10}),
-    (TestJointNormalGammaPrior, {'means': torch.randn(10, 2).double(),
-        'precision': torch.DoubleTensor([1e-4, 2e-4]), 'prior_count': 1e8,
-        'ncomp': 10}),
+def normal_iso_grad_log_norm(natural_params):
+    np1, np2 = normal_iso_split_np(natural_params)
+    variance = 1 / (-2 * np1)
+    mean = variance * np2
+    return np.hstack([len(np2) * variance + np.sum(mean ** 2), mean])
 
-    (TestNormalWishartPrior, {'mean': torch.zeros(2).float(),
-        'cov': torch.eye(2).float(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.zeros(2).double(),
-        'cov': torch.eye(2).double(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double(), 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1.}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e-3}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e-8}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e2}),
-    (TestNormalWishartPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8}),
 
-    (TestJointNormalWishartPrior, {'means': torch.zeros(3, 2).float(),
-        'cov': torch.eye(2).float(), 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.zeros(3, 2).double(),
-        'cov': torch.eye(2).double(), 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
-        'cov': torch.eye(2).float(), 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
-        'cov': torch.eye(2).double(), 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1., 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e-3, 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e-8, 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).float(),
-        'cov': torch.eye(2).float() * 1e-4, 'prior_count': 1e2, 'ncomp': 3}),
-    (TestJointNormalWishartPrior, {'means': torch.randn(3, 2).double(),
-        'cov': torch.eye(2).double() * 1e-8, 'prior_count': 1e8, 'ncomp': 3}),
+class TestNormalIsotropicCovariancePrior(BaseTest):
 
-    (TestNormalPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float()}),
-    (TestNormalPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double()}),
-    (TestNormalPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float()}),
-    (TestNormalPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double()}),
-    (TestNormalPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4}),
-    (TestNormalPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8}),
-    (TestNormalPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4}),
-    (TestNormalPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8}),
-    (TestNormalPrior, {'mean': torch.randn(2).float(),
-        'cov': torch.eye(2).float() * 1e-4}),
-    (TestNormalPrior, {'mean': torch.randn(2).double(),
-        'cov': torch.eye(2).double() * 1e-8}),
+    def setUp(self):
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.mean = torch.randn(self.dim).type(self.type)
+        self.var = (1 + torch.randn(self.dim)**2).type(self.type)
+
+    def test_create(self):
+        model = beer.NormalIsotropicCovariancePrior(self.mean, self.var)
+        mean, var = self.mean.numpy(), self.var.numpy()
+        prec = 1 / var
+        natural_params = np.hstack([
+            -.5 * prec,
+            prec * mean,
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.NormalIsotropicCovariancePrior(self.mean, self.var)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = normal_iso_grad_log_norm(natural_params)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.NormalIsotropicCovariancePrior(self.mean, self.var)
+        model2 = beer.NormalIsotropicCovariancePrior(self.mean, self.var)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(div, 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.NormalIsotropicCovariancePrior(self.mean, self.var)
+        model_log_norm = float(model.log_norm)
+        natural_params = model.natural_params.numpy()
+        log_norm = float(normal_iso_log_norm(natural_params))
+        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+
+
+########################################################################
+# Matrix Normal prior.
+########################################################################
+
+def matrixnormal_fc_split_np(natural_params, dim1, dim2):
+    np1, np2 = natural_params[:dim1 ** 2], natural_params[dim1 ** 2:]
+    return np1.reshape(dim1, dim1), np2.reshape(dim1, dim2)
+
+
+def matrixnormal_fc_log_norm(natural_params, dim1, dim2):
+    np1, np2 = matrixnormal_fc_split_np(natural_params, dim1, dim2)
+    inv_np1 = np.linalg.inv(np1)
+    sign, logdet = np.linalg.slogdet(-2 * np1)
+    lognorm = -.5 * dim2 * sign * logdet - .25 * np.trace(np2.T @ inv_np1 @ np2)
+    return lognorm.item()
+
+
+def matrixnormal_fc_grad_log_norm(natural_params, dim1, dim2):
+    np1, np2 = matrixnormal_fc_split_np(natural_params, dim1, dim2)
+    cov = np.linalg.inv(-2 * np1)
+    mean = cov @ np2
+    return np.hstack([(dim2 * cov + mean @ mean.T).reshape(-1),
+                      mean.reshape(-1)])
+
+
+class TestMatrixNormalPrior(BaseTest):
+
+    def setUp(self):
+        self.dim1 = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim2 = int(1 + torch.randint(100, (1, 1)).item())
+        self.mean = torch.randn(self.dim1, self.dim2).type(self.type)
+        cov = (1 + torch.randn(self.dim1)).type(self.type)
+        self.cov = torch.eye(self.dim1).type(self.type) + torch.ger(cov, cov)
+
+    def test_create(self):
+        model = beer.MatrixNormalPrior(self.mean, self.cov)
+        mean, cov = self.mean.numpy(), self.cov.numpy()
+        prec = np.linalg.inv(cov)
+        natural_params = np.hstack([
+            -.5 * prec.reshape(-1),
+            (prec @ mean).reshape(-1),
+        ])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.MatrixNormalPrior(self.mean, self.cov)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = matrixnormal_fc_grad_log_norm(natural_params, self.dim1,
+                                                self.dim2)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.MatrixNormalPrior(self.mean, self.cov)
+        model2 = beer.MatrixNormalPrior(self.mean, self.cov)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(float(div), 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.MatrixNormalPrior(self.mean, self.cov)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = matrixnormal_fc_log_norm(natural_params, self.dim1,
+                                            self.dim2)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+
+
+########################################################################
+# Gamma prior.
+########################################################################
+
+def gamma_log_norm(natural_params):
+    return float(gammaln(natural_params[0] + 1) - \
+        (natural_params[0] + 1) * np.log(-natural_params[1]))
+
+
+def gamma_grad_log_norm(natural_params):
+    return np.hstack([psi(natural_params[0] + 1) - np.log(-natural_params[1]),
+                      (natural_params[0] + 1) / (-natural_params[1])])
+
+
+class TestGammaPrior(BaseTest):
+
+    def setUp(self):
+        self.shape = (1 + torch.randn(1) ** 2).type(self.type)
+        self.rate = (1 + torch.randn(1) ** 2).type(self.type)
+
+    def test_create(self):
+        model = beer.GammaPrior(self.shape, self.rate)
+        shape, rate = self.shape.numpy(), self.rate.numpy()
+        natural_params = np.hstack([shape - 1, -rate])
+        self.assertArraysAlmostEqual(model.natural_params.numpy(),
+                                     natural_params)
+
+    def test_exp_sufficient_statistics(self):
+        model = beer.GammaPrior(self.shape, self.rate)
+        model_s_stats = model.expected_sufficient_statistics.numpy()
+        natural_params = model.natural_params.numpy()
+        s_stats = gamma_grad_log_norm(natural_params)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_kl_divergence(self):
+        model1 = beer.GammaPrior(self.shape, self.rate)
+        model2 = beer.GammaPrior(self.shape, self.rate)
+        div = beer.kl_div(model1, model2)
+        self.assertAlmostEqual(float(div), 0., places=self.tolplaces)
+
+    def test_log_norm(self):
+        model = beer.GammaPrior(self.shape, self.rate)
+        model_log_norm = model.log_norm.numpy()
+        natural_params = model.natural_params.numpy()
+        log_norm = gamma_log_norm(natural_params)
+        self.assertAlmostEqual(model_log_norm, log_norm, places=self.tolplaces)
+
+
+__all__ = [
+    'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior',
+    'TestNormalWishartPrior', 'TestJointNormalWishartPrior',
+    'TestNormalFullCovariancePrior', 'TestNormalIsotropicCovariancePrior',
+    'TestMatrixNormalPrior', 'TestGammaPrior'
 ]
-
-
-module = sys.modules[__name__]
-for i, test in enumerate(tests, start=1):
-    name = test[0].__name__ + 'Test' + str(i)
-    setattr(module, name, type(name, (unittest.TestCase, test[0]),  test[1]))
-
-
-if __name__ == '__main__':
-    unittest.main()
-
