@@ -56,7 +56,7 @@ class TestNormalDiagonalCovariance(BaseTest):
 
     def test_exp_llh(self):
         stats = self.model.sufficient_statistics(self.data)
-        nparams = self.model.parameters[0].expected_value
+        nparams = self.model.parameters[0].expected_value()
         exp_llh1 = stats @ nparams
         exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)
         exp_llh2 = self.model(stats)
@@ -64,7 +64,7 @@ class TestNormalDiagonalCovariance(BaseTest):
 
     def test_expected_natural_params(self):
         np1 = self.model.expected_natural_params(self.means, self.vars).numpy()
-        np2 = self.model.parameters[0].expected_value.numpy()
+        np2 = self.model.parameters[0].expected_value().numpy()
         np2 = np.ones((self.means.size(0), len(np2))) * np2
         self.assertArraysAlmostEqual(np1, np2)
 
@@ -101,7 +101,7 @@ class TestNormalFullCovariance(BaseTest):
 
     def test_exp_llh(self):
         stats = self.model.sufficient_statistics(self.data)
-        nparams = self.model.parameters[0].expected_value
+        nparams = self.model.parameters[0].expected_value()
         exp_llh1 = stats @ nparams
         exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)
         exp_llh2 = self.model(stats)
@@ -149,12 +149,12 @@ class TestNormalDiagonalCovarianceSet(BaseTest):
 
     def test_expected_natural_params_as_matrix(self):
         matrix1 = self.model.expected_natural_params_as_matrix()
-        matrix2 = torch.cat([param.expected_value[None]
+        matrix2 = torch.cat([param.expected_value()[None]
                              for param in self.model.parameters])
         self.assertArraysAlmostEqual(matrix1.numpy(), matrix2.numpy())
 
     def test_forward(self):
-        matrix = torch.cat([param.expected_value[None]
+        matrix = torch.cat([param.expected_value()[None]
                             for param in self.model.parameters], dim=0)
         T = self.model.sufficient_statistics(self.data)
         exp_llh1 = T @ matrix.t()
@@ -206,12 +206,12 @@ class TestNormalFullCovarianceSet(BaseTest):
     # pylint: disable=C0103
     def test_expected_natural_params_as_matrix(self):
         matrix1 = self.model.expected_natural_params_as_matrix()
-        matrix2 = torch.cat([param.expected_value[None]
+        matrix2 = torch.cat([param.expected_value()[None]
                              for param in self.model.parameters])
         self.assertArraysAlmostEqual(matrix1.numpy(), matrix2.numpy())
 
     def test_forward(self):
-        matrix = torch.cat([param.expected_value[None]
+        matrix = torch.cat([param.expected_value()[None]
                             for param in self.model.parameters], dim=0)
         T = self.model.sufficient_statistics(self.data)
         exp_llh1 = T @ matrix.t()

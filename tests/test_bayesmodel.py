@@ -117,7 +117,7 @@ class TestBayesianParameter(BaseTest):
             with self.subTest(i=i):
                 bayesparam = beer.BayesianParameter(prior, posterior)
                 self.assertArraysAlmostEqual(
-                    bayesparam.expected_value.numpy(),
+                    bayesparam.expected_value().numpy(),
                     posterior.expected_sufficient_statistics.numpy()
                 )
 
@@ -192,7 +192,7 @@ class TestBayesianParameterSet(BaseTest):
                 for j, param in enumerate(param_set):
                     posterior = self.posteriors[i][j]
                     self.assertArraysAlmostEqual(
-                        param.expected_value.numpy(),
+                        param.expected_value().numpy(),
                         posterior.expected_sufficient_statistics.numpy()
                     )
 

@@ -1,13 +1,10 @@
 
 '''Bayesian Subspace models.'''
 
-import abc
-from collections import namedtuple
 import math
 import torch
 
 from .bayesmodel import BayesianParameter
-from .bayesmodel import BayesianParameterSet
 from .bayesmodel import BayesianModel
 
 
@@ -17,16 +14,6 @@ from .bayesmodel import BayesianModel
 
 class PPCA(BayesianModel):
     'Probabilistic Principal Component Analysis (PPCA).'
-
-    @staticmethod
-    def sufficient_statistics(data):
-        return torch.cat([torch.sum(data ** 2, dim=1).view(-1, 1), data,
-                          torch.ones(len(data), 1).type(data.type())], dim=-1)
-
-    @staticmethod
-    def sufficient_statistics_from_mean_var(mean, var):
-        return torch.cat([torch.sum(mean ** 2 + var, dim=1).view(-1, 1), mean,
-                          torch.ones(len(mean), 1).type(mean.type())], dim=-1)
 
     def __init__(self, prior_prec, posterior_prec, prior_mean, posterior_mean,
                  prior_subspace, posterior_subspace, subspace_dim):
@@ -48,38 +35,68 @@ class PPCA(BayesianModel):
 
         '''
         super().__init__()
-        self._mean_param = BayesianParameter(prior_mean, posterior_mean)
-        self._precision_param = BayesianParameter(prior_prec, posterior_prec)
-        self._subspace_param = BayesianParameter(prior_subspace,
+        self.mean_param = BayesianParameter(prior_mean, posterior_mean)
+        self.precision_param = BayesianParameter(prior_prec, posterior_prec)
+        self.subspace_param = BayesianParameter(prior_subspace,
                                                  posterior_subspace)
-        self._data_dim = len(self._mean_param.expected_value) - 1
         self._subspace_dim = subspace_dim
+
 
     @property
     def mean(self):
-        _, mean = _normal_iso_split_nparams(self._mean_param.expected_value)
+        _, mean = self.mean_param.expected_value(concatenated=False)
         return mean
 
     @property
     def precision(self):
-        return self._precision_param.expected_value[1]
+        return self.precision_param.expected_value()[1]
 
     @property
     def subspace(self):
-        _, exp_value2 =  _matrixnormal_fc_split_nparams(
-            self._subspace_param.expected_value,
-            self._subspace_dim,
-            self._data_dim
-        )
+        post = self.subspace_param.posterior
+        _, exp_value2 =  self.subspace_param.expected_value(concatenated=False)
         return exp_value2
 
-    @property
-    def subspace_dim(self):
-        'Dimension of the subspace.'
-        return self._subspace_dim
+    def latent_posterior(self, stats):
+        data = stats[:, 1:-1]
+        mean = self.mean
+        subspace_cov, subspace_mean = \
+            self.subspace_param.expected_value(concatenated=False)
+        prec = self.precision
+        lposterior_cov = torch.inverse(
+            torch.eye(self._subspace_dim).type(stats.type()) + prec * subspace_cov)
+        lposterior_means = prec * lposterior_cov @ subspace_mean @ (data - mean).t()
+        return lposterior_means, lposterior_cov
 
-    # pylint: disable=W0613
-    def expected_natural_params(self, mean, var, labels=None, nsamples=1):
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
+
+    @staticmethod
+    def sufficient_statistics(data):
+        return torch.cat([torch.sum(data ** 2, dim=1).view(-1, 1), data,
+                          torch.ones(len(data), 1).type(data.type())], dim=-1)
+
+    def forward(self, s_stats, latent_variables=None):
+        feadim = .25 * s_stats.size(1)
+        exp_llh = s_stats @ self.mean_prec_param.expected_value()
+        exp_llh -= .5 * feadim * math.log(2 * math.pi)
+        return exp_llh
+
+    def accumulate(self, s_stats, parent_msg=None):
+        return {self.mean_prec_param: s_stats.sum(dim=0)}
+
+    ####################################################################
+    # VAELatentPrior interface.
+    ####################################################################
+
+    @staticmethod
+    def sufficient_statistics_from_mean_var(mean, var):
+        return torch.cat([torch.sum(mean ** 2 + var, dim=1).view(-1, 1), mean,
+                          torch.ones(len(mean), 1).type(mean.type())], dim=-1)
+
+    def expected_natural_params(self, mean, var, latent_variables=None,
+                                nsamples=1):
         '''Interface for the VAE model. Returns the expected value of the
         natural params of the latent model given the per-frame means
         and variances.
@@ -100,26 +117,3 @@ class PPCA(BayesianModel):
         nparams = self.mean_prec_param.expected_value
         ones = torch.ones(s_stats.size(0), nparams.size(0)).type(s_stats.type())
         return ones * nparams
-
-    def latent_posterior(self, stats):
-        data = stats[:, 1:-1]
-        _, mean = _normal_iso_split_nparams(self._mean_param.expected_value)
-        subspace_cov, subspace_mean =  _matrixnormal_fc_split_nparams(
-            self._subspace_param.expected_value,
-            self._subspace_dim,
-            self._data_dim
-        )
-        prec = self._precision_param.expected_value[1]
-        lposterior_cov = torch.inverse(
-            torch.eye(self._subspace_dim).type(stats.type()) + prec * subspace_cov)
-        lposterior_means = prec * lposterior_cov @ subspace_mean @ (data - mean).t()
-        return lposterior_means, lposterior_cov
-
-    def forward(self, s_stats, labels=None):
-        feadim = .25 * s_stats.size(1)
-        exp_llh = s_stats @ self.mean_prec_param.expected_value
-        exp_llh -= .5 * feadim * math.log(2 * math.pi)
-        return exp_llh
-
-    def accumulate(self, s_stats, parent_msg=None):
-        return {self.mean_prec_param: s_stats.sum(dim=0)}

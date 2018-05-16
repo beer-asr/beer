@@ -76,7 +76,7 @@ class Mixture(BayesianModel):
 
         '''
         per_component_exp_llh = self.modelset(s_stats)
-        per_component_exp_llh += self.weights_params.expected_value.view(1, -1)
+        per_component_exp_llh += self.weights_params.expected_value().view(1, -1)
         lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
         return per_component_exp_llh - lognorm.view(-1, 1)
 
@@ -88,7 +88,7 @@ class Mixture(BayesianModel):
         return self.modelset.sufficient_statistics(data)
 
     def forward(self, s_stats, latent_variables=None):
-        log_weights = self.weights_params.expected_value.view(1, -1)
+        log_weights = self.weights_params.expected_value().view(1, -1)
         per_component_exp_llh = self.modelset(s_stats)
         per_component_exp_llh += log_weights
 

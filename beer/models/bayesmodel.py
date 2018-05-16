@@ -15,8 +15,6 @@ class BayesianParameter:
         dictionary.
 
     Attributes:
-        expected_value (``torch.Tensor``): Expected value of the
-            parameter w.r.t. the posterior distribution.
         natural_grad (``torch.Tensor``): Natural gradient of the ELBO
             w.r.t. to the hyper-parameters of the posterior
             distribution.
@@ -35,9 +33,23 @@ class BayesianParameter:
     def __hash__(self):
         return hash(repr(self))
 
-    @property
-    def expected_value(self):
-        return self.posterior.expected_sufficient_statistics
+    def expected_value(self, concatenated=True):
+        '''Expected value of the sufficient statistics of the parameter
+        w.r.t. the posterior distribution.
+
+        Args:
+            concatenated (boolean): If true, concatenate the sufficient
+                statistics into a single ``torch.Tensor``. If false,
+                the statistics are returned in a tuple.
+
+        Returns:
+            ``torch.Tensor`` or a ``tuple``
+        '''
+        if concatenated:
+            return self.posterior.expected_sufficient_statistics
+        return self.posterior.split_sufficient_statistics(
+            self.posterior.expected_sufficient_statistics
+        )
 
     def zero_natural_grad(self):
         '''Reset the natural gradient to zero.'''

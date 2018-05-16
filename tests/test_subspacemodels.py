@@ -98,11 +98,7 @@ class TestPPCA(BaseTest):
         )
         stats = model.sufficient_statistics(self.data)
         data = stats[:, 1:-1].numpy()
-        s_cov, s_mean =  _matrixnormal_fc_split_nparams(
-            model._subspace_param.expected_value,
-            model._subspace_dim,
-            model._data_dim
-        )
+        s_cov, s_mean  =  model.subspace_param.expected_value(concatenated=False)
         s_cov, s_mean = s_cov.numpy(), s_mean.numpy()
         prec = model.precision.numpy()
         cov1 = np.linalg.inv(np.eye(self.dim_subspace) + prec * s_cov)
@@ -111,7 +107,6 @@ class TestPPCA(BaseTest):
         self.assertArraysAlmostEqual(cov1, cov2.numpy())
         self.assertArraysAlmostEqual(means1, means2.numpy())
 
-    @unittest.skip("Not implemented")
     def test_forward(self):
         model = beer.PPCA(
             self.prior_prec, self.posterior_prec,
@@ -120,8 +115,10 @@ class TestPPCA(BaseTest):
             self.dim_subspace
         )
         stats = model.sufficient_statistics(self.data)
-        means, cov = model.latent_posterior(stats)
-        nparams = model.parameters[0].expected_value
+        post = model.precision_param.posterior
+        log_prec, prec = model.precision_param.expected_value(concatenated=False)
+        l_means, l_cov = model.latent_posterior(stats)
+        nparams = model.parameters[0].expected_value()
         exp_llh1 = stats @ nparams
         exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)
         exp_llh2 = model(stats)
@@ -134,7 +131,7 @@ class TestPPCA(BaseTest):
             NormalGammaPrior(self.mean, self.prec, self.prior_count)
         )
         np1 = model.expected_natural_params(self.means, self.vars).numpy()
-        np2 = model.parameters[0].expected_value.numpy()
+        np2 = model.parameters[0].expected_value().numpy()
         np2 = np.ones((self.means.size(0), len(np2))) * np2
         self.assertArraysAlmostEqual(np1, np2)
 
