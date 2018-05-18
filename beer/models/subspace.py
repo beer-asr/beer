@@ -6,6 +6,9 @@ import torch
 
 from .bayesmodel import BayesianParameter
 from .bayesmodel import BayesianModel
+from ..expfamilyprior import GammaPrior
+from ..expfamilyprior import NormalIsotropicCovariancePrior
+from ..expfamilyprior import MatrixNormalPrior
 
 
 ########################################################################
@@ -15,18 +18,17 @@ from .bayesmodel import BayesianModel
 class PPCA(BayesianModel):
     'Probabilistic Principal Component Analysis (PPCA).'
 
-    def __init__(self, prior_prec, posterior_prec, prior_mean, posterior_mean,
+    def __init__(self, prior_mean, posterior_mean, prior_prec, posterior_prec,
                  prior_subspace, posterior_subspace, subspace_dim):
-        '''Initialize the PPCA model.
-
+        '''
         Args:
-            prior_prec (``GammaPrior``): Prior over the global precision.
-            posterior_prec (``GammaPrior``): Posterior over the global
-                precision.
             prior_mean (``NormalIsotropicCovariancePrior``): Prior over
                 the global mean.
             posterior_mean (``NormalIsotropicCovariancePrior``):
                 Posterior over the global mean.
+            prior_prec (``GammaPrior``): Prior over the global precision.
+            posterior_prec (``GammaPrior``): Posterior over the global
+                precision.
             prior_subspace (``MatrixNormalPrior``): Prior over
                 the subpace (i.e. the linear transform of the model).
             posterior_subspace (``MatrixNormalPrior``): Posterior over
@@ -41,6 +43,36 @@ class PPCA(BayesianModel):
                                                  posterior_subspace)
         self._subspace_dim = subspace_dim
 
+    @classmethod
+    def create(cls, mean, precision, subspace, pseudo_counts=1.):
+        '''Create a Probabilistic Principal Ccomponent model.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the model.
+            precision (float): Global precision of the model.
+            subspace (``torch.Tensor[subspace_dim, dim]``): Mean of the
+                Subspace matrix. `subspace_dim` and `dim` are the
+                dimension of the subspace and the data respectively.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+
+        Returns:
+            :any:`PPCA`
+        '''
+        shape = torch.tensor([pseudo_counts]).type(mean.type())
+        rate = torch.tensor([pseudo_counts / float(precision)]).type(mean.type())
+        prior_prec = GammaPrior(shape, rate)
+        posterior_prec = GammaPrior(shape, rate)
+        variance = torch.tensor([1. / float(pseudo_counts)]).type(mean.type())
+        prior_mean = NormalIsotropicCovariancePrior(mean, variance)
+        posterior_mean = NormalIsotropicCovariancePrior(mean, variance)
+
+        cov = torch.eye(subspace.size(0)).type(mean.type()) / pseudo_counts
+        prior_subspace = MatrixNormalPrior(subspace, cov)
+        posterior_subspace = MatrixNormalPrior(subspace, cov)
+
+        return cls(prior_mean, posterior_mean, prior_prec, posterior_prec,
+                   prior_subspace, posterior_subspace, subspace.size(0))
 
     @property
     def mean(self):

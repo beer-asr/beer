@@ -23,57 +23,25 @@ class TestPPCA(BaseTest):
 
     def setUp(self):
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim_subspace = int(1 + torch.randint(100, (1, 1)).item())
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.latent = torch.randn(self.npoints, self.dim_subspace).type(self.type)
         self.means = torch.randn(self.npoints, self.dim).type(self.type)
         self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
+
+        # Create the PPCA model
         self.mean = torch.randn(self.dim).type(self.type)
-        self.prec = 1 + (torch.randn(self.dim)**2).type(self.type)
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
-
-        # Prior/Posterior mean.
-        mean = torch.randn(self.dim).type(self.type)
-        var = (1 + torch.randn(1)**2).type(self.type)
-        self.prior_mean = beer.NormalIsotropicCovariancePrior(mean,var)
-        self.global_mean = torch.randn(self.dim).type(self.type)
-        self.global_var = (1 + torch.randn(1)**2).type(self.type)
-        self.posterior_mean = beer.NormalIsotropicCovariancePrior(
-            self.global_mean,
-            self.global_var
-        )
-
-        # Prior/Posterior precision.
-        shape = (1 + torch.randn(1) ** 2).type(self.type)
-        rate = (1 + torch.randn(1) ** 2).type(self.type)
-        self.prior_prec = beer.GammaPrior(shape, rate)
-        self.shape = (1 + torch.randn(1) ** 2).type(self.type)
-        self.rate = (1 + torch.randn(1) ** 2).type(self.type)
-        self.posterior_prec = beer.GammaPrior(self.shape, self.rate)
-
-        # Prior/Posterior subspace.
-        self.dim_subspace = int(1 + torch.randint(100, (1, 1)).item())
-        self.latent = torch.randn(self.npoints, self.dim_subspace).type(self.type)
-        mean = torch.randn(self.dim_subspace, self.dim).type(self.type)
-        cov = (1 + torch.randn(self.dim_subspace)).type(self.type)
-        cov = torch.eye(self.dim_subspace).type(self.type) + torch.ger(cov, cov)
-        self.prior_subspace = beer.MatrixNormalPrior(mean, cov)
-        self.mean_subspace = torch.randn(self.dim_subspace, self.dim).type(self.type)
-        cov = (1 + torch.randn(self.dim_subspace)).type(self.type)
-        self.cov_subspace = torch.eye(self.dim_subspace).type(self.type) + torch.ger(cov, cov)
-        self.posterior_subspace = beer.MatrixNormalPrior(self.mean_subspace,
-                                                         self.cov_subspace)
+        self.prec = (1 + torch.randn(1) ** 2).type(self.type)
+        self.subspace = torch.randn(self.dim_subspace, self.dim).type(self.type)
+        self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
+        self.model = beer.PPCA.create(self.mean, self.prec, self.subspace,
+                                      self.pseudo_counts)
 
     def test_create(self):
-        model = beer.PPCA(
-            self.prior_prec, self.posterior_prec,
-            self.prior_mean, self.posterior_mean,
-            self.prior_subspace, self.posterior_subspace,
-            self.dim_subspace
-        )
-        self.assertAlmostEqual(float(model.precision),
-                               float(self.shape / self.rate))
-        self.assertArraysAlmostEqual(model.mean.numpy(), self.global_mean)
-        self.assertArraysAlmostEqual(model.subspace.numpy(), self.mean_subspace)
+        self.assertAlmostEqual(float(self.model.precision), float(self.prec))
+        self.assertArraysAlmostEqual(self.model.mean.numpy(), self.mean)
+        self.assertArraysAlmostEqual(self.model.subspace.numpy(), self.subspace)
 
     def test_sufficient_statistics(self):
         data = self.data.numpy()
@@ -89,40 +57,28 @@ class TestPPCA(BaseTest):
         self.assertArraysAlmostEqual(stats1.numpy(), stats2)
 
     def test_latent_posterior(self):
-        model = beer.PPCA(
-            self.prior_prec, self.posterior_prec,
-            self.prior_mean, self.posterior_mean,
-            self.prior_subspace, self.posterior_subspace,
-            self.dim_subspace
-        )
-        stats = model.sufficient_statistics(self.data)
+        stats = self.model.sufficient_statistics(self.data)
         data = stats[:, 1:].numpy()
-        s_cov, s_mean  =  model.subspace_param.expected_value(concatenated=False)
+        s_cov, s_mean  =  self.model.subspace_param.expected_value(concatenated=False)
         s_cov, s_mean = s_cov.numpy(), s_mean.numpy()
-        prec = model.precision.numpy()
+        prec = self.model.precision.numpy()
         cov1 = np.linalg.inv(np.eye(self.dim_subspace) + prec * s_cov)
-        means1 = (prec * cov1 @ s_mean @ (data - model.mean.numpy()).T).T
-        means2, cov2 = model.latent_posterior(stats)
+        means1 = (prec * cov1 @ s_mean @ (data - self.model.mean.numpy()).T).T
+        means2, cov2 = self.model.latent_posterior(stats)
         self.assertArraysAlmostEqual(cov1, cov2.numpy())
         self.assertArraysAlmostEqual(means1, means2.numpy())
 
     def test_forward(self):
-        model = beer.PPCA(
-            self.prior_prec, self.posterior_prec,
-            self.prior_mean, self.posterior_mean,
-            self.prior_subspace, self.posterior_subspace,
-            self.dim_subspace
-        )
-        stats = model.sufficient_statistics(self.data)
-        exp_llh1 = model(stats).numpy()
+        stats = self.model.sufficient_statistics(self.data)
+        exp_llh1 = self.model(stats).numpy()
 
-        l_means, l_cov = model.latent_posterior(stats)
+        l_means, l_cov = self.model.latent_posterior(stats)
         l_means, l_cov = l_means.numpy(), l_cov.numpy()
-        log_prec, prec = model.precision_param.expected_value(concatenated=False)
+        log_prec, prec = self.model.precision_param.expected_value(concatenated=False)
         log_prec, prec = log_prec.numpy(), prec.numpy()
-        s_quad, s_mean = model.subspace_param.expected_value(concatenated=False)
+        s_quad, s_mean = self.model.subspace_param.expected_value(concatenated=False)
         s_mean, s_quad = s_mean.numpy(), s_quad.numpy()
-        m_quad, m_mean = model.mean_param.expected_value(concatenated=False)
+        m_quad, m_mean = self.model.mean_param.expected_value(concatenated=False)
         m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
         stats = stats.numpy()
 
@@ -141,23 +97,17 @@ class TestPPCA(BaseTest):
         self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
     def test_forward_latent_variables(self):
-        model = beer.PPCA(
-            self.prior_prec, self.posterior_prec,
-            self.prior_mean, self.posterior_mean,
-            self.prior_subspace, self.posterior_subspace,
-            self.dim_subspace
-        )
-        stats = model.sufficient_statistics(self.data)
-        exp_llh1 = model(stats, self.latent).numpy()
+        stats = self.model.sufficient_statistics(self.data)
+        exp_llh1 = self.model(stats, self.latent).numpy()
 
         l_means = self.latent.numpy()
         l_quad = l_means[:, :, None] * l_means[:, None, :]
         l_quad = l_quad.reshape(len(self.data), -1)
-        log_prec, prec = model.precision_param.expected_value(concatenated=False)
+        log_prec, prec = self.model.precision_param.expected_value(concatenated=False)
         log_prec, prec = log_prec.numpy(), prec.numpy()
-        s_quad, s_mean = model.subspace_param.expected_value(concatenated=False)
+        s_quad, s_mean = self.model.subspace_param.expected_value(concatenated=False)
         s_mean, s_quad = s_mean.numpy(), s_quad.numpy()
-        m_quad, m_mean = model.mean_param.expected_value(concatenated=False)
+        m_quad, m_mean = self.model.mean_param.expected_value(concatenated=False)
         m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
         stats = stats.numpy()
 
@@ -174,22 +124,16 @@ class TestPPCA(BaseTest):
         self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
     def test_expected_natural_params(self):
-        model = beer.PPCA(
-            self.prior_prec, self.posterior_prec,
-            self.prior_mean, self.posterior_mean,
-            self.prior_subspace, self.posterior_subspace,
-            self.dim_subspace
-        )
-        nparams1 = model.expected_natural_params(self.means, self.vars).numpy()
+        nparams1 = self.model.expected_natural_params(self.means, self.vars).numpy()
 
-        stats = model.sufficient_statistics_from_mean_var(self.means, self.vars)
-        l_means, l_cov = model.latent_posterior(stats)
+        stats = self.model.sufficient_statistics_from_mean_var(self.means, self.vars)
+        l_means, l_cov = self.model.latent_posterior(stats)
         l_means, l_cov = l_means.numpy(), l_cov.numpy()
-        log_prec, prec = model.precision_param.expected_value(concatenated=False)
+        log_prec, prec = self.model.precision_param.expected_value(concatenated=False)
         log_prec, prec = log_prec.numpy(), prec.numpy()
-        s_quad, s_mean = model.subspace_param.expected_value(concatenated=False)
+        s_quad, s_mean = self.model.subspace_param.expected_value(concatenated=False)
         s_mean, s_quad = s_mean.numpy(), s_quad.numpy()
-        m_quad, m_mean = model.mean_param.expected_value(concatenated=False)
+        m_quad, m_mean = self.model.mean_param.expected_value(concatenated=False)
         m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
 
         np1 = -.5 * prec * np.ones((len(stats), self.dim))
