@@ -29,6 +29,12 @@ def plot_gmm(fig, gmm, alpha=1., color='blue'):
         plot_normal(fig, comp.mean.numpy(), comp.cov.numpy(),
             alpha * weight.numpy(), color)
 
+def plot_hmm(fig, hmm, alpha=1., color='blue'):
+    'Plot a Normal density'
+    for comp in hmm.modelset:
+        plot_normal(fig, comp.mean.numpy(), comp.cov.numpy(),
+            alpha, color)
+        
 
 def plot_latent_model(fig, latent_model, alpha=1., color='blue'):
     if 'Mixture' in str(type(latent_model)):
