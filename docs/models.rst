@@ -40,6 +40,8 @@ Concrete Models
 +-----------------------------------------------+
 | :any:`beer.Mixture`                           |
 +-----------------------------------------------+
+| :any:`beer.PPCA`                              |
++-----------------------------------------------+
 
 .. autoclass:: beer.NormalDiagonalCovariance
    :show-inheritance:
@@ -66,5 +68,9 @@ Concrete Models
    :members: create
 
 .. autoclass:: beer.Mixture
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.PPCA
    :show-inheritance:
    :members: create

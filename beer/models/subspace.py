@@ -16,7 +16,29 @@ from ..expfamilyprior import MatrixNormalPrior
 ########################################################################
 
 class PPCA(BayesianModel):
-    'Probabilistic Principal Component Analysis (PPCA).'
+    '''Probabilistic Principal Component Analysis (PPCA).
+
+    Attributes:
+        mean (``torch.Tensor``): Expected mean.
+        precision (``torch.Tensor[1]``): Expected precision (scalar).
+        subspace (``torch.Tensor[subspace_dim, data_dim]``): Mean of the
+            matrix definining the prior.
+
+    Example:
+        >>> subspace_dim, dim = 2, 4
+        >>> mean = torch.zeros(dim)
+        >>> precision = 1.
+        >>> subspace = torch.randn(subspace_dim ,dim)
+        >>> ppca = beer.PPCA.create(mean, precision, subspace)
+        >>> ppca.mean
+        tensor([ 0.,  0.,  0.,  0.])
+        >>> ppca.precision
+        tensor(1.)
+        >>> ppca.subspace
+        tensor([[ 0.0328, -2.8251,  2.6031, -0.9721],
+                [ 0.5193,  0.6301, -0.3425,  1.2708]])
+
+    '''
 
     def __init__(self, prior_mean, posterior_mean, prior_prec, posterior_prec,
                  prior_subspace, posterior_subspace, subspace_dim):
@@ -50,9 +72,9 @@ class PPCA(BayesianModel):
         Args:
             mean (``torch.Tensor``): Mean of the model.
             precision (float): Global precision of the model.
-            subspace (``torch.Tensor[subspace_dim, dim]``): Mean of the
-                Subspace matrix. `subspace_dim` and `dim` are the
-                dimension of the subspace and the data respectively.
+            subspace (``torch.Tensor[subspace_dim, data_dim]``): Mean of
+                the subspace matrix. `subspace_dim` and `data_dim` are
+                the dimension of the subspace and the data respectively.
             pseudo_counts (``torch.Tensor``): Strength of the prior.
                 Should be greater than 0.
 
