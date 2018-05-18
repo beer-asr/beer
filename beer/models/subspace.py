@@ -53,12 +53,11 @@ class PPCA(BayesianModel):
 
     @property
     def subspace(self):
-        post = self.subspace_param.posterior
         _, exp_value2 =  self.subspace_param.expected_value(concatenated=False)
         return exp_value2
 
     def latent_posterior(self, stats):
-        data = stats[:, 1:-1]
+        data = stats[:, 1:]
         mean = self.mean
         subspace_cov, subspace_mean = \
             self.subspace_param.expected_value(concatenated=False)
@@ -66,7 +65,7 @@ class PPCA(BayesianModel):
         lposterior_cov = torch.inverse(
             torch.eye(self._subspace_dim).type(stats.type()) + prec * subspace_cov)
         lposterior_means = prec * lposterior_cov @ subspace_mean @ (data - mean).t()
-        return lposterior_means, lposterior_cov
+        return lposterior_means.t(), lposterior_cov
 
     ####################################################################
     # BayesianModel interface.
@@ -74,13 +73,27 @@ class PPCA(BayesianModel):
 
     @staticmethod
     def sufficient_statistics(data):
-        return torch.cat([torch.sum(data ** 2, dim=1).view(-1, 1), data,
-                          torch.ones(len(data), 1).type(data.type())], dim=-1)
+        return torch.cat([torch.sum(data ** 2, dim=1).view(-1, 1), data],
+                          dim=-1)
 
     def forward(self, s_stats, latent_variables=None):
-        feadim = .25 * s_stats.size(1)
-        exp_llh = s_stats @ self.mean_prec_param.expected_value()
-        exp_llh -= .5 * feadim * math.log(2 * math.pi)
+        feadim = s_stats.size(1) - 1
+        l_means, l_cov = self.latent_posterior(s_stats)
+        log_prec, prec = self.precision_param.expected_value(concatenated=False)
+        s_quad, s_mean = self.subspace_param.expected_value(concatenated=False)
+        m_quad, m_mean = self.mean_param.expected_value(concatenated=False)
+
+        exp_llh = torch.zeros(len(s_stats)).type(s_stats.type())
+        exp_llh += -.5 * feadim * math.log(2 * math.pi)
+        exp_llh += .5 * feadim * log_prec
+        exp_llh += -.5 * prec * s_stats[:, 0]
+        exp_llh += torch.sum(prec * \
+            (s_mean.t() @ l_means.t() + m_mean[:, None]) * s_stats[:, 1:].t(), dim=0)
+        l_quad = l_cov + \
+            torch.sum(l_means[:, :, None] * l_means[:, None, :], dim=0)
+        exp_llh += -.5 * prec * torch.trace(s_quad @ l_quad)
+        exp_llh += - prec * l_means @ s_mean @ m_mean
+        exp_llh += -.5 * prec * m_quad
         return exp_llh
 
     def accumulate(self, s_stats, parent_msg=None):
@@ -92,8 +105,8 @@ class PPCA(BayesianModel):
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        return torch.cat([torch.sum(mean ** 2 + var, dim=1).view(-1, 1), mean,
-                          torch.ones(len(mean), 1).type(mean.type())], dim=-1)
+        return torch.cat([torch.sum(mean ** 2 + var, dim=1).view(-1, 1), mean],
+                         dim=1)
 
     def expected_natural_params(self, mean, var, latent_variables=None,
                                 nsamples=1):
@@ -114,6 +127,20 @@ class PPCA(BayesianModel):
 
         '''
         s_stats = self.sufficient_statistics_from_mean_var(mean, var)
-        nparams = self.mean_prec_param.expected_value
-        ones = torch.ones(s_stats.size(0), nparams.size(0)).type(s_stats.type())
-        return ones * nparams
+        l_means, l_cov = self.latent_posterior(s_stats)
+        log_prec, prec = self.precision_param.expected_value(concatenated=False)
+        s_quad, s_mean = self.subspace_param.expected_value(concatenated=False)
+        m_quad, m_mean = self.mean_param.expected_value(concatenated=False)
+        l_quad = l_cov + \
+            torch.sum(l_means[:, :, None] * l_means[:, None, :], dim=0)
+
+        np1 = -.5 * prec * torch.ones(len(s_stats),
+                                      mean.size(1)).type(mean.type())
+        np2 = prec * (l_means @ s_mean + m_mean)
+        np3 = torch.zeros(len(s_stats), mean.size(1)).type(mean.type())
+        np3 += -.5 * prec * torch.trace(s_quad @ l_quad)
+        np3 += - (prec * l_means @ s_mean @ m_mean).reshape(-1, 1)
+        np3 += -.5 * prec * m_quad
+        np4 = -.5 * log_prec * torch.ones(s_stats.size(0),
+                                          mean.size(1)).type(mean.type())
+        return torch.cat([np1, np2, np3, np4], dim=1)

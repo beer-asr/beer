@@ -76,8 +76,7 @@ class TestPPCA(BaseTest):
 
     def test_sufficient_statistics(self):
         data = self.data.numpy()
-        stats1 = np.c_[np.sum(data ** 2, axis=1), self.data, \
-                       np.ones(len(data))]
+        stats1 = np.c_[np.sum(data ** 2, axis=1), self.data]
         stats2 = beer.PPCA.sufficient_statistics(self.data)
         self.assertArraysAlmostEqual(stats1, stats2.numpy())
 
@@ -85,8 +84,7 @@ class TestPPCA(BaseTest):
         stats1 = beer.PPCA.sufficient_statistics_from_mean_var(self.means,
                                                                self.vars)
         means, variances = self.means.numpy(), self.vars.numpy()
-        stats2 = np.c_[np.sum(means ** 2 + variances, axis=1), means,
-                       np.ones(len(means))]
+        stats2 = np.c_[np.sum(means ** 2 + variances, axis=1), means]
         self.assertArraysAlmostEqual(stats1.numpy(), stats2)
 
     def test_latent_posterior(self):
@@ -97,12 +95,12 @@ class TestPPCA(BaseTest):
             self.dim_subspace
         )
         stats = model.sufficient_statistics(self.data)
-        data = stats[:, 1:-1].numpy()
+        data = stats[:, 1:].numpy()
         s_cov, s_mean  =  model.subspace_param.expected_value(concatenated=False)
         s_cov, s_mean = s_cov.numpy(), s_mean.numpy()
         prec = model.precision.numpy()
         cov1 = np.linalg.inv(np.eye(self.dim_subspace) + prec * s_cov)
-        means1 = prec * cov1 @ s_mean @ (data - model.mean.numpy()).T
+        means1 = (prec * cov1 @ s_mean @ (data - model.mean.numpy()).T).T
         means2, cov2 = model.latent_posterior(stats)
         self.assertArraysAlmostEqual(cov1, cov2.numpy())
         self.assertArraysAlmostEqual(means1, means2.numpy())
@@ -115,25 +113,60 @@ class TestPPCA(BaseTest):
             self.dim_subspace
         )
         stats = model.sufficient_statistics(self.data)
-        post = model.precision_param.posterior
-        log_prec, prec = model.precision_param.expected_value(concatenated=False)
+        exp_llh1 = model(stats).numpy()
+
         l_means, l_cov = model.latent_posterior(stats)
-        nparams = model.parameters[0].expected_value()
-        exp_llh1 = stats @ nparams
-        exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)
-        exp_llh2 = model(stats)
-        self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
+        l_means, l_cov = l_means.numpy(), l_cov.numpy()
+        log_prec, prec = model.precision_param.expected_value(concatenated=False)
+        log_prec, prec = log_prec.numpy(), prec.numpy()
+        s_quad, s_mean = model.subspace_param.expected_value(concatenated=False)
+        s_mean, s_quad = s_mean.numpy(), s_quad.numpy()
+        m_quad, m_mean = model.mean_param.expected_value(concatenated=False)
+        m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
+        stats = stats.numpy()
 
-    @unittest.skip("Not implemented")
+        exp_llh2 = np.zeros(len(stats))
+        exp_llh2 -= .5 * self.dim * np.log(2 * np.pi)
+        exp_llh2 += .5 * self.dim * log_prec
+        exp_llh2 += -.5 * prec * stats[:, 0]
+        exp_llh2 +=np.sum(prec * \
+            (s_mean.T @ l_means.T + m_mean[:, None]) * stats[:, 1:].T, axis=0)
+        l_quad = l_cov + np.sum(l_means[:, :, None] * l_means[:, None, :], axis=0)
+        exp_llh2 += -.5 * prec * np.trace(s_quad @ l_quad)
+        exp_llh2 += - prec * l_means @ s_mean @ m_mean
+        exp_llh2 += -.5 * prec * m_quad
+
+        self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
+
     def test_expected_natural_params(self):
-        model = beer.NormalDiagonalCovariance(
-            NormalGammaPrior(self.mean, self.prec, self.prior_count),
-            NormalGammaPrior(self.mean, self.prec, self.prior_count)
+        model = beer.PPCA(
+            self.prior_prec, self.posterior_prec,
+            self.prior_mean, self.posterior_mean,
+            self.prior_subspace, self.posterior_subspace,
+            self.dim_subspace
         )
-        np1 = model.expected_natural_params(self.means, self.vars).numpy()
-        np2 = model.parameters[0].expected_value().numpy()
-        np2 = np.ones((self.means.size(0), len(np2))) * np2
-        self.assertArraysAlmostEqual(np1, np2)
+        nparams1 = model.expected_natural_params(self.means, self.vars).numpy()
 
+        stats = model.sufficient_statistics_from_mean_var(self.means, self.vars)
+        l_means, l_cov = model.latent_posterior(stats)
+        l_means, l_cov = l_means.numpy(), l_cov.numpy()
+        log_prec, prec = model.precision_param.expected_value(concatenated=False)
+        log_prec, prec = log_prec.numpy(), prec.numpy()
+        s_quad, s_mean = model.subspace_param.expected_value(concatenated=False)
+        s_mean, s_quad = s_mean.numpy(), s_quad.numpy()
+        m_quad, m_mean = model.mean_param.expected_value(concatenated=False)
+        m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
+
+        np1 = -.5 * prec * np.ones((len(stats), self.dim))
+        np2 = prec * (l_means @ s_mean + m_mean)
+        l_quad = l_cov + np.sum(l_means[:, :, None] * l_means[:, None, :], axis=0)
+        np3 = np.zeros((len(stats), self.dim))
+        np3 += -.5 * prec * np.trace(s_quad @ l_quad)
+        np3 += - (prec * l_means @ s_mean @ m_mean).reshape(-1, 1)
+        np3 += -.5 * prec * m_quad
+        np4 = -.5 * log_prec * np.ones((len(stats), self.dim))
+        nparams2 = np.hstack([np1, np2, np3, np4])
+
+        self.assertArraysAlmostEqual(nparams1, nparams2)
 
 __all__ = ['TestPPCA']
