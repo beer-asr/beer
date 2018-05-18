@@ -23,7 +23,9 @@ from .models import NormalFullCovarianceSet
 from .models import NormalSetSharedDiagonalCovariance
 from .models import NormalSetSharedFullCovariance
 from .models import Mixture
+from .models import HMM
 from .models import PPCA
+
 from .models import VAE
 from .models import NormalDiagonalCovarianceMLP
 from .models import BernoulliMLP

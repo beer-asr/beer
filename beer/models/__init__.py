@@ -12,6 +12,7 @@ from .normal import NormalSetSharedDiagonalCovariance
 from .normal import NormalSetSharedFullCovariance
 
 from .mixture import Mixture
+from .hmm import HMM
 
 from .mlpmodel import NormalDiagonalCovarianceMLP
 from .mlpmodel import BernoulliMLP

@@ -66,6 +66,17 @@ class TestEvidenceLowerbound(BaseTest):
         weights = torch.ones(10).type(self.type) * .1
         self.models.append(beer.Mixture.create(weights, normalset))
 
+        normalset = beer.NormalSetSharedFullCovariance.create(
+            torch.zeros(self.dim).type(self.type),
+            torch.eye(self.dim).type(self.type),
+            2,
+            noise_std=0.1
+        )
+        self.models.append(beer.HMM.create([0, 1], [0, 1], 
+                                           torch.FloatTensor([[1, 0], 
+                                            [.5, .5]]).type(self.type),
+                                            normalset))
+
 
     def test_elbo(self):
         elbo_fn = beer.EvidenceLowerBound(len(self.data))

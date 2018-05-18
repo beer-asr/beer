@@ -40,6 +40,8 @@ Concrete Models
 +-----------------------------------------------+
 | :any:`beer.Mixture`                           |
 +-----------------------------------------------+
+| :any:`beer.HMM`                               |
++-----------------------------------------------+
 | :any:`beer.PPCA`                              |
 +-----------------------------------------------+
 
@@ -68,6 +70,10 @@ Concrete Models
    :members: create
 
 .. autoclass:: beer.Mixture
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.HMM
    :show-inheritance:
    :members: create
 

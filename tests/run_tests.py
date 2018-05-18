@@ -20,10 +20,10 @@ import test_expfamilyprior
 import test_features
 import test_mixture
 import test_normal
+import test_hmm
 import test_subspacemodels
 import test_utils
 import test_vbi
-
 
 testcases = {
     'test_bayesmodel': test_bayesmodel,
@@ -33,9 +33,9 @@ testcases = {
     'test_normal': test_normal,
     'test_subspacemodels': test_subspacemodels,
     'test_utils': test_utils,
-    'test_vbi': test_vbi
+    'test_vbi': test_vbi,
+    'test_hmm': test_hmm
 }
-
 
 def run():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -56,6 +56,7 @@ def run():
     tensor_type = args.tensor_type
     init_seed = args.init_seed
 
+
     if args.testcase is not None:
         test_modules = [testcases[args.testcase]]
     else:
@@ -67,10 +68,12 @@ def run():
             test_normal,
             #test_subspacemodels,
             test_utils,
-            test_vbi
+            test_vbi,
+            test_hmm
         ]
 
     suite = unittest.TestSuite()
+
     for test_module in test_modules:
         for testcase_name in test_module.__all__:
             testcase = getattr(test_module, testcase_name)
