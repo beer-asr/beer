@@ -1,5 +1,5 @@
 
-'Bayesian Mixture model.'
+'Bayesian HMM model.'
 
 import math
 import torch
@@ -11,7 +11,32 @@ from ..utils import onehot, logsumexp
 
 
 class HMM(BayesianModel):
-    'HMM Model.'
+    ''' Hidden Markov Model.
+
+    Attributes: 
+        init_states  (list): Indices of initial states who have 
+            non-zero probability.
+        final_states  (list): Indices of final states who have 
+            non-zero probability.
+        trans_mat (``torch.Tensor``): Transition matrix of HMM states.
+        modelset (:any:`BayesianModelSet`): Set of emission density.
+
+    Example:
+        >>> # Create a set of Normal densities.
+        >>> mean = torch.zeros(2)
+        >>> cov = torch.eye(2)
+        >>> normalset = beer.NormalSetSharedFullCovariance.create(mean, cov, 3, noise_std=0.1)
+        >>> init_state = [0]
+        >>> final_state = [1]
+        >>> hmm = beer.HMM(init_state, final_state, trans_mat, normalset)
+        >>> hmm.init_states
+        [0]
+        >>> hmm.final_states
+        [1]
+        >>> hmm.trans_mat
+        tensor([[ 0.5000,  0.5000],
+                [ 1.0000,  0.0000]])
+    '''
 
     def __init__(self, init_states, final_states, trans_mat, modelset):
         '''
