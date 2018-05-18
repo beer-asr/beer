@@ -52,6 +52,7 @@ class TestPPCA(BaseTest):
 
         # Prior/Posterior subspace.
         self.dim_subspace = int(1 + torch.randint(100, (1, 1)).item())
+        self.latent = torch.randn(self.npoints, self.dim_subspace).type(self.type)
         mean = torch.randn(self.dim_subspace, self.dim).type(self.type)
         cov = (1 + torch.randn(self.dim_subspace)).type(self.type)
         cov = torch.eye(self.dim_subspace).type(self.type) + torch.ger(cov, cov)
@@ -129,10 +130,44 @@ class TestPPCA(BaseTest):
         exp_llh2 -= .5 * self.dim * np.log(2 * np.pi)
         exp_llh2 += .5 * self.dim * log_prec
         exp_llh2 += -.5 * prec * stats[:, 0]
-        exp_llh2 +=np.sum(prec * \
+        exp_llh2 += np.sum(prec * \
             (s_mean.T @ l_means.T + m_mean[:, None]) * stats[:, 1:].T, axis=0)
-        l_quad = l_cov + np.sum(l_means[:, :, None] * l_means[:, None, :], axis=0)
-        exp_llh2 += -.5 * prec * np.trace(s_quad @ l_quad)
+        l_quad = (l_cov + l_means[:, :, None] * l_means[:, None, :])
+        l_quad = l_quad.reshape(len(self.data), -1)
+        exp_llh2 += -.5 * prec * np.sum(l_quad * s_quad.reshape(-1), axis=1)
+        exp_llh2 += - prec * l_means @ s_mean @ m_mean
+        exp_llh2 += -.5 * prec * m_quad
+
+        self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
+
+    def test_forward_latent_variables(self):
+        model = beer.PPCA(
+            self.prior_prec, self.posterior_prec,
+            self.prior_mean, self.posterior_mean,
+            self.prior_subspace, self.posterior_subspace,
+            self.dim_subspace
+        )
+        stats = model.sufficient_statistics(self.data)
+        exp_llh1 = model(stats, self.latent).numpy()
+
+        l_means = self.latent.numpy()
+        l_quad = l_means[:, :, None] * l_means[:, None, :]
+        l_quad = l_quad.reshape(len(self.data), -1)
+        log_prec, prec = model.precision_param.expected_value(concatenated=False)
+        log_prec, prec = log_prec.numpy(), prec.numpy()
+        s_quad, s_mean = model.subspace_param.expected_value(concatenated=False)
+        s_mean, s_quad = s_mean.numpy(), s_quad.numpy()
+        m_quad, m_mean = model.mean_param.expected_value(concatenated=False)
+        m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
+        stats = stats.numpy()
+
+        exp_llh2 = np.zeros(len(stats))
+        exp_llh2 -= .5 * self.dim * np.log(2 * np.pi)
+        exp_llh2 += .5 * self.dim * log_prec
+        exp_llh2 += -.5 * prec * stats[:, 0]
+        exp_llh2 += np.sum(prec * \
+            (s_mean.T @ l_means.T + m_mean[:, None]) * stats[:, 1:].T, axis=0)
+        exp_llh2 += -.5 * prec * np.sum(l_quad * s_quad.reshape(-1), axis=1)
         exp_llh2 += - prec * l_means @ s_mean @ m_mean
         exp_llh2 += -.5 * prec * m_quad
 

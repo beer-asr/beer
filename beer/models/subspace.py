@@ -78,7 +78,15 @@ class PPCA(BayesianModel):
 
     def forward(self, s_stats, latent_variables=None):
         feadim = s_stats.size(1) - 1
-        l_means, l_cov = self.latent_posterior(s_stats)
+
+        if latent_variables is not None:
+            l_means = latent_variables
+            l_quad = l_means[:, :, None] * l_means[:, None, :]
+        else:
+            l_means, l_cov = self.latent_posterior(s_stats)
+            l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
+        l_quad = l_quad.view(len(s_stats), -1)
+
         log_prec, prec = self.precision_param.expected_value(concatenated=False)
         s_quad, s_mean = self.subspace_param.expected_value(concatenated=False)
         m_quad, m_mean = self.mean_param.expected_value(concatenated=False)
@@ -89,9 +97,7 @@ class PPCA(BayesianModel):
         exp_llh += -.5 * prec * s_stats[:, 0]
         exp_llh += torch.sum(prec * \
             (s_mean.t() @ l_means.t() + m_mean[:, None]) * s_stats[:, 1:].t(), dim=0)
-        l_quad = l_cov + \
-            torch.sum(l_means[:, :, None] * l_means[:, None, :], dim=0)
-        exp_llh += -.5 * prec * torch.trace(s_quad @ l_quad)
+        exp_llh += -.5 * prec * torch.sum(l_quad * s_quad.view(-1), dim=1)
         exp_llh += - prec * l_means @ s_mean @ m_mean
         exp_llh += -.5 * prec * m_quad
         return exp_llh
