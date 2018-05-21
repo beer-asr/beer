@@ -40,8 +40,30 @@ class PPCA(BayesianModel):
 
     '''
 
+    @staticmethod
+    def kl_div_latent_posterior(l_means, l_cov):
+        '''KL divergence between the posterior distribution of the
+        latent variables and their prior (standard normal).
+
+        Args:
+            l_means (``torch.Tensor[N, s_dim]``): Means of the
+                posteriors where N is  the number of frames (= the
+                number of posterior) and s_dim is the dimension of
+                the subspace.
+            l_cov (``torch.Tensor[s_dim, s_dim]``): Covariance matrix
+                shared accross posteriors.
+
+        Returns:
+            ``torch.Tensor[N]``: Per-frame KL-divergence.
+
+        '''
+        s_dim = l_means.size(1)
+        _, logdet = torch.slogdet(l_cov)
+        return .5 * (math.log(s_dim) - s_dim - logdet -\
+            torch.diag(l_cov).sum() + torch.sum(l_means ** 2, dim=1))
+
     def __init__(self, prior_mean, posterior_mean, prior_prec, posterior_prec,
-                 prior_subspace, posterior_subspace, subspace_dim):
+                 prior_subspace, posterior_subspace):
         '''
         Args:
             prior_mean (``NormalIsotropicCovariancePrior``): Prior over
@@ -63,7 +85,17 @@ class PPCA(BayesianModel):
         self.precision_param = BayesianParameter(prior_prec, posterior_prec)
         self.subspace_param = BayesianParameter(prior_subspace,
                                                  posterior_subspace)
-        self._subspace_dim = subspace_dim
+        self._subspace_dim, self._data_dim = self.subspace.size()
+
+        # Cache some computation for a quick accumulation of the
+        # sufficient statistics.
+        self._distance_term = None
+        self._l_means = None
+        self._l_quad = None
+
+        # Keep track of the number of update to alternate between
+        # parameters
+        self._update_count = 0
 
     @classmethod
     def create(cls, mean, precision, subspace, pseudo_counts=1.):
@@ -82,7 +114,7 @@ class PPCA(BayesianModel):
             :any:`PPCA`
         '''
         shape = torch.tensor([pseudo_counts]).type(mean.type())
-        rate = torch.tensor([pseudo_counts / float(precision)]).type(mean.type())
+        rate = torch.tensor([pseudo_counts / float(.5 * precision)]).type(mean.type())
         prior_prec = GammaPrior(shape, rate)
         posterior_prec = GammaPrior(shape, rate)
         variance = torch.tensor([1. / float(pseudo_counts)]).type(mean.type())
@@ -94,7 +126,7 @@ class PPCA(BayesianModel):
         posterior_subspace = MatrixNormalPrior(subspace, cov)
 
         return cls(prior_mean, posterior_mean, prior_prec, posterior_prec,
-                   prior_subspace, posterior_subspace, subspace.size(0))
+                   prior_subspace, posterior_subspace)
 
     @property
     def mean(self):
@@ -103,7 +135,7 @@ class PPCA(BayesianModel):
 
     @property
     def precision(self):
-        return self.precision_param.expected_value()[1]
+        return 2 * self.precision_param.expected_value()[1]
 
     @property
     def subspace(self):
@@ -113,11 +145,12 @@ class PPCA(BayesianModel):
     def latent_posterior(self, stats):
         data = stats[:, 1:]
         mean = self.mean
-        subspace_cov, subspace_mean = \
+        subspace_quad, subspace_mean = \
             self.subspace_param.expected_value(concatenated=False)
-        prec = self.precision
+        prec = .5 * self.precision
         lposterior_cov = torch.inverse(
-            torch.eye(self._subspace_dim).type(stats.type()) + prec * subspace_cov)
+            torch.eye(self._subspace_dim).type(stats.type()) + \
+            prec * subspace_quad)
         lposterior_means = prec * lposterior_cov @ subspace_mean @ (data - mean).t()
         return lposterior_means.t(), lposterior_cov
 
@@ -136,28 +169,91 @@ class PPCA(BayesianModel):
         if latent_variables is not None:
             l_means = latent_variables
             l_quad = l_means[:, :, None] * l_means[:, None, :]
+            l_kl_div = torch.zeros(len(s_stats)).type(s_stats.type())
         else:
             l_means, l_cov = self.latent_posterior(s_stats)
             l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
+            l_kl_div = self.kl_div_latent_posterior(l_means, l_cov)
         l_quad = l_quad.view(len(s_stats), -1)
 
         log_prec, prec = self.precision_param.expected_value(concatenated=False)
         s_quad, s_mean = self.subspace_param.expected_value(concatenated=False)
         m_quad, m_mean = self.mean_param.expected_value(concatenated=False)
+        prec *= 2
+        log_prec *= 2
+
+        # Compute intermediary results.
+        distance_term = torch.zeros(len(s_stats)).type(s_stats.type())
+        distance_term += -.5 * s_stats[:, 0]
+        distance_term += torch.sum(
+            (s_mean.t() @ l_means.t() + m_mean[:, None]) * s_stats[:, 1:].t(), dim=0)
+        distance_term += -.5 * torch.sum(l_quad * s_quad.view(-1), dim=1)
+        distance_term += -l_means @ s_mean @ m_mean
+        distance_term += -.5 * m_quad
 
         exp_llh = torch.zeros(len(s_stats)).type(s_stats.type())
         exp_llh += -.5 * feadim * math.log(2 * math.pi)
         exp_llh += .5 * feadim * log_prec
-        exp_llh += -.5 * prec * s_stats[:, 0]
-        exp_llh += torch.sum(prec * \
-            (s_mean.t() @ l_means.t() + m_mean[:, None]) * s_stats[:, 1:].t(), dim=0)
-        exp_llh += -.5 * prec * torch.sum(l_quad * s_quad.view(-1), dim=1)
-        exp_llh += - prec * l_means @ s_mean @ m_mean
-        exp_llh += -.5 * prec * m_quad
+        exp_llh += prec *  distance_term - l_kl_div
+
+        # Cache some computation for a quick accumulation of the
+        # sufficient statistics.
+        self._distance_term = distance_term
+        self._l_means = l_means
+        self._l_quad = l_quad
+
         return exp_llh
 
     def accumulate(self, s_stats, parent_msg=None):
-        return {self.mean_prec_param: s_stats.sum(dim=0)}
+        t_type = s_stats.type()
+        feadim = s_stats.size(1) - 1
+
+        log_prec, prec = self.precision_param.expected_value(concatenated=False)
+        _, s_mean = self.subspace_param.expected_value(concatenated=False)
+        _, m_mean = self.mean_param.expected_value(concatenated=False)
+        prec *= 2
+        log_prec *= 2
+
+        self._update_count += 1
+        if self._update_count > 2:
+            self._update_count = 0
+
+        if self._update_count == 0:
+            data_mean = s_stats[:, 1:] - m_mean[None, :]
+            acc_s_mean = (self._l_means.t() @ data_mean)
+            return {
+                self.mean_param: torch.cat([
+                    - .5 * torch.tensor(len(s_stats) * prec).view(1).type(t_type),
+                    prec * torch.sum(s_stats[:, 1:] - \
+                        (s_mean.t() @ self._l_means.t()).t(), dim=0)
+                ]),
+                self.precision_param: torch.cat([
+                    torch.tensor(len(s_stats) * feadim).view(1).type(t_type),
+                    2 * torch.sum(self._distance_term).view(1)
+                ])
+            }
+        elif self._update_count == 1:
+            return {
+                self.precision_param: torch.cat([
+                    torch.tensor(len(s_stats) * feadim).view(1).type(t_type),
+                    2 * torch.sum(self._distance_term).view(1)
+                ])
+            }
+        else:
+            data_mean = s_stats[:, 1:] - m_mean[None, :]
+            acc_s_mean = (self._l_means.t() @ data_mean)
+            return {
+                self.subspace_param:  torch.cat([
+                    - .5 * prec * self._l_quad.sum(dim=0).view(-1),
+                    prec * acc_s_mean.view(-1)
+                ])
+            }
+
+        # Clear the cache.
+        self._distance_term = None
+        self._l_means = None
+        self._l_quad = None
+
 
     ####################################################################
     # VAELatentPrior interface.

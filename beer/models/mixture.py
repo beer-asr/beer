@@ -61,7 +61,7 @@ class Mixture(BayesianModel):
     @property
     def weights(self):
         'Expected value of the weights of the mixture.'
-        weights = torch.exp(self.weights_params.expected_value)
+        weights = torch.exp(self.weights_params.expected_value())
         return weights / weights.sum()
 
     def log_predictions(self, s_stats):

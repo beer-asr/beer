@@ -22,8 +22,8 @@ from basetest import BaseTest
 class TestPPCA(BaseTest):
 
     def setUp(self):
-        self.dim = int(1 + torch.randint(100, (1, 1)).item())
-        self.dim_subspace = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim = int(10 + torch.randint(100, (1, 1)).item())
+        self.dim_subspace = int(1 + torch.randint(self.dim - 1, (1, 1)).item())
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
         self.latent = torch.randn(self.npoints, self.dim_subspace).type(self.type)
@@ -33,15 +33,30 @@ class TestPPCA(BaseTest):
         # Create the PPCA model
         self.mean = torch.randn(self.dim).type(self.type)
         self.prec = (1 + torch.randn(1) ** 2).type(self.type)
-        self.subspace = torch.randn(self.dim_subspace, self.dim).type(self.type)
-        self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
+        rand_mat = torch.randn(self.dim_subspace, self.dim)
+        q_mat, _  = torch.qr(rand_mat.t())
+        self.subspace = q_mat.t().type(self.type)
+        self.pseudo_counts = 1e-1 + 100 * torch.rand(1).item()
         self.model = beer.PPCA.create(self.mean, self.prec, self.subspace,
                                       self.pseudo_counts)
 
     def test_create(self):
-        self.assertAlmostEqual(float(self.model.precision), float(self.prec))
+        self.assertAlmostEqual(float(self.model.precision), float(self.prec), places=self.tolplaces)
         self.assertArraysAlmostEqual(self.model.mean.numpy(), self.mean)
         self.assertArraysAlmostEqual(self.model.subspace.numpy(), self.subspace)
+
+    def test_kl_div_latent_posteriors(self):
+        stats = self.model.sufficient_statistics(self.data)
+        l_means, l_cov = self.model.latent_posterior(stats)
+        kld1 = beer.PPCA.kl_div_latent_posterior(l_means, l_cov)
+        l_means, l_cov = l_means.numpy(), l_cov.numpy()
+        s_dim = self.dim_subspace
+        kld2 = .5 * (np.log(s_dim) - s_dim)
+        sign, logdet = np.linalg.slogdet(l_cov)
+        kld2 += -.5 * (sign * logdet + np.trace(l_cov))
+        kld2 += .5 * np.sum(l_means**2, axis=1)
+        self.assertArraysAlmostEqual(kld1, kld2)
+
 
     def test_sufficient_statistics(self):
         data = self.data.numpy()
@@ -149,3 +164,4 @@ class TestPPCA(BaseTest):
         self.assertArraysAlmostEqual(nparams1, nparams2)
 
 __all__ = ['TestPPCA']
+

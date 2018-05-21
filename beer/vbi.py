@@ -43,10 +43,13 @@ class EvidenceLowerBoundInstance:
         :any:`BayesianParameter`.
         '''
         for parameter in self._parameters:
-            acc_stats = self._acc_stats[parameter]
-            parameter.natural_grad += parameter.prior.natural_hparams +  \
-                self._scale * acc_stats - \
-                parameter.posterior.natural_hparams
+            try:
+                acc_stats = self._acc_stats[parameter]
+                parameter.natural_grad += parameter.prior.natural_hparams +  \
+                    self._scale * acc_stats - \
+                    parameter.posterior.natural_hparams
+            except KeyError:
+                pass
 
 
 class EvidenceLowerBound:
@@ -161,3 +164,4 @@ class BayesianModelOptimizer:
                 self._lrate * parameter.natural_grad,
                 requires_grad=True
             )
+

@@ -10,6 +10,11 @@ import torch
 import beer
 from basetest import BaseTest
 
+# Even though the VB-EM algorithm is theoretically gauranteed to
+# increase, it may happen in practice due to floating point precision
+# issue that it decreases a little bit at one step. Settings TOLERANCE
+# to 0 will make the test fails if one of such update occurs.
+TOLERANCE = -.3
 
 class TestEvidenceLowerbound(BaseTest):
 
@@ -72,11 +77,15 @@ class TestEvidenceLowerbound(BaseTest):
             2,
             noise_std=0.1
         )
-        self.models.append(beer.HMM.create([0, 1], [0, 1], 
-                                           torch.FloatTensor([[1, 0], 
+        self.models.append(beer.HMM.create([0, 1], [0, 1],
+                                           torch.FloatTensor([[1, 0],
                                             [.5, .5]]).type(self.type),
                                             normalset))
 
+        self.mean = torch.zeros(self.dim).type(self.type)
+        self.prec = 2
+        self.subspace = torch.randn(self.dim - 1, self.dim).type(self.type)
+        self.models.append(beer.PPCA.create(self.mean, self.prec, self.subspace))
 
     def test_elbo(self):
         elbo_fn = beer.EvidenceLowerBound(len(self.data))
@@ -89,9 +98,8 @@ class TestEvidenceLowerbound(BaseTest):
                     elbo = elbo_fn(model, self.data)
                     elbo.natural_backward()
                     optim.step()
-
-                    elbo = round(float(elbo) / len(self.data), self.tolplaces)
-                    self.assertGreaterEqual(elbo, previous)
+                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
+                    self.assertGreaterEqual(elbo - previous, TOLERANCE)
                     previous = elbo
 
 __all__ = ['TestEvidenceLowerbound']
