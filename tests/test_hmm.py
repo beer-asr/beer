@@ -81,6 +81,59 @@ def create_modelset_full(ncomps, dim, type_t):
     )
     return modelset
 
+def create_trans_mat(unigram, nstate_per_unit, gamma):
+
+    trans_mat = np.zeros((len(unigram) * nstate_per_unit,
+                          len(unigram) * nstate_per_unit))
+    initial_states = np.arange(0, len(unigram) * nstate_per_unit, 
+                               nstate_per_unit)
+
+    for i, j in enumerate(unigram):
+        if nstate_per_unit == 1:
+            trans_mat[i,:] += (1 - gamma) * unigram
+            trans_mat[i, i] += gamma
+        else:
+            for n in range(nstate_per_unit-1):
+                trans_mat[i*nstate_per_unit+n, 
+                          i*nstate_per_unit+n : i*nstate_per_unit+n+2] = .5
+            trans_mat[i*nstate_per_unit+nstate_per_unit-1, 
+                      i*nstate_per_unit+nstate_per_unit-1] = gamma
+            trans_mat[i*nstate_per_unit+nstate_per_unit-1, 
+                      initial_states] = (1 - gamma) * unigram
+    return trans_mat
+
+def create_ali_trans_mat(tot_states):
+    trans_mat = np.diag(np.ones(tot_states) * .5)
+    idx1 = np.arange(0, tot_states-1)
+    idx2 = np.arange(1, tot_states)
+    trans_mat[idx1, idx2] = .5
+    trans_mat[-1, -1] = 1.
+    return trans_mat
+
+
+# pylint: disable=R0902
+class TestCreateTransMatrix(BaseTest):
+
+    def setUp(self):
+        self.nstate_per_unit = int(1 + np.random.randint(10, size=1))
+        num_units = torch.randint(1, 10, (1,), dtype=torch.int)
+        pdf = torch.distributions.Dirichlet(torch.randint(0, 10, (num_units,)))
+        self.unigram = pdf.sample()
+        self.gamma = np.random.ranf()
+        self.tot_states = int(1 + np.random.randint(10, size=1))
+    
+    def test_create_trans_mat(self):
+        trans_mat1 = create_trans_mat(np.asarray(self.unigram), 
+                                      self.nstate_per_unit, self.gamma)
+        trans_mat2 = beer.HMM.create_trans_mat(self.unigram, 
+                                               self.nstate_per_unit, self.gamma)
+        self.assertArraysAlmostEqual(trans_mat1, trans_mat2.numpy())
+
+    def test_create_ali_trans_mat(self):
+        trans_ali_mat1 = create_ali_trans_mat(self.tot_states)
+        trans_ali_mat2 = beer.HMM.create_ali_trans_mat(self.tot_states)
+        self.assertArraysAlmostEqual(trans_ali_mat1, trans_ali_mat2.numpy())
+
 # pylint: disable=R0902
 class TestForwardBackwardViterbi(BaseTest):
 
@@ -214,4 +267,4 @@ class TestHMM(BaseTest):
                 exp_llh2 = model(stats, label_idxs).numpy()
                 self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
-__all__ = ['TestHMM', 'TestForwardBackwardViterbi']
+__all__ = ['TestHMM', 'TestForwardBackwardViterbi', 'TestCreateTransMatrix']

@@ -1,13 +1,11 @@
 
 'Bayesian HMM model.'
 
-import math
 import torch
+import numpy as np
 from .bayesmodel import BayesianModel
 from .bayesmodel import BayesianParameter
 from ..utils import onehot, logsumexp
-
-
 
 
 class HMM(BayesianModel):
@@ -83,8 +81,54 @@ class HMM(BayesianModel):
         return self.modelset.sufficient_statistics_from_mean_var(mean, var)
 
     @staticmethod
+    def create_trans_mat(unigram, nstate_per_unit, gamma):
+        '''Create a transition matrix
+
+        Args:
+            unigram (``torch.Tensor``): Unigram probability of each unit.
+            nstate_per_unit (int): Number of states for each unit.
+            gamma (float): Insertion penalty, probability of staying in 
+                the last state of a unit.
+        '''
+
+        trans_mat = torch.zeros((len(unigram) * nstate_per_unit, 
+                                 len(unigram) * nstate_per_unit))
+        initial_states = np.arange(0, len(unigram) * nstate_per_unit, 
+                                   nstate_per_unit)
+
+        for i, j in enumerate(unigram):
+            if nstate_per_unit == 1:
+                trans_mat[i,:] += (1 - gamma) * unigram
+                trans_mat[i, i] += gamma
+            else:
+                for n in range(nstate_per_unit-1):
+                    trans_mat[i*nstate_per_unit+n, 
+                              i*nstate_per_unit+n : i*nstate_per_unit+n+2] = .5
+                trans_mat[i*nstate_per_unit+nstate_per_unit-1, 
+                          i*nstate_per_unit+nstate_per_unit-1] = gamma
+                trans_mat[i*nstate_per_unit+nstate_per_unit-1, 
+                          initial_states] = (1 - gamma) * unigram
+        return trans_mat
+    
+    @staticmethod
+    def create_ali_trans_mat(tot_states):
+        '''Create align transition matrix for a sequence of units
+
+        Args:
+            tot_states (int): length of total number of states of the given
+                sequence.
+        '''
+
+        trans_mat = torch.diag(torch.ones(tot_states) * .5)
+        idx1 = torch.arange(0, tot_states-1, dtype=torch.long)
+        idx2 = torch.arange(1, tot_states, dtype=torch.long)
+        trans_mat[idx1, idx2] = .5
+        trans_mat[-1, -1] = 1.
+        return trans_mat
+    
+    @staticmethod
     def baum_welch_forward(init_states, trans_mat, llhs):
-        init_log_prob = -math.log(len(init_states))
+        init_log_prob = -np.log(len(init_states))
         log_trans_mat = trans_mat.log()
         log_alphas = torch.zeros_like(llhs) - float('inf')
         log_alphas[0, init_states] = llhs[0, init_states] + init_log_prob
@@ -97,7 +141,7 @@ class HMM(BayesianModel):
 
     @staticmethod
     def baum_welch_backward(final_states, trans_mat, llhs):
-        final_log_prob = -math.log(len(final_states))
+        final_log_prob = -np.log(len(final_states))
         log_trans_mat = trans_mat.log()
         log_betas = torch.zeros_like(llhs) - float('inf')
         log_betas[-1, final_states] = final_log_prob
@@ -108,7 +152,7 @@ class HMM(BayesianModel):
 
     @staticmethod
     def viterbi(init_states, final_states, trans_mat, llhs):
-        init_log_prob = -math.log(len(init_states))
+        init_log_prob = -np.log(len(init_states))
         backtrack = torch.zeros_like(llhs, dtype=torch.long)
         omega = torch.zeros(llhs.shape[1]).type(llhs.type()) - float('inf')
         omega[init_states] = llhs[0, init_states] + init_log_prob
