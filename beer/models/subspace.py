@@ -192,13 +192,14 @@ class PPCA(BayesianModel):
         exp_llh = torch.zeros(len(s_stats)).type(s_stats.type())
         exp_llh += -.5 * feadim * math.log(2 * math.pi)
         exp_llh += .5 * feadim * log_prec
-        exp_llh += -.5 * prec * distance_term - l_kl_div
+        exp_llh += -.5 * prec * distance_term
 
         # Cache some computation for a quick accumulation of the
         # sufficient statistics.
         self._distance_term = distance_term.sum()
         self._l_means = l_means
         self._l_quad = l_quad
+        self._kl_div = l_kl_div
 
         return exp_llh
 
@@ -229,6 +230,10 @@ class PPCA(BayesianModel):
         self._l_quad = None
 
         return acc_stats
+
+    def kl_div_posterior_prior(self):
+        kl_div = super().kl_div_posterior_prior()
+        return kl_div + self._kl_div.sum()
 
     ####################################################################
     # VAELatentPrior interface.

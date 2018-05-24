@@ -100,7 +100,7 @@ class EvidenceLowerBound:
         s_stats = model.sufficient_statistics(data)
         return EvidenceLowerBoundInstance(
             expected_llh=model(s_stats, latent_variables),
-            kl_div=BayesianModel.kl_div_posterior_prior(model.parameters),
+            kl_div=model.kl_div_posterior_prior(),
             parameters=model.parameters,
             acc_stats=model.accumulate(s_stats),
             scale=float(len(data)) / self.datasize
@@ -164,4 +164,3 @@ class BayesianModelOptimizer:
                 self._lrate * parameter.natural_grad,
                 requires_grad=True
             )
-

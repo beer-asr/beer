@@ -133,16 +133,6 @@ class TestBayesianParameter(BaseTest):
                     np.zeros(len(bayesparam.natural_grad))
                 )
 
-    def test_kl_div_prior_posterior(self):
-        for i, pdfs in enumerate(zip(self.priors, self.posteriors)):
-            prior, posterior = pdfs
-            with self.subTest(i=i):
-                kl_div = beer.BayesianModel.kl_div_posterior_prior(
-                    [beer.BayesianParameter(prior, posterior)
-                     for _ in range(10)]
-                )
-        self.assertGreaterEqual(float(kl_div), 0.)
-
 
 class TestBayesianParameterSet(BaseTest):
 

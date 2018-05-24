@@ -114,20 +114,16 @@ class BayesianModel(metaclass=abc.ABCMeta):
     def __call__(self, data, labels=None):
         return self.forward(data, labels)
 
-    @staticmethod
-    def kl_div_posterior_prior(parameters):
+    def kl_div_posterior_prior(self):
         '''Kullback-Leibler divergence between the posterior and the prior
         distribution of the parameters.
-
-        Args:
-            parameters (list): List of :any:`BayesianParameter`.
 
         Returns:
             float: KL( q || p)
 
         '''
         retval = 0.
-        for parameter in parameters:
+        for parameter in self.parameters:
             retval += ExpFamilyPrior.kl_div(parameter.posterior,
                                             parameter.prior)
         return retval
