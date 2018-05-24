@@ -98,13 +98,13 @@ class TestPPCA(BaseTest):
         m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
         stats = stats.numpy()
 
-        data_mean = stats[:, :-1] - m_mean.reshape(1, -1)
+        data_mean = stats[:, 1:] - m_mean.reshape(1, -1)
 
         exp_llh2 = np.zeros(len(stats))
         exp_llh2 += -.5 * self.dim * np.log(2 * np.pi)
         exp_llh2 += .5 * self.dim * log_prec
         exp_llh2 += -.5 * prec * stats[:, 0]
-        exp_llh2 += prec * stats[:, :-1] @ m_mean
+        exp_llh2 += prec * stats[:, 1:] @ m_mean
         exp_llh2 += prec * np.sum((l_means @ s_mean) * data_mean, axis=1)
         exp_llh2 += -.5 * prec * l_quad.reshape(len(stats), -1) @ s_quad.reshape(-1)
         exp_llh2 += -.5 * prec * m_quad
@@ -127,13 +127,13 @@ class TestPPCA(BaseTest):
         m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
         stats = stats.numpy()
 
-        data_mean = stats[:, :-1] - m_mean.reshape(1, -1)
+        data_mean = stats[:, 1:] - m_mean.reshape(1, -1)
 
         exp_llh2 = np.zeros(len(stats))
         exp_llh2 += -.5 * self.dim * np.log(2 * np.pi)
         exp_llh2 += .5 * self.dim * log_prec
         exp_llh2 += -.5 * prec * stats[:, 0]
-        exp_llh2 += prec * stats[:, :-1] @ m_mean
+        exp_llh2 += prec * stats[:, 1:] @ m_mean
         exp_llh2 += prec * np.sum((l_means @ s_mean) * data_mean, axis=1)
         exp_llh2 += -.5 * prec * l_quad.reshape(len(stats), -1) @ s_quad.reshape(-1)
         exp_llh2 += -.5 * prec * m_quad

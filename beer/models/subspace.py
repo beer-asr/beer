@@ -179,25 +179,24 @@ class PPCA(BayesianModel):
         l_quad = l_quad.view(len(s_stats), -1)
 
         log_prec, prec, s_quad, s_mean, m_quad, m_mean = self._get_expectation()
-        data_mean = s_stats[:, :-1] - m_mean.view(1, -1)
+        data_mean = s_stats[:, 1:] - m_mean.view(1, -1)
 
         # Compute intermediary results.
         distance_term = torch.zeros(len(s_stats)).type(s_stats.type())
-        distance_term += -.5 * prec * s_stats[:, 0]
-        distance_term += prec * s_stats[:, :-1] @ m_mean
-        distance_term += prec * torch.sum((l_means @ s_mean) * data_mean, dim=1)
-        distance_term += -.5 * prec * \
-            l_quad.view(len(s_stats), -1) @ s_quad.view(-1)
-        distance_term += -.5 * prec * m_quad
+        distance_term += s_stats[:, 0]
+        distance_term += - 2 * s_stats[:, 1:] @ m_mean
+        distance_term += - 2 * torch.sum((l_means @ s_mean) * data_mean, dim=1)
+        distance_term += l_quad.view(len(s_stats), -1) @ s_quad.view(-1)
+        distance_term += m_quad
 
         exp_llh = torch.zeros(len(s_stats)).type(s_stats.type())
         exp_llh += -.5 * feadim * math.log(2 * math.pi)
         exp_llh += .5 * feadim * log_prec
-        exp_llh += distance_term - l_kl_div
+        exp_llh += -.5 * prec * distance_term - l_kl_div
 
         # Cache some computation for a quick accumulation of the
         # sufficient statistics.
-        self._distance_term = distance_term
+        self._distance_term = distance_term.sum()
         self._l_means = l_means
         self._l_quad = l_quad
 
@@ -206,50 +205,30 @@ class PPCA(BayesianModel):
     def accumulate(self, s_stats, parent_msg=None):
         t_type = s_stats.type()
         feadim = s_stats.size(1) - 1
-        log_prec, prec, _, s_mean, _, m_mean = self._get_expectation()
-        prec *= 2
-        log_prec *= 2
-
-        self._update_count += 1
-        if self._update_count > 2:
-            self._update_count = 0
-
-        if self._update_count == 0:
-            data_mean = s_stats[:, 1:] - m_mean[None, :]
-            acc_s_mean = (self._l_means.t() @ data_mean)
-            return {
-                self.mean_param: torch.cat([
-                    - .5 * torch.tensor(len(s_stats) * prec).view(1).type(t_type),
-                    prec * torch.sum(s_stats[:, 1:] - \
-                        (s_mean.t() @ self._l_means.t()).t(), dim=0)
-                ]),
-                self.precision_param: torch.cat([
-                    torch.tensor(len(s_stats) * feadim).view(1).type(t_type),
-                    2 * torch.sum(self._distance_term).view(1)
-                ])
-            }
-        elif self._update_count == 1:
-            return {
-                self.precision_param: torch.cat([
-                    torch.tensor(len(s_stats) * feadim).view(1).type(t_type),
-                    2 * torch.sum(self._distance_term).view(1)
-                ])
-            }
-        else:
-            data_mean = s_stats[:, 1:] - m_mean[None, :]
-            acc_s_mean = (self._l_means.t() @ data_mean)
-            return {
-                self.subspace_param:  torch.cat([
-                    - .5 * prec * self._l_quad.sum(dim=0).view(-1),
-                    prec * acc_s_mean.view(-1)
-                ])
-            }
+        _, prec, _, s_mean, _, m_mean = self._get_expectation()
+        data_mean = s_stats[:, 1:] - m_mean[None, :]
+        acc_s_mean = (self._l_means.t() @ data_mean)
+        acc_stats = {
+            self.precision_param: torch.cat([
+                .5 * torch.tensor(len(s_stats) * feadim).view(1).type(t_type),
+                -.5 * self._distance_term.view(1)
+            ]),
+            self.mean_param: torch.cat([
+                - .5 * torch.tensor(len(s_stats) * prec).view(1).type(t_type),
+                prec * torch.sum(s_stats[:, 1:] - self._l_means @ s_mean, dim=0)
+            ]),
+            self.subspace_param:  torch.cat([
+                - .5 * prec * self._l_quad.sum(dim=0).view(-1),
+                prec * acc_s_mean.view(-1)
+            ])
+        }
 
         # Clear the cache.
         self._distance_term = None
         self._l_means = None
         self._l_quad = None
 
+        return acc_stats
 
     ####################################################################
     # VAELatentPrior interface.
