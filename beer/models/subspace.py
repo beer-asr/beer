@@ -114,7 +114,7 @@ class PPCA(BayesianModel):
             :any:`PPCA`
         '''
         shape = torch.tensor([pseudo_counts]).type(mean.type())
-        rate = torch.tensor([pseudo_counts / float(.5 * precision)]).type(mean.type())
+        rate = torch.tensor([pseudo_counts / float(precision)]).type(mean.type())
         prior_prec = GammaPrior(shape, rate)
         posterior_prec = GammaPrior(shape, rate)
         variance = torch.tensor([1. / float(pseudo_counts)]).type(mean.type())
@@ -135,23 +135,25 @@ class PPCA(BayesianModel):
 
     @property
     def precision(self):
-        return 2 * self.precision_param.expected_value()[1]
+        return self.precision_param.expected_value()[1]
 
     @property
     def subspace(self):
         _, exp_value2 =  self.subspace_param.expected_value(concatenated=False)
         return exp_value2
 
+    def _get_expectation(self):
+        log_prec, prec = self.precision_param.expected_value(concatenated=False)
+        s_quad, s_mean = self.subspace_param.expected_value(concatenated=False)
+        m_quad, m_mean = self.mean_param.expected_value(concatenated=False)
+        return log_prec, prec, s_quad, s_mean, m_quad, m_mean
+
     def latent_posterior(self, stats):
         data = stats[:, 1:]
-        mean = self.mean
-        subspace_quad, subspace_mean = \
-            self.subspace_param.expected_value(concatenated=False)
-        prec = .5 * self.precision
+        _, prec, s_quad, s_mean, _, m_mean = self._get_expectation()
         lposterior_cov = torch.inverse(
-            torch.eye(self._subspace_dim).type(stats.type()) + \
-            prec * subspace_quad)
-        lposterior_means = prec * lposterior_cov @ subspace_mean @ (data - mean).t()
+            torch.eye(self._subspace_dim).type(stats.type()) + prec * s_quad)
+        lposterior_means = prec * lposterior_cov @ s_mean @ (data - m_mean).t()
         return lposterior_means.t(), lposterior_cov
 
     ####################################################################
@@ -176,25 +178,22 @@ class PPCA(BayesianModel):
             l_kl_div = self.kl_div_latent_posterior(l_means, l_cov)
         l_quad = l_quad.view(len(s_stats), -1)
 
-        log_prec, prec = self.precision_param.expected_value(concatenated=False)
-        s_quad, s_mean = self.subspace_param.expected_value(concatenated=False)
-        m_quad, m_mean = self.mean_param.expected_value(concatenated=False)
-        prec *= 2
-        log_prec *= 2
+        log_prec, prec, s_quad, s_mean, m_quad, m_mean = self._get_expectation()
+        data_mean = s_stats[:, :-1] - m_mean.view(1, -1)
 
         # Compute intermediary results.
         distance_term = torch.zeros(len(s_stats)).type(s_stats.type())
-        distance_term += -.5 * s_stats[:, 0]
-        distance_term += torch.sum(
-            (s_mean.t() @ l_means.t() + m_mean[:, None]) * s_stats[:, 1:].t(), dim=0)
-        distance_term += -.5 * torch.sum(l_quad * s_quad.view(-1), dim=1)
-        distance_term += -l_means @ s_mean @ m_mean
-        distance_term += -.5 * m_quad
+        distance_term += -.5 * prec * s_stats[:, 0]
+        distance_term += prec * s_stats[:, :-1] @ m_mean
+        distance_term += prec * torch.sum((l_means @ s_mean) * data_mean, dim=1)
+        distance_term += -.5 * prec * \
+            l_quad.view(len(s_stats), -1) @ s_quad.view(-1)
+        distance_term += -.5 * prec * m_quad
 
         exp_llh = torch.zeros(len(s_stats)).type(s_stats.type())
         exp_llh += -.5 * feadim * math.log(2 * math.pi)
         exp_llh += .5 * feadim * log_prec
-        exp_llh += prec *  distance_term - l_kl_div
+        exp_llh += distance_term - l_kl_div
 
         # Cache some computation for a quick accumulation of the
         # sufficient statistics.
@@ -207,10 +206,7 @@ class PPCA(BayesianModel):
     def accumulate(self, s_stats, parent_msg=None):
         t_type = s_stats.type()
         feadim = s_stats.size(1) - 1
-
-        log_prec, prec = self.precision_param.expected_value(concatenated=False)
-        _, s_mean = self.subspace_param.expected_value(concatenated=False)
-        _, m_mean = self.mean_param.expected_value(concatenated=False)
+        log_prec, prec, _, s_mean, _, m_mean = self._get_expectation()
         prec *= 2
         log_prec *= 2
 
@@ -284,11 +280,10 @@ class PPCA(BayesianModel):
         '''
         s_stats = self.sufficient_statistics_from_mean_var(mean, var)
         l_means, l_cov = self.latent_posterior(s_stats)
-        log_prec, prec = self.precision_param.expected_value(concatenated=False)
-        s_quad, s_mean = self.subspace_param.expected_value(concatenated=False)
-        m_quad, m_mean = self.mean_param.expected_value(concatenated=False)
         l_quad = l_cov + \
             torch.sum(l_means[:, :, None] * l_means[:, None, :], dim=0)
+        log_prec, prec, s_quad, s_mean, m_quad, m_mean = self._get_expectation()
+
 
         np1 = -.5 * prec * torch.ones(len(s_stats),
                                       mean.size(1)).type(mean.type())

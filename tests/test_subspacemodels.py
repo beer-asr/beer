@@ -57,7 +57,6 @@ class TestPPCA(BaseTest):
         kld2 += .5 * np.sum(l_means**2, axis=1)
         self.assertArraysAlmostEqual(kld1, kld2)
 
-
     def test_sufficient_statistics(self):
         data = self.data.numpy()
         stats1 = np.c_[np.sum(data ** 2, axis=1), self.data]
@@ -74,10 +73,10 @@ class TestPPCA(BaseTest):
     def test_latent_posterior(self):
         stats = self.model.sufficient_statistics(self.data)
         data = stats[:, 1:].numpy()
-        s_cov, s_mean  =  self.model.subspace_param.expected_value(concatenated=False)
-        s_cov, s_mean = s_cov.numpy(), s_mean.numpy()
+        s_quad, s_mean  =  self.model.subspace_param.expected_value(concatenated=False)
+        s_quad, s_mean = s_quad.numpy(), s_mean.numpy()
         prec = self.model.precision.numpy()
-        cov1 = np.linalg.inv(np.eye(self.dim_subspace) + prec * s_cov)
+        cov1 = np.linalg.inv(np.eye(self.dim_subspace) + prec * s_quad)
         means1 = (prec * cov1 @ s_mean @ (data - self.model.mean.numpy()).T).T
         means2, cov2 = self.model.latent_posterior(stats)
         self.assertArraysAlmostEqual(cov1, cov2.numpy())
@@ -88,7 +87,9 @@ class TestPPCA(BaseTest):
         exp_llh1 = self.model(stats).numpy()
 
         l_means, l_cov = self.model.latent_posterior(stats)
+        kld = beer.PPCA.kl_div_latent_posterior(l_means, l_cov).numpy()
         l_means, l_cov = l_means.numpy(), l_cov.numpy()
+        l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
         log_prec, prec = self.model.precision_param.expected_value(concatenated=False)
         log_prec, prec = log_prec.numpy(), prec.numpy()
         s_quad, s_mean = self.model.subspace_param.expected_value(concatenated=False)
@@ -97,17 +98,17 @@ class TestPPCA(BaseTest):
         m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
         stats = stats.numpy()
 
+        data_mean = stats[:, :-1] - m_mean.reshape(1, -1)
+
         exp_llh2 = np.zeros(len(stats))
-        exp_llh2 -= .5 * self.dim * np.log(2 * np.pi)
+        exp_llh2 += -.5 * self.dim * np.log(2 * np.pi)
         exp_llh2 += .5 * self.dim * log_prec
         exp_llh2 += -.5 * prec * stats[:, 0]
-        exp_llh2 += np.sum(prec * \
-            (s_mean.T @ l_means.T + m_mean[:, None]) * stats[:, 1:].T, axis=0)
-        l_quad = (l_cov + l_means[:, :, None] * l_means[:, None, :])
-        l_quad = l_quad.reshape(len(self.data), -1)
-        exp_llh2 += -.5 * prec * np.sum(l_quad * s_quad.reshape(-1), axis=1)
-        exp_llh2 += - prec * l_means @ s_mean @ m_mean
+        exp_llh2 += prec * stats[:, :-1] @ m_mean
+        exp_llh2 += prec * np.sum((l_means @ s_mean) * data_mean, axis=1)
+        exp_llh2 += -.5 * prec * l_quad.reshape(len(stats), -1) @ s_quad.reshape(-1)
         exp_llh2 += -.5 * prec * m_quad
+        exp_llh2 += - kld
 
         self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
@@ -126,14 +127,15 @@ class TestPPCA(BaseTest):
         m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
         stats = stats.numpy()
 
+        data_mean = stats[:, :-1] - m_mean.reshape(1, -1)
+
         exp_llh2 = np.zeros(len(stats))
-        exp_llh2 -= .5 * self.dim * np.log(2 * np.pi)
+        exp_llh2 += -.5 * self.dim * np.log(2 * np.pi)
         exp_llh2 += .5 * self.dim * log_prec
         exp_llh2 += -.5 * prec * stats[:, 0]
-        exp_llh2 += np.sum(prec * \
-            (s_mean.T @ l_means.T + m_mean[:, None]) * stats[:, 1:].T, axis=0)
-        exp_llh2 += -.5 * prec * np.sum(l_quad * s_quad.reshape(-1), axis=1)
-        exp_llh2 += - prec * l_means @ s_mean @ m_mean
+        exp_llh2 += prec * stats[:, :-1] @ m_mean
+        exp_llh2 += prec * np.sum((l_means @ s_mean) * data_mean, axis=1)
+        exp_llh2 += -.5 * prec * l_quad.reshape(len(stats), -1) @ s_quad.reshape(-1)
         exp_llh2 += -.5 * prec * m_quad
 
         self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
