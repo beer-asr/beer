@@ -132,3 +132,6 @@ class Mixture(BayesianModel):
                                      len(self.modelset)).mean(dim=0)
         matrix = self.modelset.expected_natural_params_as_matrix()
         return self._resps @ matrix
+
+
+__all__ = ['Mixture']

@@ -13,10 +13,10 @@ from ..utils import onehot, logsumexp
 class HMM(BayesianModel):
     ''' Hidden Markov Model.
 
-    Attributes: 
-        init_states  (list): Indices of initial states who have 
+    Attributes:
+        init_states  (list): Indices of initial states who have
             non-zero probability.
-        final_states  (list): Indices of final states who have 
+        final_states  (list): Indices of final states who have
             non-zero probability.
         trans_mat (``torch.Tensor``): Transition matrix of HMM states.
         modelset (:any:`BayesianModelSet`): Set of emission density.
@@ -41,9 +41,9 @@ class HMM(BayesianModel):
     def __init__(self, init_states, final_states, trans_mat, modelset):
         '''
         Args:
-            init_states  (list): Indices of initial states who have 
+            init_states  (list): Indices of initial states who have
                 non-zero probability.
-            final_states  (list): Indices of final states who have 
+            final_states  (list): Indices of final states who have
                 non-zero probability.
             trans_mat (``torch.Tensor``): Transition matrix of HMM states.
             modelset (:any:`BayesianModelSet`): Set of emission density.
@@ -55,15 +55,15 @@ class HMM(BayesianModel):
         self.trans_mat = trans_mat
         self.modelset = modelset
         self._resps = None
-    
+
     @classmethod
     def create(cls, init_states, final_states, trans_mat, modelset):
         '''Create a :any:`HMM` model.
 
         Args:
-            init_states  (list): Indices of initial states who have 
+            init_states  (list): Indices of initial states who have
                 non-zero probability.
-            final_states  (list): Indices of final states who have 
+            final_states  (list): Indices of final states who have
                 non-zero probability.
             trans_mat (``torch.Tensor``): Transition matrix of HMM states.
             modelset (:any:`BayesianModelSet`): Set of emission density.
@@ -77,8 +77,6 @@ class HMM(BayesianModel):
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
-    # pylint: disable=C0103
-    # Invalid method name.
     def sufficient_statistics_from_mean_var(self, mean, var):
         return self.modelset.sufficient_statistics_from_mean_var(mean, var)
 
@@ -91,7 +89,7 @@ class HMM(BayesianModel):
 
         for i in range(1, llhs.shape[0]):
             log_alphas[i] = llhs[i]
-            log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(), 
+            log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(),
                                        dim=1).view(-1)
         return log_alphas
 
@@ -118,7 +116,7 @@ class HMM(BayesianModel):
             hypothesis = omega + log_trans_mat.t()
             backtrack[i] = torch.argmax(hypothesis, dim=1)
             omega = llhs[i] + hypothesis[range(len(log_trans_mat)), backtrack[i]]
-        
+
         path = [final_states[torch.argmax(omega[final_states])]]
         for i in reversed(range(1, len(llhs))):
             path.insert(0, backtrack[i, path[0]])
@@ -148,3 +146,6 @@ class HMM(BayesianModel):
         }
         self._resps = None
         return retval
+
+
+__all__ = ['HMM']

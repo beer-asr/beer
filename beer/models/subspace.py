@@ -1,5 +1,5 @@
-
 '''Bayesian Subspace models.'''
+
 
 import math
 import torch
@@ -280,3 +280,6 @@ class PPCA(BayesianModel):
         np4 = -.5 * log_prec * torch.ones(s_stats.size(0),
                                           mean.size(1)).type(mean.type())
         return torch.cat([np1, np2, np3, np4], dim=1)
+
+
+__all__ = ['PPCA']

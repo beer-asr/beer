@@ -65,3 +65,5 @@ class VAE(BayesianModel):
 
     def accumulate(self, _, parent_msg=None):
         return self.latent_model.accumulate(self._s_stats, parent_msg)
+
+__all__ = ['VAE']

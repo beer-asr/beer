@@ -127,7 +127,6 @@ class NormalDiagonalCovariance(BayesianModel):
         return torch.cat([(mean ** 2) + var, mean, torch.ones_like(mean),
                           torch.ones_like(mean)], dim=-1)
 
-    # pylint: disable=W0613
     def expected_natural_params(self, mean, var, labels=None, nsamples=1):
         '''Interface for the VAE model. Returns the expected value of the
         natural params of the latent model given the per-frame means
@@ -659,3 +658,8 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
         ones2 = torch.ones(self._ncomp, 1).type(np1.type())
         return torch.cat([ones1 * np1.view(-1)[None, :],
                           np2, np3.view(-1, 1), ones2 * np4], dim=1)
+
+
+__all__ = ['NormalDiagonalCovariance', 'NormalFullCovariance',
+           'NormalDiagonalCovarianceSet', 'NormalFullCovarianceSet',
+           'NormalSetSharedDiagonalCovariance', 'NormalSetSharedFullCovariance']

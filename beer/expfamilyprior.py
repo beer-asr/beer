@@ -1,7 +1,7 @@
+'''Implementation of the Conjugate prior from the exponential family
+of distribution.
 
-# pylint: disable=E1102
-# pylint: disable=C0103
-# pylint: disable=W1401
+'''
 
 import abc
 import math
@@ -808,3 +808,11 @@ class GammaPrior(ExpFamilyPrior):
         '''
         hnp1, hnp2 = self.split_sufficient_statistics(natural_hparams)
         return torch.lgamma(hnp1 + 1) - (hnp1 + 1) * torch.log(-hnp2)
+
+
+__all__ = [
+    'ExpFamilyPrior', 'DirichletPrior', 'NormalGammaPrior',
+    'JointNormalGammaPrior', 'NormalWishartPrior', 'JointNormalWishartPrior',
+    'NormalFullCovariancePrior', 'NormalIsotropicCovariancePrior', 'GammaPrior',
+     'MatrixNormalPrior'
+]

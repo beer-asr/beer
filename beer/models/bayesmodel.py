@@ -56,7 +56,6 @@ class BayesianParameter:
         self.natural_grad.zero_()
 
 
-# pylint: disable=R0903
 class BayesianParameterSet:
     '''Set of Bayesian parameters.
 
@@ -254,3 +253,6 @@ class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
             ``torch.Tensor[n_frames, n_models]``: ELBO.
         '''
         raise NotImplementedError
+
+__all__ = ['BayesianModel', 'BayesianModelSet', 'BayesianParameter',
+           'BayesianParameterSet']

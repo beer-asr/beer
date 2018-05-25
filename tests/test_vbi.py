@@ -1,8 +1,5 @@
 'Test the Normal model.'
 
-import unittest
-
-
 import sys
 sys.path.insert(0, './')
 
@@ -10,7 +7,7 @@ import torch
 import beer
 from basetest import BaseTest
 
-# Even though the VB-EM algorithm is theoretically gauranteed to
+# Even though the VB-EM algorithm is theoretically guaranteed to
 # increase, it may happen in practice due to floating point precision
 # issue that it decreases a little bit at one step. Settings TOLERANCE
 # to 0 will make the test fails if one of such update occurs.

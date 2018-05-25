@@ -73,3 +73,6 @@ class BernoulliMLP:
     def log_likelihood(self, X):
         per_pixel_bce = X * self.mu.log() + (1.0 - X) * (1 - self.mu).log()
         return per_pixel_bce.sum(dim=-1)
+
+
+__all__ = ['NormalDiagonalCovarianceMLP', 'BernoulliMLP']

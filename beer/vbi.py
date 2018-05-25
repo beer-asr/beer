@@ -3,7 +3,6 @@
 
 
 import torch
-from .models import BayesianModel
 
 class EvidenceLowerBoundInstance:
     '''Evidence Lower Bound of a data set given a model.
