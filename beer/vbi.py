@@ -2,7 +2,7 @@
 'Variational Bayes Inference.'
 
 
-import torch.autograd as ta
+import torch
 from .models import BayesianModel
 
 class EvidenceLowerBoundInstance:
@@ -14,9 +14,9 @@ class EvidenceLowerBoundInstance:
     '''
 
     def __init__(self, expected_llh, kl_div, parameters, acc_stats, scale):
-        self._elbo = scale * expected_llh.sum() - kl_div
-        self._exp_llh_per_frame = expected_llh
+        self._exp_llh = expected_llh.sum()
         self._kl_div = kl_div
+        self._elbo = scale * self._exp_llh - self._kl_div
         self._parameters = parameters
         self._acc_stats = acc_stats
         self._scale = scale
@@ -27,8 +27,15 @@ class EvidenceLowerBoundInstance:
     def __float__(self):
         return float(self._elbo)
 
-    def scale(self, scale):
-        self._elbo *= scale
+    @property
+    def kl_div(self):
+        'KL divergence term of the ELBO'
+        return self._kl_div
+
+    @property
+    def expected_llh(self):
+        'Expected log-likelihood of the ELBO'
+        return self._exp_llh
 
     def backward(self):
         '''Compute the gradient of the loss w.r.t. to standard
@@ -159,8 +166,63 @@ class BayesianModelOptimizer:
         if self._std_optim is not None:
             self._std_optim.step()
         for parameter in self._parameters:
-            parameter.posterior.natural_hparams = ta.Variable(
+            parameter.posterior.natural_hparams = torch.tensor(
                 parameter.posterior.natural_hparams + \
                 self._lrate * parameter.natural_grad,
                 requires_grad=True
             )
+
+
+class BayesianModelCoordinateAscentOptimizer(BayesianModelOptimizer):
+    '''Optimizer that update iteratively groups of parameters. This
+    optimizer is suited for model like PPCA which cannot estimate the
+    gradient of all its paramaters at once.
+
+
+    Example:
+        >>> # Assume "model" is a BayesianModel to be trained and X is
+        >>> # the dataset.
+        >>> elbo_fn = beer.EvidenceLowerBound(len(X))
+        >>> optim = beer.BayesianModelCoordinateAscentOptimizer(model.parameters)
+        >>> for epoch in range(10):
+        >>>     optim.zero_grad()
+        >>>     elbo = elbo_fn(model, X)
+        >>>     elbo.natural_backward()
+        >>>     optim.step()
+
+    '''
+
+    def __init__(self, *groups, lrate=1., std_optim=None):
+        '''
+        Args:
+            ... (list): N List of ``BayesianParameter``.
+                to be updated separately.
+            lrate (float): learning rate.
+            std_optim (``torch.optim.Optimizer``): Optimizer for
+                non-Bayesian parameters (i.e. standard ``pytorch``
+                parameters)
+        '''
+        parameters = []
+        for group in groups:
+            parameters += group
+        super().__init__(parameters, lrate=lrate, std_optim=std_optim)
+        self._groups = groups
+        self._update_count = 0
+
+    def step(self):
+        'Update one group the standard/Bayesian parameters.'
+        if self._std_optim is not None:
+            self._std_optim.step()
+        if self._update_count >= len(self._groups):
+            self._update_count = 0
+        for parameter in self._groups[self._update_count]:
+            parameter.posterior.natural_hparams = torch.tensor(
+                parameter.posterior.natural_hparams + \
+                self._lrate * parameter.natural_grad,
+                requires_grad=True
+            )
+        self._update_count += 1
+
+
+__all__ = ['EvidenceLowerBound', 'BayesianModelOptimizer',
+           'BayesianModelCoordinateAscentOptimizer']

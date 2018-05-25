@@ -33,9 +33,5 @@ from .models import BernoulliMLP
 # Features extraction.
 from . import features
 
-# Variational Bayes Inference.
-from .vbi import EvidenceLowerBound
-from .vbi import BayesianModelOptimizer
-
-# Utility functions.
+from .vbi import *
 from .utils import *

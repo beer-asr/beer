@@ -58,9 +58,9 @@ class PPCA(BayesianModel):
 
         '''
         s_dim = l_means.size(1)
-        _, logdet = torch.slogdet(l_cov)
-        return .5 * (math.log(s_dim) - s_dim - logdet -\
-            torch.diag(l_cov).sum() + torch.sum(l_means ** 2, dim=1))
+        sign, logdet = torch.slogdet(l_cov)
+        return .5 * (- s_dim - sign * logdet + torch.trace(l_cov) + \
+            torch.sum(l_means ** 2, dim=1))
 
     def __init__(self, prior_mean, posterior_mean, prior_prec, posterior_prec,
                  prior_subspace, posterior_subspace):
@@ -233,6 +233,7 @@ class PPCA(BayesianModel):
 
     def kl_div_posterior_prior(self):
         kl_div = super().kl_div_posterior_prior()
+        #return kl_div
         return kl_div + self._kl_div.sum()
 
     ####################################################################

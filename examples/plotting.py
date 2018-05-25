@@ -6,20 +6,19 @@ def plot_normal(fig, mean, cov, alpha=1., color='blue'):
     'Plot a Normal density'
 
     # Eigenvalue decomposition of the covariance matrix.
-    Q, R = np.linalg.qr(cov)
+    w, v = np.linalg.eigh(cov)
 
     # Angle of the rotation.
-    angle =  - np.arccos(Q[0, 0])
-    evals = np.abs(np.diag(R))
+    angle =  - np.arctan(v[0, -1] / v[1, -1])
 
     fig.ellipse(x=mean[0], y=mean[1],
-            width=4 * np.sqrt(evals[0]),
-            height=4 * np.sqrt(evals[1]),
+            width=4 * np.sqrt(w[0]),
+            height=4 * np.sqrt(w[1]),
             angle=angle, alpha=.5 * alpha, color=color)
     fig.cross(mean[0], mean[1], color=color, alpha=alpha)
     fig.ellipse(x=mean[0], y=mean[1],
-            width=2 * np.sqrt(evals[0]),
-            height=2 * np.sqrt(evals[1]),
+            width=2 * np.sqrt(w[0]),
+            height=2 * np.sqrt(w[1]),
             angle=angle, alpha=alpha, color=color)
 
 
