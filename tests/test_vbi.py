@@ -14,7 +14,7 @@ from basetest import BaseTest
 # increase, it may happen in practice due to floating point precision
 # issue that it decreases a little bit at one step. Settings TOLERANCE
 # to 0 will make the test fails if one of such update occurs.
-TOLERANCE = -.3
+TOLERANCE = 0.
 
 class TestEvidenceLowerbound(BaseTest):
 
@@ -85,9 +85,9 @@ class TestEvidenceLowerbound(BaseTest):
         self.mean = torch.zeros(self.dim).type(self.type)
         self.prec = 2
         self.subspace = torch.randn(self.dim - 1, self.dim).type(self.type)
-        self.models.append(beer.PPCA.create(self.mean, self.prec, self.subspace))
+        self.ppca = beer.PPCA.create(self.mean, self.prec, self.subspace)
 
-    def test_elbo(self):
+    def test_optim1(self):
         elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, model in enumerate(self.models):
             with self.subTest(i=i):
@@ -101,5 +101,20 @@ class TestEvidenceLowerbound(BaseTest):
                     elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
                     self.assertGreaterEqual(elbo - previous, TOLERANCE)
                     previous = elbo
+
+    def test_optim2(self):
+        elbo_fn = beer.EvidenceLowerBound(len(self.data))
+        optim = beer.BayesianModelCoordinateAscentOptimizer(
+            [self.ppca.precision_param], [self.ppca.mean_param],
+            [self.ppca.subspace_param], lrate=1.)
+        previous = -float('inf')
+        for _ in range(100):
+            optim.zero_grad()
+            elbo = elbo_fn(self.ppca, self.data)
+            elbo.natural_backward()
+            optim.step()
+            elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
+            self.assertGreaterEqual(elbo - previous, TOLERANCE)
+            previous = elbo
 
 __all__ = ['TestEvidenceLowerbound']
