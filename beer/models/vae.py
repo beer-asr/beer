@@ -36,7 +36,7 @@ class VAE(BayesianModel):
     def sufficient_statistics(data):
         return data
 
-    def forward(self, s_stats, labels=None):
+    def forward(self, s_stats, latent_variables=None):
         # For the case of the VAE, the sufficient statistics is just
         # the data itself. We just rename the s_stats to avoid
         # confusion with the sufficient statistics of the latent model.
@@ -47,13 +47,18 @@ class VAE(BayesianModel):
         self._s_stats = \
             self.latent_model.sufficient_statistics_from_mean_var(mean, var)
         exp_np_params = self.latent_model.expected_natural_params(
-            mean.data, var.data, labels=labels, nsamples=self.nsamples)
+            mean.detach(), var.detach(), latent_variables=latent_variables,
+            nsamples=self.nsamples)
         samples = mean + torch.sqrt(var) * torch.randn(self.nsamples,
                                                        data.size(0),
                                                        mean.size(1))
-
+        self.cache['kl_divergence'] = enc_state.kl_div(exp_np_params)
         llh = self.decoder(samples).log_likelihood(data)
-        return llh - enc_state.kl_div(exp_np_params)
+        return llh
+
+    def local_kl_div_posterior_prior(self):
+        return self.cache['kl_divergence'] + \
+            self.latent_model.local_kl_div_posterior_prior()
 
     #def evaluate(self, data):
     #    'Convenience function mostly for plotting and debugging.'

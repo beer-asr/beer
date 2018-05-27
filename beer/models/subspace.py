@@ -58,8 +58,8 @@ class PPCA(BayesianModel):
 
         '''
         s_dim = l_means.size(1)
-        sign, logdet = torch.slogdet(l_cov)
-        return .5 * (- s_dim - sign * logdet + torch.trace(l_cov) + \
+        _, logdet = torch.slogdet(l_cov)
+        return .5 * (- s_dim - logdet + torch.trace(l_cov) + \
             torch.sum(l_means ** 2, dim=1))
 
     def __init__(self, prior_mean, posterior_mean, prior_prec, posterior_prec,
@@ -86,16 +86,6 @@ class PPCA(BayesianModel):
         self.subspace_param = BayesianParameter(prior_subspace,
                                                  posterior_subspace)
         self._subspace_dim, self._data_dim = self.subspace.size()
-
-        # Cache some computation for a quick accumulation of the
-        # sufficient statistics.
-        self._distance_term = None
-        self._l_means = None
-        self._l_quad = None
-
-        # Keep track of the number of update to alternate between
-        # parameters
-        self._update_count = 0
 
     @classmethod
     def create(cls, mean, precision, subspace, pseudo_counts=1.):
@@ -148,6 +138,17 @@ class PPCA(BayesianModel):
         m_quad, m_mean = self.mean_param.expected_value(concatenated=False)
         return log_prec, prec, s_quad, s_mean, m_quad, m_mean
 
+    def _compute_distance_term(self, s_stats, l_means, l_quad):
+        _, _, s_quad, s_mean, m_quad, m_mean = self._get_expectation()
+        data_mean = s_stats[:, 1:] - m_mean.view(1, -1)
+        distance_term = torch.zeros(len(s_stats)).type(s_stats.type())
+        distance_term += s_stats[:, 0]
+        distance_term += - 2 * s_stats[:, 1:] @ m_mean
+        distance_term += - 2 * torch.sum((l_means @ s_mean) * data_mean, dim=1)
+        distance_term += l_quad.view(len(s_stats), -1) @ s_quad.view(-1)
+        distance_term += m_quad
+        return distance_term
+
     def latent_posterior(self, stats):
         data = stats[:, 1:]
         _, prec, s_quad, s_mean, _, m_mean = self._get_expectation()
@@ -178,17 +179,9 @@ class PPCA(BayesianModel):
             l_kl_div = self.kl_div_latent_posterior(l_means, l_cov)
         l_quad = l_quad.view(len(s_stats), -1)
 
-        log_prec, prec, s_quad, s_mean, m_quad, m_mean = self._get_expectation()
-        data_mean = s_stats[:, 1:] - m_mean.view(1, -1)
+        log_prec, prec, _, s_mean, _, m_mean = self._get_expectation()
 
-        # Compute intermediary results.
-        distance_term = torch.zeros(len(s_stats)).type(s_stats.type())
-        distance_term += s_stats[:, 0]
-        distance_term += - 2 * s_stats[:, 1:] @ m_mean
-        distance_term += - 2 * torch.sum((l_means @ s_mean) * data_mean, dim=1)
-        distance_term += l_quad.view(len(s_stats), -1) @ s_quad.view(-1)
-        distance_term += m_quad
-
+        distance_term = self._compute_distance_term(s_stats, l_means, l_quad)
         exp_llh = torch.zeros(len(s_stats)).type(s_stats.type())
         exp_llh += -.5 * feadim * math.log(2 * math.pi)
         exp_llh += .5 * feadim * log_prec
@@ -196,45 +189,45 @@ class PPCA(BayesianModel):
 
         # Cache some computation for a quick accumulation of the
         # sufficient statistics.
-        self._distance_term = distance_term.sum()
-        self._l_means = l_means
-        self._l_quad = l_quad
-        self._kl_div = l_kl_div
+        self.cache['distance'] = distance_term.sum()
+        self.cache['latent_means'] = l_means
+        self.cache['latent_quad'] = l_quad
+        self.cache['kl_divergence'] = l_kl_div
+        self.cache['precision'] = prec
+        self.cache['subspace_mean'] = s_mean
+        self.cache['mean_mean'] = m_mean
 
         return exp_llh
 
     def accumulate(self, s_stats, parent_msg=None):
+        # Load cached values and clear the cache.
+        distance_term = self.cache['distance']
+        l_means = self.cache['latent_means']
+        l_quad = self.cache['latent_quad']
+        prec = self.cache['precision']
+        s_mean = self.cache['subspace_mean']
+        m_mean = self.cache['mean_mean']
+        self.clear_cache()
+
         t_type = s_stats.type()
         feadim = s_stats.size(1) - 1
-        _, prec, _, s_mean, _, m_mean = self._get_expectation()
+
         data_mean = s_stats[:, 1:] - m_mean[None, :]
-        acc_s_mean = (self._l_means.t() @ data_mean)
-        acc_stats = {
+        acc_s_mean = (l_means.t() @ data_mean)
+        return {
             self.precision_param: torch.cat([
                 .5 * torch.tensor(len(s_stats) * feadim).view(1).type(t_type),
-                -.5 * self._distance_term.view(1)
+                -.5 * distance_term.view(1)
             ]),
             self.mean_param: torch.cat([
                 - .5 * torch.tensor(len(s_stats) * prec).view(1).type(t_type),
-                prec * torch.sum(s_stats[:, 1:] - self._l_means @ s_mean, dim=0)
+                prec * torch.sum(s_stats[:, 1:] - l_means @ s_mean, dim=0)
             ]),
             self.subspace_param:  torch.cat([
-                - .5 * prec * self._l_quad.sum(dim=0).view(-1),
+                - .5 * prec * l_quad.sum(dim=0).view(-1),
                 prec * acc_s_mean.view(-1)
             ])
         }
-
-        # Clear the cache.
-        self._distance_term = None
-        self._l_means = None
-        self._l_quad = None
-
-        return acc_stats
-
-    def kl_div_posterior_prior(self):
-        kl_div = super().kl_div_posterior_prior()
-        #return kl_div
-        return kl_div + self._kl_div.sum()
 
     ####################################################################
     # VAELatentPrior interface.
@@ -244,6 +237,9 @@ class PPCA(BayesianModel):
     def sufficient_statistics_from_mean_var(mean, var):
         return torch.cat([torch.sum(mean ** 2 + var, dim=1).view(-1, 1), mean],
                          dim=1)
+
+    def local_kl_div_posterior_prior(self):
+        return self.cache['kl_divergence']
 
     def expected_natural_params(self, mean, var, latent_variables=None,
                                 nsamples=1):
@@ -257,29 +253,53 @@ class PPCA(BayesianModel):
                 distribution.
             labels (Tensor): Frame labelling (if any).
             nsamples (int): Number of samples to estimate the
-                natural parameters.
+                natural parameters (ignored).
 
         Returns:
             (Tensor): Expected value of the natural parameters.
 
+        Note:
+            The expected natural parameters can be estimated in close
+            form and therefore does not requires sampling. Hence,
+            the parameters `nsamples` will be ignored.
+
         '''
         s_stats = self.sufficient_statistics_from_mean_var(mean, var)
-        l_means, l_cov = self.latent_posterior(s_stats)
-        l_quad = l_cov + \
-            torch.sum(l_means[:, :, None] * l_means[:, None, :], dim=0)
-        log_prec, prec, s_quad, s_mean, m_quad, m_mean = self._get_expectation()
 
+        if latent_variables is not None:
+            l_means = latent_variables
+            l_quad = l_means[:, :, None] * l_means[:, None, :]
+            l_kl_div = torch.zeros(len(s_stats)).type(s_stats.type())
+        else:
+            l_means, l_cov = self.latent_posterior(s_stats)
+            l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
+            l_kl_div = self.kl_div_latent_posterior(l_means, l_cov)
+        l_quad = l_quad.view(len(s_stats), -1)
+
+        log_prec, prec, s_quad, s_mean, m_quad, m_mean = self._get_expectation()
 
         np1 = -.5 * prec * torch.ones(len(s_stats),
                                       mean.size(1)).type(mean.type())
         np2 = prec * (l_means @ s_mean + m_mean)
         np3 = torch.zeros(len(s_stats), mean.size(1)).type(mean.type())
-        np3 += -.5 * prec * torch.trace(s_quad @ l_quad)
-        np3 += - (prec * l_means @ s_mean @ m_mean).reshape(-1, 1)
+        np3 += -.5 * prec * (l_quad.view(len(s_stats), -1) @ s_quad.view(-1)).view(-1, 1)
+        np3 += -(prec * l_means @ s_mean @ m_mean).reshape(-1, 1)
         np3 += -.5 * prec * m_quad
-        np4 = -.5 * log_prec * torch.ones(s_stats.size(0),
+        np3 /= self._data_dim
+        np4 = .5 * log_prec * torch.ones(s_stats.size(0),
                                           mean.size(1)).type(mean.type())
-        return torch.cat([np1, np2, np3, np4], dim=1)
+
+        # Cache some computation for a quick accumulation of the
+        # sufficient statistics.
+        self.cache['distance'] = self._compute_distance_term(s_stats, l_means,
+                                                             l_quad).sum()
+        self.cache['latent_means'] = l_means
+        self.cache['latent_quad'] = l_quad
+        self.cache['kl_divergence'] = l_kl_div
+        self.cache['precision'] = prec
+        self.cache['subspace_mean'] = s_mean
+        self.cache['mean_mean'] = m_mean
+        return torch.cat([np1, np2, np3, np4], dim=1).detach()
 
 
 __all__ = ['PPCA']

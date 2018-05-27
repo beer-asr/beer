@@ -12,10 +12,13 @@ class EvidenceLowerBoundInstance:
 
     '''
 
-    def __init__(self, expected_llh, kl_div, parameters, acc_stats, scale):
-        self._exp_llh = expected_llh.sum()
-        self._kl_div = kl_div
-        self._elbo = scale * self._exp_llh - self._kl_div
+    def __init__(self, expected_llh, local_kl_div, global_kl_div, parameters,
+                 acc_stats, scale):
+        self._exp_llh = expected_llh
+        self._global_kl_div = global_kl_div
+        self._local_kl_div = local_kl_div
+        self._elbo = scale * self._exp_llh.sum() - \
+            self._local_kl_div.sum() - self._global_kl_div
         self._parameters = parameters
         self._acc_stats = acc_stats
         self._scale = scale
@@ -29,12 +32,13 @@ class EvidenceLowerBoundInstance:
     @property
     def kl_div(self):
         'KL divergence term of the ELBO'
-        return self._kl_div
+        return self._global_kl_div + torch.sum(
+            torch.tensor(self._local_kl_div))
 
     @property
     def expected_llh(self):
         'Expected log-likelihood of the ELBO'
-        return self._exp_llh
+        return self._exp_llh.sum()
 
     def backward(self):
         '''Compute the gradient of the loss w.r.t. to standard
@@ -106,7 +110,8 @@ class EvidenceLowerBound:
         s_stats = model.sufficient_statistics(data)
         return EvidenceLowerBoundInstance(
             expected_llh=model(s_stats, latent_variables),
-            kl_div=model.kl_div_posterior_prior(),
+            local_kl_div=model.local_kl_div_posterior_prior(),
+            global_kl_div=model.kl_div_posterior_prior(),
             parameters=model.parameters,
             acc_stats=model.accumulate(s_stats),
             scale=float(len(data)) / self.datasize

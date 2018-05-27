@@ -99,6 +99,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
     def __init__(self):
         self._parameters = []
+        self._cache = {}
 
     def __setattr__(self, name, value):
         if isinstance(value, BayesianParameter):
@@ -113,9 +114,30 @@ class BayesianModel(metaclass=abc.ABCMeta):
     def __call__(self, data, labels=None):
         return self.forward(data, labels)
 
+    @property
+    def parameters(self):
+        return self._parameters
+
+    @property
+    def cache(self):
+        return self._cache
+
+    def clear_cache(self):
+        self._cache = {}
+
+    def local_kl_div_posterior_prior(self):
+        '''KL divergence between the posterior/prior distribution over the
+        "local" parameters
+
+        Returns:
+            ``torch.Tensor`` or 0.
+        '''
+        t_type = self._parameters[0].expected_value().type()
+        return torch.tensor(0.).type(t_type)
+
     def kl_div_posterior_prior(self):
-        '''Kullback-Leibler divergence between the posterior and the prior
-        distribution of the parameters.
+        '''Kullback-Leibler divergence between the posterior/prior
+        distribution of the "global" parameters.
 
         Returns:
             float: KL( q || p)
@@ -126,10 +148,6 @@ class BayesianModel(metaclass=abc.ABCMeta):
             retval += ExpFamilyPrior.kl_div(parameter.posterior,
                                             parameter.prior)
         return retval
-
-    @property
-    def parameters(self):
-        return self._parameters
 
     @abc.abstractmethod
     def accumulate(self, s_stats, parent_msg=None):

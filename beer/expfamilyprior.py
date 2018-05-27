@@ -74,7 +74,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             nparams.grad,
             model2.natural_hparams,
             model1.natural_hparams
-        )
+        ).detach()
 
     # pylint: disable=W0102
     def __init__(self, natural_hparams):
@@ -129,10 +129,11 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
     def natural_hparams(self, value):
         if value.grad is not None:
             value.grad.zero_()()
-        log_norm_value = self.log_norm(value)
+        copied_value = torch.tensor(value.detach(), requires_grad=True)
+        log_norm_value = self.log_norm(copied_value)
         ta.backward(log_norm_value)
-        self._expected_sufficient_statistics = torch.tensor(value.grad)
-        self._natural_hparams = value
+        self._expected_sufficient_statistics = torch.tensor(copied_value.grad)
+        self._natural_hparams = copied_value
         self._log_norm_value = torch.tensor(log_norm_value)
 
     @abc.abstractmethod
