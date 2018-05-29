@@ -127,7 +127,8 @@ class NormalDiagonalCovariance(BayesianModel):
         return torch.cat([(mean ** 2) + var, mean, torch.ones_like(mean),
                           torch.ones_like(mean)], dim=-1)
 
-    def expected_natural_params(self, mean, var, labels=None, nsamples=1):
+    def expected_natural_params(self, mean, var, latent_variables=None,
+                                nsamples=1):
         '''Interface for the VAE model. Returns the expected value of the
         natural params of the latent model given the per-frame means
         and variances.
@@ -136,7 +137,7 @@ class NormalDiagonalCovariance(BayesianModel):
             mean (Tensor): Per-frame mean of the posterior distribution.
             var (Tensor): Per-frame variance of the posterior
                 distribution.
-            labels (Tensor): Frame labelling (if any).
+            latent_variables (Tensor): Frame labelling (if any).
             nsamples (int): Number of samples to estimate the
                 natural parameters.
 

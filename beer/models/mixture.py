@@ -118,9 +118,10 @@ class Mixture(BayesianModel):
     def sufficient_statistics_from_mean_var(self, mean, var):
         return self.modelset.sufficient_statistics_from_mean_var(mean, var)
 
-    def expected_natural_params(self, mean, var, labels=None, nsamples=1):
-        if labels is not None:
-            onehot_labels = onehot(labels, len(self.modelset))
+    def expected_natural_params(self, mean, var, latent_variables=None,
+                                nsamples=1):
+        if latent_variables is not None:
+            onehot_labels = onehot(latent_variables, len(self.modelset))
             self._resps = onehot_labels.type(mean.type())
         else:
             samples = mean + torch.sqrt(var) * torch.randn(nsamples,

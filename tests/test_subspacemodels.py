@@ -160,7 +160,7 @@ class TestPPCA(BaseTest):
         np3 += - (prec * l_means @ s_mean @ m_mean).reshape(-1, 1)
         np3 += -.5 * prec * m_quad
         np3 /= self.dim
-        np4 = -.5 * log_prec * np.ones((len(stats), self.dim))
+        np4 = .5 * log_prec * np.ones((len(stats), self.dim))
         nparams2 = np.hstack([np1, np2, np3, np4])
 
         self.assertEqual(nparams1.shape[0], len(self.means))

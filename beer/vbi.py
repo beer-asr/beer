@@ -17,8 +17,8 @@ class EvidenceLowerBoundInstance:
         self._exp_llh = expected_llh
         self._global_kl_div = global_kl_div
         self._local_kl_div = local_kl_div
-        self._elbo = scale * self._exp_llh.sum() - \
-            self._local_kl_div.sum() - self._global_kl_div
+        self._elbo = scale * (self._exp_llh.sum() - \
+            self._local_kl_div.sum()) - self._global_kl_div
         self._parameters = parameters
         self._acc_stats = acc_stats
         self._scale = scale
@@ -39,6 +39,11 @@ class EvidenceLowerBoundInstance:
     def expected_llh(self):
         'Expected log-likelihood of the ELBO'
         return self._exp_llh.sum()
+
+    def per_frame(self):
+        'ELBO per-frame as a ``torch.Tensor``'
+        return self._exp_llh - self._local_kl_div - \
+            self._global_kl_div
 
     def backward(self):
         '''Compute the gradient of the loss w.r.t. to standard

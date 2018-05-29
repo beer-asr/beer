@@ -64,7 +64,6 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             float: Value of te KL. divergence between these two models.
 
         '''
-        # pylint: disable=W0212
         nparams = torch.tensor(model1.natural_hparams, requires_grad=True)
         lnorm = model1.log_norm(nparams)
         ta.backward(lnorm)
