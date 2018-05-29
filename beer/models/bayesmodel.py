@@ -15,8 +15,6 @@ class BayesianParameter:
         dictionary.
 
     Attributes:
-        expected_value (``torch.Tensor``): Expected value of the
-            parameter w.r.t. the posterior distribution.
         natural_grad (``torch.Tensor``): Natural gradient of the ELBO
             w.r.t. to the hyper-parameters of the posterior
             distribution.
@@ -35,16 +33,29 @@ class BayesianParameter:
     def __hash__(self):
         return hash(repr(self))
 
-    @property
-    def expected_value(self):
-        return self.posterior.expected_sufficient_statistics
+    def expected_value(self, concatenated=True):
+        '''Expected value of the sufficient statistics of the parameter
+        w.r.t. the posterior distribution.
+
+        Args:
+            concatenated (boolean): If true, concatenate the sufficient
+                statistics into a single ``torch.Tensor``. If false,
+                the statistics are returned in a tuple.
+
+        Returns:
+            ``torch.Tensor`` or a ``tuple``
+        '''
+        if concatenated:
+            return self.posterior.expected_sufficient_statistics
+        return self.posterior.split_sufficient_statistics(
+            self.posterior.expected_sufficient_statistics
+        )
 
     def zero_natural_grad(self):
         '''Reset the natural gradient to zero.'''
         self.natural_grad.zero_()
 
 
-# pylint: disable=R0903
 class BayesianParameterSet:
     '''Set of Bayesian parameters.
 
@@ -88,6 +99,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
     def __init__(self):
         self._parameters = []
+        self._cache = {}
 
     def __setattr__(self, name, value):
         if isinstance(value, BayesianParameter):
@@ -102,27 +114,40 @@ class BayesianModel(metaclass=abc.ABCMeta):
     def __call__(self, data, labels=None):
         return self.forward(data, labels)
 
-    @staticmethod
-    def kl_div_posterior_prior(parameters):
-        '''Kullback-Leibler divergence between the posterior and the prior
-        distribution of the parameters.
+    @property
+    def parameters(self):
+        return self._parameters
 
-        Args:
-            parameters (list): List of :any:`BayesianParameter`.
+    @property
+    def cache(self):
+        return self._cache
+
+    def clear_cache(self):
+        self._cache = {}
+
+    def local_kl_div_posterior_prior(self):
+        '''KL divergence between the posterior/prior distribution over the
+        "local" parameters
+
+        Returns:
+            ``torch.Tensor`` or 0.
+        '''
+        t_type = self._parameters[0].expected_value().type()
+        return torch.tensor(0.).type(t_type)
+
+    def kl_div_posterior_prior(self):
+        '''Kullback-Leibler divergence between the posterior/prior
+        distribution of the "global" parameters.
 
         Returns:
             float: KL( q || p)
 
         '''
         retval = 0.
-        for parameter in parameters:
+        for parameter in self.parameters:
             retval += ExpFamilyPrior.kl_div(parameter.posterior,
                                             parameter.prior)
         return retval
-
-    @property
-    def parameters(self):
-        return self._parameters
 
     @abc.abstractmethod
     def accumulate(self, s_stats, parent_msg=None):
@@ -246,3 +271,6 @@ class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
             ``torch.Tensor[n_frames, n_models]``: ELBO.
         '''
         raise NotImplementedError
+
+__all__ = ['BayesianModel', 'BayesianModelSet', 'BayesianParameter',
+           'BayesianParameterSet']

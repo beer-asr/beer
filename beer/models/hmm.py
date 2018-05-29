@@ -11,10 +11,10 @@ from ..utils import onehot, logsumexp
 class HMM(BayesianModel):
     ''' Hidden Markov Model.
 
-    Attributes: 
-        init_states  (list): Indices of initial states who have 
+    Attributes:
+        init_states  (list): Indices of initial states who have
             non-zero probability.
-        final_states  (list): Indices of final states who have 
+        final_states  (list): Indices of final states who have
             non-zero probability.
         trans_mat (``torch.Tensor``): Transition matrix of HMM states.
         modelset (:any:`BayesianModelSet`): Set of emission density.
@@ -39,9 +39,9 @@ class HMM(BayesianModel):
     def __init__(self, init_states, final_states, trans_mat, modelset):
         '''
         Args:
-            init_states  (list): Indices of initial states who have 
+            init_states  (list): Indices of initial states who have
                 non-zero probability.
-            final_states  (list): Indices of final states who have 
+            final_states  (list): Indices of final states who have
                 non-zero probability.
             trans_mat (``torch.Tensor``): Transition matrix of HMM states.
             modelset (:any:`BayesianModelSet`): Set of emission density.
@@ -53,15 +53,15 @@ class HMM(BayesianModel):
         self.trans_mat = trans_mat
         self.modelset = modelset
         self._resps = None
-    
+
     @classmethod
     def create(cls, init_states, final_states, trans_mat, modelset):
         '''Create a :any:`HMM` model.
 
         Args:
-            init_states  (list): Indices of initial states who have 
+            init_states  (list): Indices of initial states who have
                 non-zero probability.
-            final_states  (list): Indices of final states who have 
+            final_states  (list): Indices of final states who have
                 non-zero probability.
             trans_mat (``torch.Tensor``): Transition matrix of HMM states.
             modelset (:any:`BayesianModelSet`): Set of emission density.
@@ -75,8 +75,6 @@ class HMM(BayesianModel):
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
-    # pylint: disable=C0103
-    # Invalid method name.
     def sufficient_statistics_from_mean_var(self, mean, var):
         return self.modelset.sufficient_statistics_from_mean_var(mean, var)
 
@@ -87,13 +85,13 @@ class HMM(BayesianModel):
         Args:
             unigram (``torch.Tensor``): Unigram probability of each unit.
             nstate_per_unit (int): Number of states for each unit.
-            gamma (float): Insertion penalty, probability of staying in 
+            gamma (float): Insertion penalty, probability of staying in
                 the last state of a unit.
         '''
 
-        trans_mat = torch.zeros((len(unigram) * nstate_per_unit, 
+        trans_mat = torch.zeros((len(unigram) * nstate_per_unit,
                                  len(unigram) * nstate_per_unit))
-        initial_states = np.arange(0, len(unigram) * nstate_per_unit, 
+        initial_states = np.arange(0, len(unigram) * nstate_per_unit,
                                    nstate_per_unit)
 
         for i, j in enumerate(unigram):
@@ -102,14 +100,14 @@ class HMM(BayesianModel):
                 trans_mat[i, i] += gamma
             else:
                 for n in range(nstate_per_unit-1):
-                    trans_mat[i*nstate_per_unit+n, 
+                    trans_mat[i*nstate_per_unit+n,
                               i*nstate_per_unit+n : i*nstate_per_unit+n+2] = .5
-                trans_mat[i*nstate_per_unit+nstate_per_unit-1, 
+                trans_mat[i*nstate_per_unit+nstate_per_unit-1,
                           i*nstate_per_unit+nstate_per_unit-1] = gamma
-                trans_mat[i*nstate_per_unit+nstate_per_unit-1, 
+                trans_mat[i*nstate_per_unit+nstate_per_unit-1,
                           initial_states] = (1 - gamma) * unigram
         return trans_mat
-    
+
     @staticmethod
     def create_ali_trans_mat(tot_states):
         '''Create align transition matrix for a sequence of units
@@ -125,7 +123,7 @@ class HMM(BayesianModel):
         trans_mat[idx1, idx2] = .5
         trans_mat[-1, -1] = 1.
         return trans_mat
-    
+
     @staticmethod
     def baum_welch_forward(init_states, trans_mat, llhs):
         init_log_prob = -np.log(len(init_states))
@@ -135,7 +133,7 @@ class HMM(BayesianModel):
 
         for i in range(1, llhs.shape[0]):
             log_alphas[i] = llhs[i]
-            log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(), 
+            log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(),
                                        dim=1).view(-1)
         return log_alphas
 
@@ -162,7 +160,7 @@ class HMM(BayesianModel):
             hypothesis = omega + log_trans_mat.t()
             backtrack[i] = torch.argmax(hypothesis, dim=1)
             omega = llhs[i] + hypothesis[range(len(log_trans_mat)), backtrack[i]]
-        
+
         path = [final_states[torch.argmax(omega[final_states])]]
         for i in reversed(range(1, len(llhs))):
             path.insert(0, backtrack[i, path[0]])
@@ -195,31 +193,31 @@ class HMM(BayesianModel):
 
 
 class AlignModelSet(BayesianModelSet):
-    
+
     def __init__(self, model_set, state_ids):
         '''Args:
         model_set: (:any:`BayesianModelSet`): Set of emission density.
         state_ids (list): sequence of state ids.
-        
+
         '''
         super().__init__()
         self.model_set = model_set
         self.state_ids = torch.tensor(state_ids).long()
         self._idxs = list(range(len(self.state_ids)))
-    
+
     def __getitem__(self, key):
         '''Args:
         key (int): state index.
-        
+
         '''
         return self.model_set[self.state_ids[key]]
-    
+
     def __len__(self):
         return len(self.state_ids)
-        
+
     def sufficient_statistics(self, data):
         return len(data), self.model_set.sufficient_statistics(data)
-        
+
     def forward(self, len_s_stats, latent_variables=None):
         length, s_stats = len_s_stats
         pc_exp_llh = self.model_set(s_stats)
@@ -237,7 +235,10 @@ class AlignModelSet(BayesianModelSet):
             new_weights[:, self.state_ids[key]] += val
 
         return self.model_set.accumulate(s_stats, parent_msg=new_weights)
-    
+
     def expected_natural_params_as_matrix(self):
         parameters = self.model_set.expected_natural_params_as_matrix()
         return parameters[self.state_ids]
+
+
+__all__ = ['HMM', 'AlignModelSet']

@@ -1,7 +1,7 @@
+'''Implementation of the Conjugate prior from the exponential family
+of distribution.
 
-# pylint: disable=E1102
-# pylint: disable=C0103
-# pylint: disable=W1401
+'''
 
 import abc
 import math
@@ -10,7 +10,7 @@ import torch.autograd as ta
 
 
 def _bregman_divergence(f_val1, f_val2, grad_f_val2, val1, val2):
-    return f_val1 - f_val2 - grad_f_val2 @ (val1 - val2)
+    return f_val1 - f_val2 - torch.sum(grad_f_val2 * (val1 - val2))
 
 
 # The following code compute the log of the determinant of a
@@ -64,14 +64,16 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             float: Value of te KL. divergence between these two models.
 
         '''
-        # pylint: disable=W0212
+        nparams = torch.tensor(model1.natural_hparams, requires_grad=True)
+        lnorm = model1.log_norm(nparams)
+        ta.backward(lnorm)
         return _bregman_divergence(
             model2._log_norm_value,
             model1._log_norm_value,
-            model1._expected_sufficient_statistics,
+            nparams.grad,
             model2.natural_hparams,
             model1.natural_hparams
-        )
+        ).detach()
 
     # pylint: disable=W0102
     def __init__(self, natural_hparams):
@@ -115,7 +117,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
                 A\\big(\\eta(\\theta) \\big)
 
         '''
-        return self._expected_sufficient_statistics.detach()
+        return self._expected_sufficient_statistics
 
     @property
     def natural_hparams(self):
@@ -126,11 +128,12 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
     def natural_hparams(self, value):
         if value.grad is not None:
             value.grad.zero_()()
-        log_norm_value = self.log_norm(value)
+        copied_value = torch.tensor(value.detach(), requires_grad=True)
+        log_norm_value = self.log_norm(copied_value)
         ta.backward(log_norm_value)
-        self._expected_sufficient_statistics = value.grad
-        self._natural_hparams = value
-        self._log_norm_value = log_norm_value.detach()
+        self._expected_sufficient_statistics = torch.tensor(copied_value.grad)
+        self._natural_hparams = copied_value
+        self._log_norm_value = torch.tensor(log_norm_value)
 
     @abc.abstractmethod
     def split_sufficient_statistics(self, s_stats):
@@ -750,7 +753,8 @@ class MatrixNormalPrior(ExpFamilyPrior):
         inv_hnp1 = torch.inverse(hnp1)
         #mat1, mat2 = np2.t() @ inv_np1, np2
         #trace_mat1_mat2 = mat1.view(-1) @ mat2.t().contiguous().view(-1)
-        return -.5 * self.dim2 * _logdet(-2 * hnp1) - \
+        _, logdet = torch.slogdet(-2 * hnp1)
+        return -.5 * self.dim2 * logdet - \
             .25 * torch.trace(hnp2.t() @ inv_hnp1 @ hnp2)
 
 
@@ -804,3 +808,11 @@ class GammaPrior(ExpFamilyPrior):
         '''
         hnp1, hnp2 = self.split_sufficient_statistics(natural_hparams)
         return torch.lgamma(hnp1 + 1) - (hnp1 + 1) * torch.log(-hnp2)
+
+
+__all__ = [
+    'ExpFamilyPrior', 'DirichletPrior', 'NormalGammaPrior',
+    'JointNormalGammaPrior', 'NormalWishartPrior', 'JointNormalWishartPrior',
+    'NormalFullCovariancePrior', 'NormalIsotropicCovariancePrior', 'GammaPrior',
+     'MatrixNormalPrior'
+]

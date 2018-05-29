@@ -117,7 +117,7 @@ class TestBayesianParameter(BaseTest):
             with self.subTest(i=i):
                 bayesparam = beer.BayesianParameter(prior, posterior)
                 self.assertArraysAlmostEqual(
-                    bayesparam.expected_value.numpy(),
+                    bayesparam.expected_value().numpy(),
                     posterior.expected_sufficient_statistics.numpy()
                 )
 
@@ -132,16 +132,6 @@ class TestBayesianParameter(BaseTest):
                     bayesparam.natural_grad.numpy(),
                     np.zeros(len(bayesparam.natural_grad))
                 )
-
-    def test_kl_div_prior_posterior(self):
-        for i, pdfs in enumerate(zip(self.priors, self.posteriors)):
-            prior, posterior = pdfs
-            with self.subTest(i=i):
-                kl_div = beer.BayesianModel.kl_div_posterior_prior(
-                    [beer.BayesianParameter(prior, posterior)
-                     for _ in range(10)]
-                )
-        self.assertGreaterEqual(float(kl_div), 0.)
 
 
 class TestBayesianParameterSet(BaseTest):
@@ -192,7 +182,7 @@ class TestBayesianParameterSet(BaseTest):
                 for j, param in enumerate(param_set):
                     posterior = self.posteriors[i][j]
                     self.assertArraysAlmostEqual(
-                        param.expected_value.numpy(),
+                        param.expected_value().numpy(),
                         posterior.expected_sufficient_statistics.numpy()
                     )
 

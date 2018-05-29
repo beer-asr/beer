@@ -61,7 +61,7 @@ class Mixture(BayesianModel):
     @property
     def weights(self):
         'Expected value of the weights of the mixture.'
-        weights = torch.exp(self.weights_params.expected_value)
+        weights = torch.exp(self.weights_params.expected_value())
         return weights / weights.sum()
 
     def log_predictions(self, s_stats):
@@ -76,7 +76,7 @@ class Mixture(BayesianModel):
 
         '''
         per_component_exp_llh = self.modelset(s_stats)
-        per_component_exp_llh += self.weights_params.expected_value.view(1, -1)
+        per_component_exp_llh += self.weights_params.expected_value().view(1, -1)
         lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
         return per_component_exp_llh - lognorm.view(-1, 1)
 
@@ -88,7 +88,7 @@ class Mixture(BayesianModel):
         return self.modelset.sufficient_statistics(data)
 
     def forward(self, s_stats, latent_variables=None):
-        log_weights = self.weights_params.expected_value.view(1, -1)
+        log_weights = self.weights_params.expected_value().view(1, -1)
         per_component_exp_llh = self.modelset(s_stats)
         per_component_exp_llh += log_weights
 
@@ -118,9 +118,10 @@ class Mixture(BayesianModel):
     def sufficient_statistics_from_mean_var(self, mean, var):
         return self.modelset.sufficient_statistics_from_mean_var(mean, var)
 
-    def expected_natural_params(self, mean, var, labels=None, nsamples=1):
-        if labels is not None:
-            onehot_labels = onehot(labels, len(self.modelset))
+    def expected_natural_params(self, mean, var, latent_variables=None,
+                                nsamples=1):
+        if latent_variables is not None:
+            onehot_labels = onehot(latent_variables, len(self.modelset))
             self._resps = onehot_labels.type(mean.type())
         else:
             samples = mean + torch.sqrt(var) * torch.randn(nsamples,
@@ -132,3 +133,6 @@ class Mixture(BayesianModel):
                                      len(self.modelset)).mean(dim=0)
         matrix = self.modelset.expected_natural_params_as_matrix()
         return self._resps @ matrix
+
+
+__all__ = ['Mixture']

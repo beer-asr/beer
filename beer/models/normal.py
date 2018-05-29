@@ -91,17 +91,13 @@ class NormalDiagonalCovariance(BayesianModel):
     @property
     def mean(self):
         np1, np2, _, _ = \
-            self.mean_prec_param.posterior.split_sufficient_statistics(
-                self.mean_prec_param.expected_value
-            )
+            self.mean_prec_param.expected_value(concatenated=False)
         return np2 / (-2 * np1)
 
     @property
     def cov(self):
         np1, _, _, _ = \
-            self.mean_prec_param.posterior.split_sufficient_statistics(
-                self.mean_prec_param.expected_value
-            )
+            self.mean_prec_param.expected_value(concatenated=False)
         return torch.diag(1/(-2 * np1))
 
     ####################################################################
@@ -115,7 +111,7 @@ class NormalDiagonalCovariance(BayesianModel):
 
     def forward(self, s_stats, latent_variables=None):
         feadim = .25 * s_stats.size(1)
-        exp_llh = s_stats @ self.mean_prec_param.expected_value
+        exp_llh = s_stats @ self.mean_prec_param.expected_value()
         exp_llh -= .5 * feadim * math.log(2 * math.pi)
         return exp_llh
 
@@ -131,8 +127,8 @@ class NormalDiagonalCovariance(BayesianModel):
         return torch.cat([(mean ** 2) + var, mean, torch.ones_like(mean),
                           torch.ones_like(mean)], dim=-1)
 
-    # pylint: disable=W0613
-    def expected_natural_params(self, mean, var, labels=None, nsamples=1):
+    def expected_natural_params(self, mean, var, latent_variables=None,
+                                nsamples=1):
         '''Interface for the VAE model. Returns the expected value of the
         natural params of the latent model given the per-frame means
         and variances.
@@ -141,7 +137,7 @@ class NormalDiagonalCovariance(BayesianModel):
             mean (Tensor): Per-frame mean of the posterior distribution.
             var (Tensor): Per-frame variance of the posterior
                 distribution.
-            labels (Tensor): Frame labelling (if any).
+            latent_variables (Tensor): Frame labelling (if any).
             nsamples (int): Number of samples to estimate the
                 natural parameters.
 
@@ -150,7 +146,7 @@ class NormalDiagonalCovariance(BayesianModel):
 
         '''
         s_stats = self.sufficient_statistics_from_mean_var(mean, var)
-        nparams = self.mean_prec_param.expected_value
+        nparams = self.mean_prec_param.expected_value()
         ones = torch.ones(s_stats.size(0), nparams.size(0)).type(s_stats.type())
         return ones * nparams
 
@@ -204,16 +200,14 @@ class NormalFullCovariance(BayesianModel):
     @property
     def mean(self):
         np1, np2, _, _ = \
-            self.mean_prec_param.posterior.split_sufficient_statistics(
-                self.mean_prec_param.expected_value
-            )
+            self.mean_prec_param.expected_value(concatenated=False)
         return torch.inverse(-2 * np1) @ np2
 
     @property
     def cov(self):
         np1, _, _, _ = \
             self.mean_prec_param.posterior.split_sufficient_statistics(
-                self.mean_prec_param.expected_value
+                self.mean_prec_param.expected_value()
             )
         return torch.inverse(-2 * np1)
 
@@ -231,7 +225,7 @@ class NormalFullCovariance(BayesianModel):
 
     def forward(self, s_stats, latent_variables=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - s_stats.size(1))))
-        exp_llh = s_stats @ self.mean_prec_param.expected_value
+        exp_llh = s_stats @ self.mean_prec_param.expected_value()
         exp_llh -= .5 * feadim * math.log(2 * math.pi)
         return exp_llh
 
@@ -335,7 +329,7 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
 
     # Invalid method name.
     def expected_natural_params_as_matrix(self):
-        return torch.cat([param.expected_value[None]
+        return torch.cat([param.expected_value()[None]
                           for param in self.parameters], dim=0)
 
     ####################################################################
@@ -438,7 +432,7 @@ class NormalFullCovarianceSet(BayesianModelSet):
 
     # Invalid method name.
     def expected_natural_params_as_matrix(self):
-        return torch.cat([param.expected_value[None]
+        return torch.cat([param.expected_value()[None]
                           for param in self.parameters], dim=0)
 
 
@@ -525,9 +519,8 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
 
     def __getitem__(self, key):
         np1, np2, _, _ = \
-            self.means_prec_param.posterior.split_sufficient_statistics(
-                self.means_prec_param.expected_value
-            )
+            self.means_prec_param.expected_value(concatenated=False)
+
         cov = 1 / (-2 * np1)
         mean = cov * np2[key]
         return NormalSetElement(mean=mean, cov=torch.diag(cov))
@@ -538,9 +531,7 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
     # Invalid method name.
     def expected_natural_params_as_matrix(self):
         np1, np2, np3, np4 = \
-            self.means_prec_param.posterior.split_sufficient_statistics(
-                self.means_prec_param.expected_value
-            )
+            self.means_prec_param.expected_value(concatenated=False)
         ones = torch.ones_like(np2)
         return torch.cat([ones * np1, np2, np3, ones * np4], dim=1)
 
@@ -550,9 +541,7 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
 
     def _expected_nparams(self):
         np1, np2, np3, np4 = \
-            self.means_prec_param.posterior.split_sufficient_statistics(
-                self.means_prec_param.expected_value
-            )
+            self.means_prec_param.expected_value(concatenated=False)
         return torch.cat([np1.view(-1), np4.view(-1)]), \
             torch.cat([np2, np3], dim=1)
 
@@ -611,9 +600,7 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
 
     def _expected_nparams(self):
         np1, np2, np3, np4 = \
-            self.means_prec_param.posterior.split_sufficient_statistics(
-                self.means_prec_param.expected_value
-            )
+            self.means_prec_param.expected_value(concatenated=False)
         return np1.view(-1), \
             torch.cat([np2, np3[:, None]], dim=1), np4
 
@@ -656,9 +643,7 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
 
     def __getitem__(self, key):
         np1, np2, _, _ = \
-            self.means_prec_param.posterior.split_sufficient_statistics(
-                self.means_prec_param.expected_value
-            )
+            self.means_prec_param.expected_value(concatenated=False)
         cov = torch.inverse(-2 * np1)
         mean = cov @ np2[key]
         return NormalSetElement(mean=mean, cov=cov)
@@ -669,10 +654,13 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
     def expected_natural_params_as_matrix(self):
         dim = self.means_prec_param.posterior.dim
         np1, np2, np3, np4 = \
-            self.means_prec_param.posterior.split_sufficient_statistics(
-                self.means_prec_param.expected_value
-            )
+            self.means_prec_param.expected_value(concatenated=False)
         ones1 = torch.ones(self._ncomp, dim ** 2).type(np1.type())
         ones2 = torch.ones(self._ncomp, 1).type(np1.type())
         return torch.cat([ones1 * np1.view(-1)[None, :],
                           np2, np3.view(-1, 1), ones2 * np4], dim=1)
+
+
+__all__ = ['NormalDiagonalCovariance', 'NormalFullCovariance',
+           'NormalDiagonalCovarianceSet', 'NormalFullCovarianceSet',
+           'NormalSetSharedDiagonalCovariance', 'NormalSetSharedFullCovariance']

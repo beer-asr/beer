@@ -42,8 +42,6 @@ def __triangle(center, start, end, freqs):
 
 
 @lru_cache(maxsize=8)
-# pylint: disable=R0913
-# too many arguments
 def create_fbank(nfilters, fft_len=512, srate=16000, lowfreq=0, highfreq=None,
                  hz2scale=hz2mel, scale2hz=mel2hz, align_filt_center=True):
     '''Create a set of triangular filter.
@@ -100,8 +98,6 @@ def add_deltas(fea, winlens=(2, 2)):
     return np.hstack(fea_list)
 
 
-# pylint: disable=R0913,R0914
-# too many arguments, too many local variables
 def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, lowfreq=20, nfilters=26,
           preemph=0.97, srate=16000):
     '''Extract the FBANK features.
