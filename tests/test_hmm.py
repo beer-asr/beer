@@ -81,6 +81,58 @@ def create_modelset_full(ncomps, dim, type_t):
     )
     return modelset
 
+def create_trans_mat(unigram, nstate_per_unit, gamma):
+
+    trans_mat = np.zeros((len(unigram) * nstate_per_unit,
+                          len(unigram) * nstate_per_unit))
+    initial_states = np.arange(0, len(unigram) * nstate_per_unit, 
+                               nstate_per_unit)
+
+    for i, j in enumerate(unigram):
+        if nstate_per_unit == 1:
+            trans_mat[i,:] += (1 - gamma) * unigram
+            trans_mat[i, i] += gamma
+        else:
+            for n in range(nstate_per_unit-1):
+                trans_mat[i*nstate_per_unit+n, 
+                          i*nstate_per_unit+n : i*nstate_per_unit+n+2] = .5
+            trans_mat[i*nstate_per_unit+nstate_per_unit-1, 
+                      i*nstate_per_unit+nstate_per_unit-1] = gamma
+            trans_mat[i*nstate_per_unit+nstate_per_unit-1, 
+                      initial_states] = (1 - gamma) * unigram
+    return trans_mat
+
+def create_ali_trans_mat(tot_states):
+    trans_mat = np.diag(np.ones(tot_states) * .5)
+    idx1 = np.arange(0, tot_states-1)
+    idx2 = np.arange(1, tot_states)
+    trans_mat[idx1, idx2] = .5
+    trans_mat[-1, -1] = 1.
+    return trans_mat
+
+
+class TestCreateTransMatrix(BaseTest):
+
+    def setUp(self):
+        self.nstate_per_unit = int(1 + np.random.randint(10, size=1))
+        num_units = torch.randint(1, 10, (1,), dtype=torch.int)
+        pdf = torch.distributions.Dirichlet(torch.randint(0, 10, (num_units,)))
+        self.unigram = pdf.sample()
+        self.gamma = np.random.ranf()
+        self.tot_states = int(1 + np.random.randint(10, size=1))
+    
+    def test_create_trans_mat(self):
+        trans_mat1 = create_trans_mat(np.asarray(self.unigram), 
+                                      self.nstate_per_unit, self.gamma)
+        trans_mat2 = beer.HMM.create_trans_mat(self.unigram, 
+                                               self.nstate_per_unit, self.gamma)
+        self.assertArraysAlmostEqual(trans_mat1, trans_mat2.numpy())
+
+    def test_create_ali_trans_mat(self):
+        trans_ali_mat1 = create_ali_trans_mat(self.tot_states)
+        trans_ali_mat2 = beer.HMM.create_ali_trans_mat(self.tot_states)
+        self.assertArraysAlmostEqual(trans_ali_mat1, trans_ali_mat2.numpy())
+
 # pylint: disable=R0902
 class TestForwardBackwardViterbi(BaseTest):
 
@@ -125,6 +177,73 @@ class TestForwardBackwardViterbi(BaseTest):
         self.assertArraysAlmostEqual(path1, path2)
 
 
+class TestAlignModelSet(BaseTest):
+
+    def setUp(self):
+        self.npoints = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.nstates = int(1 + torch.randint(100, (1, 1)).item())
+        self.nseqs = int(1 + torch.randint(50, (1, 1)).item())
+        self.ali_seqs = np.random.randint(0, self.nstates, 
+                                          size=self.nseqs).tolist()       
+        self.modelsets = [
+            beer.NormalDiagonalCovarianceSet.create(
+                torch.zeros(self.dim).type(self.type),
+                torch.ones(self.dim).type(self.type),
+                self.nstates,
+                noise_std=0.1
+            ),
+            beer.NormalFullCovarianceSet.create(
+                torch.zeros(self.dim).type(self.type),
+                torch.eye(self.dim).type(self.type),
+                self.nstates,
+                noise_std=0.1
+            ),
+            beer.NormalSetSharedDiagonalCovariance.create(
+                torch.zeros(self.dim).type(self.type),
+                torch.ones(self.dim).type(self.type),
+                self.nstates,
+                noise_std=0.1
+            ),
+            beer.NormalSetSharedFullCovariance.create(
+                torch.zeros(self.dim).type(self.type),
+                torch.eye(self.dim).type(self.type),
+                self.nstates,
+                noise_std=0.1
+            )
+        ]
+        self.alimodelsets = []
+        for modelset in self.modelsets:
+            self.alimodelsets.append(beer.AlignModelSet(modelset, self.ali_seqs))
+        
+    def test_sufficient_statistics(self):
+        for i, m in enumerate(self.alimodelsets):
+             with self.subTest(i=i):
+                stats1 = self.modelsets[i].sufficient_statistics(self.data)
+                _, stats2 = m.sufficient_statistics(self.data)
+                self.assertArraysAlmostEqual(stats1[0].numpy(), stats2[0].numpy())
+        
+    def test_forward(self):
+        for i, m in enumerate(self.alimodelsets):
+            with self.subTest(i=i):
+                len_stats = m.sufficient_statistics(self.data)
+                shape1 = (self.npoints, self.nseqs)
+                shape2 = m.forward(len_stats).shape
+                self.assertEqual(shape1[0], shape2[0])
+                self.assertEqual(shape1[1], shape2[1])
+
+    def test_expected_natural_params_as_matrix(self):
+        for i, m in enumerate(self.alimodelsets):
+            with self.subTest(i=i):
+                shape1 = (self.npoints, 
+                    self.modelsets[i].expected_natural_params_as_matrix().shape[1])
+                shape2 = (self.npoints,
+                    m.expected_natural_params_as_matrix().shape[1])
+                self.assertEqual(shape1[0], shape2[0])
+                self.assertEqual(shape1[1], shape2[1])
+
+
 # pylint: disable=R0902
 class TestHMM(BaseTest):
 
@@ -132,9 +251,6 @@ class TestHMM(BaseTest):
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
-        self.means = torch.randn(self.npoints, self.dim).type(self.type)
-        self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
         self.nstates = int(1 + torch.randint(100, (1, 1)).item())
         modelsets = [
             beer.NormalDiagonalCovarianceSet.create(
@@ -214,4 +330,5 @@ class TestHMM(BaseTest):
                 exp_llh2 = model(stats, label_idxs).numpy()
                 self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
-__all__ = ['TestHMM', 'TestForwardBackwardViterbi']
+__all__ = ['TestHMM', 'TestForwardBackwardViterbi', 
+           'TestCreateTransMatrix', 'TestAlignModelSet']
