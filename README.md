@@ -35,5 +35,5 @@ to install it.
 Usage
 -----
 
-Have a look to our [examples](https://github.com/beer-asr/beer/tree/install/examples)
+Have a look to our [examples](https://github.com/beer-asr/beer/tree/master/examples)
 to get started with beer.
