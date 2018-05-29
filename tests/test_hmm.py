@@ -111,7 +111,6 @@ def create_ali_trans_mat(tot_states):
     return trans_mat
 
 
-# pylint: disable=R0902
 class TestCreateTransMatrix(BaseTest):
 
     def setUp(self):
@@ -178,6 +177,73 @@ class TestForwardBackwardViterbi(BaseTest):
         self.assertArraysAlmostEqual(path1, path2)
 
 
+class TestAlignModelSet(BaseTest):
+
+    def setUp(self):
+        self.npoints = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.nstates = int(1 + torch.randint(100, (1, 1)).item())
+        self.nseqs = int(1 + torch.randint(50, (1, 1)).item())
+        self.ali_seqs = np.random.randint(0, self.nstates, 
+                                          size=self.nseqs).tolist()       
+        self.modelsets = [
+            beer.NormalDiagonalCovarianceSet.create(
+                torch.zeros(self.dim).type(self.type),
+                torch.ones(self.dim).type(self.type),
+                self.nstates,
+                noise_std=0.1
+            ),
+            beer.NormalFullCovarianceSet.create(
+                torch.zeros(self.dim).type(self.type),
+                torch.eye(self.dim).type(self.type),
+                self.nstates,
+                noise_std=0.1
+            ),
+            beer.NormalSetSharedDiagonalCovariance.create(
+                torch.zeros(self.dim).type(self.type),
+                torch.ones(self.dim).type(self.type),
+                self.nstates,
+                noise_std=0.1
+            ),
+            beer.NormalSetSharedFullCovariance.create(
+                torch.zeros(self.dim).type(self.type),
+                torch.eye(self.dim).type(self.type),
+                self.nstates,
+                noise_std=0.1
+            )
+        ]
+        self.alimodelsets = []
+        for modelset in self.modelsets:
+            self.alimodelsets.append(beer.AlignModelSet(modelset, self.ali_seqs))
+        
+    def test_sufficient_statistics(self):
+        for i, m in enumerate(self.alimodelsets):
+             with self.subTest(i=i):
+                stats1 = self.modelsets[i].sufficient_statistics(self.data)
+                _, stats2 = m.sufficient_statistics(self.data)
+                self.assertArraysAlmostEqual(stats1[0].numpy(), stats2[0].numpy())
+        
+    def test_forward(self):
+        for i, m in enumerate(self.alimodelsets):
+            with self.subTest(i=i):
+                len_stats = m.sufficient_statistics(self.data)
+                shape1 = (self.npoints, self.nseqs)
+                shape2 = m.forward(len_stats).shape
+                self.assertEqual(shape1[0], shape2[0])
+                self.assertEqual(shape1[1], shape2[1])
+
+    def test_expected_natural_params_as_matrix(self):
+        for i, m in enumerate(self.alimodelsets):
+            with self.subTest(i=i):
+                shape1 = (self.npoints, 
+                    self.modelsets[i].expected_natural_params_as_matrix().shape[1])
+                shape2 = (self.npoints,
+                    m.expected_natural_params_as_matrix().shape[1])
+                self.assertEqual(shape1[0], shape2[0])
+                self.assertEqual(shape1[1], shape2[1])
+
+
 # pylint: disable=R0902
 class TestHMM(BaseTest):
 
@@ -185,9 +251,6 @@ class TestHMM(BaseTest):
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
-        self.means = torch.randn(self.npoints, self.dim).type(self.type)
-        self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
-        self.prior_count = 1e-2 + 100 * torch.rand(1).item()
         self.nstates = int(1 + torch.randint(100, (1, 1)).item())
         modelsets = [
             beer.NormalDiagonalCovarianceSet.create(
@@ -267,4 +330,5 @@ class TestHMM(BaseTest):
                 exp_llh2 = model(stats, label_idxs).numpy()
                 self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
-__all__ = ['TestHMM', 'TestForwardBackwardViterbi', 'TestCreateTransMatrix']
+__all__ = ['TestHMM', 'TestForwardBackwardViterbi', 
+           'TestCreateTransMatrix', 'TestAlignModelSet']

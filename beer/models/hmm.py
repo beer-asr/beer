@@ -3,7 +3,7 @@
 
 import torch
 import numpy as np
-from .bayesmodel import BayesianModel
+from .bayesmodel import BayesianModel, BayesianModelSet
 from .bayesmodel import BayesianParameter
 from ..utils import onehot, logsumexp
 
@@ -192,3 +192,52 @@ class HMM(BayesianModel):
         }
         self._resps = None
         return retval
+
+
+class AlignModelSet(BayesianModelSet):
+    
+    def __init__(self, model_set, state_ids):
+        '''Args:
+        model_set: (:any:`BayesianModelSet`): Set of emission density.
+        state_ids (list): sequence of state ids.
+        
+        '''
+        super().__init__()
+        self.model_set = model_set
+        self.state_ids = torch.tensor(state_ids).long()
+        self._idxs = list(range(len(self.state_ids)))
+    
+    def __getitem__(self, key):
+        '''Args:
+        key (int): state index.
+        
+        '''
+        return self.model_set[self.state_ids[key]]
+    
+    def __len__(self):
+        return len(self.state_ids)
+        
+    def sufficient_statistics(self, data):
+        return len(data), self.model_set.sufficient_statistics(data)
+        
+    def forward(self, len_s_stats, latent_variables=None):
+        length, s_stats = len_s_stats
+        pc_exp_llh = self.model_set(s_stats)
+        new_pc_exp_llh = torch.zeros((length, len(self.state_ids)), dtype=pc_exp_llh.dtype)
+        new_pc_exp_llh[:, self._idxs] = pc_exp_llh[:, self.state_ids[self._idxs]]
+        return new_pc_exp_llh
+
+    def accumulate(self, len_s_stats, parent_msg=None):
+        length, s_stats = len_s_stats
+        if parent_msg is None:
+            raise ValueError('"parent_msg" should not be None')
+        weights = parent_msg
+        new_weights = torch.zeros((length, len(self.model_set)), dtype=weights.dtype)
+        for key, val in enumerate(weights.t()):
+            new_weights[:, self.state_ids[key]] += val
+
+        return self.model_set.accumulate(s_stats, parent_msg=new_weights)
+    
+    def expected_natural_params_as_matrix(self):
+        parameters = self.model_set.expected_natural_params_as_matrix()
+        return parameters[self.state_ids]

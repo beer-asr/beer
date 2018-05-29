@@ -23,7 +23,7 @@ from .models import NormalFullCovarianceSet
 from .models import NormalSetSharedDiagonalCovariance
 from .models import NormalSetSharedFullCovariance
 from .models import Mixture
-from .models import HMM
+from .models import HMM, AlignModelSet
 from .models import PPCA
 
 from .models import VAE
