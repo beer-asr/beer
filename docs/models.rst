@@ -42,6 +42,8 @@ Concrete Models
 +-----------------------------------------------+
 | :any:`beer.HMM`                               |
 +-----------------------------------------------+
+| :any:`beer.PPCA`                              |
++-----------------------------------------------+
 
 .. autoclass:: beer.NormalDiagonalCovariance
    :show-inheritance:
@@ -72,5 +74,9 @@ Concrete Models
    :members: create
 
 .. autoclass:: beer.HMM
+   :show-inheritance:
+   :members: create
+
+.. autoclass:: beer.PPCA
    :show-inheritance:
    :members: create

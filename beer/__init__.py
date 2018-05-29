@@ -1,41 +1,7 @@
+'''BEER -- the Bayesian spEEch Recognizer.'''
 
-# Conjugate priors for the Bayesian models.
-from .expfamilyprior import ExpFamilyPrior
-from .expfamilyprior import DirichletPrior
-from .expfamilyprior import NormalGammaPrior
-from .expfamilyprior import JointNormalGammaPrior
-from .expfamilyprior import NormalWishartPrior
-from .expfamilyprior import JointNormalWishartPrior
-from .expfamilyprior import NormalFullCovariancePrior
-from .expfamilyprior import NormalIsotropicCovariancePrior
-from .expfamilyprior import GammaPrior
-from .expfamilyprior import MatrixNormalPrior
-
-# Bayesian models.
-from .models import BayesianModel
-from .models import BayesianModelSet
-from .models import BayesianParameter
-from .models import BayesianParameterSet
-from .models import NormalDiagonalCovariance
-from .models import NormalFullCovariance
-from .models import NormalDiagonalCovarianceSet
-from .models import NormalFullCovarianceSet
-from .models import NormalSetSharedDiagonalCovariance
-from .models import NormalSetSharedFullCovariance
-from .models import Mixture
-from .models import HMM
-from .models import PPCA
-
-from .models import VAE
-from .models import NormalDiagonalCovarianceMLP
-from .models import BernoulliMLP
-
-# Features extraction.
-from . import features
-
-# Variational Bayes Inference.
-from .vbi import EvidenceLowerBound
-from .vbi import BayesianModelOptimizer
-
-# Utility functions.
+from .models import *
+from .expfamilyprior import *
+from .vbi import *
 from .utils import *
+from . import features
