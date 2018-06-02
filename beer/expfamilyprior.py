@@ -64,13 +64,10 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             float: Value of te KL. divergence between these two models.
 
         '''
-        nparams = torch.tensor(model1.natural_hparams, requires_grad=True)
-        lnorm = model1.log_norm(nparams)
-        ta.backward(lnorm)
         return _bregman_divergence(
             model2._log_norm_value,
             model1._log_norm_value,
-            nparams.grad,
+            model1.expected_sufficient_statistics,
             model2.natural_hparams,
             model1.natural_hparams
         ).detach()
@@ -191,7 +188,7 @@ class JointExpFamilyPrior(ExpFamilyPrior):
 
     def split_sufficient_statistics(self, s_stats):
         previous_dim = 0
-        retval  = []
+        retval = []
         for prior, dim in zip(self._priors, self._dims):
             stats = s_stats[previous_dim: dim]
             retval.append = prior.split_sufficient_statistics(stats)
@@ -200,7 +197,7 @@ class JointExpFamilyPrior(ExpFamilyPrior):
 
     def log_norm(self, natural_hparams):
         previous_dim = 0
-        lnorm  = 0
+        lnorm = 0
         for prior, dim in zip(self._priors, self._dims):
             n_hparams = natural_hparams[previous_dim: previous_dim + dim]
             lnorm += prior.log_norm(n_hparams)
@@ -578,25 +575,6 @@ class JointNormalWishartPrior(ExpFamilyPrior):
         return lognorm
 
 
-def _normal_fc_split_nparams(natural_params):
-    # We need to retrieve the 2 natural parameters organized as
-    # follows:
-    #   [ np1_1, ..., np1_D^2, np2_1, ..., np2_D]
-    #
-    # The dimension D is found by solving the polynomial:
-    #   D^2 + D - len(self.natural_params) = 0
-    dim = int(.5 * (-1 + math.sqrt(1 + 4 * len(natural_params))))
-    np1, np2 = natural_params[:int(dim ** 2)].view(dim, dim), \
-         natural_params[int(dim ** 2):]
-    return np1, np2, dim
-
-
-def _normal_fc_log_norm(natural_params):
-    np1, np2, _ = _normal_fc_split_nparams(natural_params)
-    inv_np1 = torch.inverse(np1)
-    return -.5 * _logdet(-2 * np1) - .25 * ((np2[None, :] @ inv_np1) @ np2)[0]
-
-
 class NormalFullCovariancePrior(ExpFamilyPrior):
     '''Normal density prior:
 
@@ -847,5 +825,5 @@ __all__ = [
     'ExpFamilyPrior', 'JointExpFamilyPrior', 'DirichletPrior', 'NormalGammaPrior',
     'JointNormalGammaPrior', 'NormalWishartPrior', 'JointNormalWishartPrior',
     'NormalFullCovariancePrior', 'NormalIsotropicCovariancePrior', 'GammaPrior',
-     'MatrixNormalPrior'
+    'MatrixNormalPrior'
 ]
