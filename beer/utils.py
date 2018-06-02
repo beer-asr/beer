@@ -12,7 +12,7 @@ def onehot(labels, max_label):
             defined the dimension of the returned matrix.
 
     Returns:
-        ``torch.Tensor``: a matrix of N x `max_label` where each row \
+        ``torch.Tensor``: a matrix of N x `max_label` where each column \
             has a single element set to 1.
     '''
     retval = torch.zeros(len(labels), max_label)
