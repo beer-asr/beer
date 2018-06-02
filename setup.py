@@ -10,6 +10,7 @@ setup(
     install_requires=[
         'numpy',
         'scipy',
+        'torch',
     ],
     version=1.0,
     packages=['beer', 'beer.models']
