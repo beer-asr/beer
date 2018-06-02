@@ -75,7 +75,6 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             model1.natural_hparams
         ).detach()
 
-    # pylint: disable=W0102
     def __init__(self, natural_hparams):
         '''Initialize the base class.
 
@@ -127,7 +126,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
     @natural_hparams.setter
     def natural_hparams(self, value):
         if value.grad is not None:
-            value.grad.zero_()()
+            value.grad.zero_()
         copied_value = torch.tensor(value.detach(), requires_grad=True)
         log_norm_value = self.log_norm(copied_value)
         ta.backward(log_norm_value)
@@ -173,6 +172,40 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
 
         '''
         pass
+
+
+class JointExpFamilyPrior(ExpFamilyPrior):
+    '''Composite prior of K independent distributions from the
+    exponential family.
+
+    '''
+    def __init__(self, priors):
+        '''
+        Args:
+            prior (list): List of :any:`ExpFamilyPrior`` to combine.
+        '''
+        self._priors = priors
+        self._dims = [len(prior.natural_hparams) for prior in priors]
+        n_hparams = torch.cat([prior.natural_hparams for prior in self._priors])
+        super().__init__(n_hparams)
+
+    def split_sufficient_statistics(self, s_stats):
+        previous_dim = 0
+        retval  = []
+        for prior, dim in zip(self._priors, self._dims):
+            stats = s_stats[previous_dim: dim]
+            retval.append = prior.split_sufficient_statistics(stats)
+            previous_dim = dim
+        return retval
+
+    def log_norm(self, natural_hparams):
+        previous_dim = 0
+        lnorm  = 0
+        for prior, dim in zip(self._priors, self._dims):
+            n_hparams = natural_hparams[previous_dim: previous_dim + dim]
+            lnorm += prior.log_norm(n_hparams)
+            previous_dim += dim
+        return lnorm
 
 
 class DirichletPrior(ExpFamilyPrior):
@@ -811,7 +844,7 @@ class GammaPrior(ExpFamilyPrior):
 
 
 __all__ = [
-    'ExpFamilyPrior', 'DirichletPrior', 'NormalGammaPrior',
+    'ExpFamilyPrior', 'JointExpFamilyPrior', 'DirichletPrior', 'NormalGammaPrior',
     'JointNormalGammaPrior', 'NormalWishartPrior', 'JointNormalWishartPrior',
     'NormalFullCovariancePrior', 'NormalIsotropicCovariancePrior', 'GammaPrior',
      'MatrixNormalPrior'
