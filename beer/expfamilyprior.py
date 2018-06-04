@@ -190,9 +190,9 @@ class JointExpFamilyPrior(ExpFamilyPrior):
         previous_dim = 0
         retval = []
         for prior, dim in zip(self._priors, self._dims):
-            stats = s_stats[previous_dim: dim]
-            retval.append = prior.split_sufficient_statistics(stats)
-            previous_dim = dim
+            stats = s_stats[previous_dim: previous_dim + dim]
+            retval.append(prior.split_sufficient_statistics(stats))
+            previous_dim += dim
         return retval
 
     def log_norm(self, natural_hparams):
