@@ -250,27 +250,8 @@ class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
         Returns:
             ``torch.Tensor``: The set of natural parameters in a matrix.
         '''
-    @abc.abstractmethod
-    def forward(self, s_stats, latent_variables=None):
-        '''Abstract method to be implemented by subclasses of
-        :any:`BayesianModel`.
+        pass
 
-        Compute the Evidence Lower-BOund (ELBO) of the data given the
-        model for each model.
-
-        Args:
-            s_stats (``torch.Tensor[n_frames, dim]``): Sufficient
-                statistics of the model.
-            latent_variables (object): Latent variable that can be
-                provided to the model (optional). Note that type of
-                the latent variables depends on the model. If a model
-                does not use any latent variable, it will ignore this
-                parameter.
-
-        Returns:
-            ``torch.Tensor[n_frames, n_models]``: ELBO.
-        '''
-        raise NotImplementedError
 
 __all__ = ['BayesianModel', 'BayesianModelSet', 'BayesianParameter',
            'BayesianParameterSet']
