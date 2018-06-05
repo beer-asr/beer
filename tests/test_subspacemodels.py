@@ -240,7 +240,6 @@ class TestPLDA(BaseTest):
         class_s_mean, class_s_quad = class_s_mean.numpy(), class_s_quad.numpy()
         m_quad, m_mean = self.model.mean_param.expected_value(concatenated=False)
         m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
-        noise_mean = l_means @ noise_s_mean
         class_mean_mean, class_mean_quad = [], []
         for mean_param in self.model.class_mean_params:
             mean_quad, mean = mean_param.expected_value(concatenated=False)
@@ -248,22 +247,19 @@ class TestPLDA(BaseTest):
             class_mean_quad.append(mean_quad.numpy())
 
         dim = self.dim
-        npoints = len(self.data)
         nparams_matrix = []
         for i in range(self.nclasses):
             class_mean = class_mean_mean[i] @ class_s_mean
-            lnorm_quad = np.zeros(npoints)
-            lnorm_quad += np.sum(l_quad.reshape(npoints, -1) * \
-                noise_s_quad.reshape(-1), axis=1)
+            lnorm_quad = np.zeros(self.dim)
             lnorm_quad += class_mean_quad[i].reshape(-1) @ \
                 class_s_quad.reshape(-1) + m_quad
-            lnorm_quad += 2 * noise_mean @ m_mean
+            lnorm_quad += 2 * class_mean @ m_mean
 
             nparams_matrix.append(np.r_[
                 -.5 * (prec / dim) * np.ones(dim),
-                class_mean,
-                -.5 * prec * lnorm_quad,
-                .5 * dim * log_prec,
+                prec * (class_mean - self.model.mean),
+                -.5 * prec * lnorm_quad * np.ones(dim) / dim,
+                .5 * log_prec * np.ones(dim) / dim,
             ])
         matrix2 = np.r_[nparams_matrix]
 
@@ -295,7 +291,7 @@ class TestPLDA(BaseTest):
         ls_quad = l_quad.reshape(len(self.data), -1) @ \
             s_quad.reshape(-1)
 
-        broadcasting_array = np.ones_like(data) / data.shape[1]
+        broadcasting_array = np.ones_like(data)
         tmp = np.sum(data ** 2 - 2 * data * noise_mean, axis=1) + ls_quad
 
         stats1 = np.c_[
@@ -326,13 +322,13 @@ class TestPLDA(BaseTest):
         self.assertArraysAlmostEqual(cov1, cov2.numpy())
         self.assertArraysAlmostEqual(means1, means2.numpy())
 
-    @unittest.skip('not implemented')
     def test_forward(self):
         stats = self.model.sufficient_statistics(self.data)
         exp_llh1 = self.model(stats).numpy()
 
+        stats = stats.numpy()
         matrix = self.model.expected_natural_params_as_matrix().numpy()
-        exp_llh2 = stats @ matrix -.5 * self.dim * np.log(2 * np.pi)
+        exp_llh2 = stats @ matrix.T -.5 * self.dim * np.log(2 * np.pi)
 
         self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 

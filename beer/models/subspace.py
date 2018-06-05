@@ -541,7 +541,7 @@ class PLDA(BayesianModelSet):
         self.cache['noise_ls_quad'] = ls_quad
 
         # Intermediary computation
-        broadcasting_array = torch.ones_like(data) / data.shape[1]
+        broadcasting_array = torch.ones_like(data)
         stats1 = torch.sum(data ** 2 - 2 * data * noise_mean, dim=1) + ls_quad
 
         # Sufficient statistics of the model.
@@ -552,7 +552,12 @@ class PLDA(BayesianModelSet):
         ], dim=-1)
 
     def forward(self, s_stats, latent_variables=None):
-        exp_llh = s_stats @ self.expected_natural_params_as_matrix()
+        exp_llh = s_stats @ self.expected_natural_params_as_matrix().t()
+
+        # We store the distance term of the Gaussian likelihood for the
+        # training of the precision parameters.
+        self.cache['distance'] = (exp_llh - self.cache['log_prec']) / \
+            self.cache['prec']
         return exp_llh - .5 * self._data_dim * math.log(2 * math.pi)
 
     def accumulate(self, s_stats, parent_msg=None):
@@ -603,27 +608,37 @@ class PLDA(BayesianModelSet):
         return len(self.class_mean_params)
 
     def expected_natural_params_as_matrix(self):
-        l_means = self.cache['latent_means']
-        l_quad = self.cache['latent_quad']
-        noise_mean = self.cache['noise_mean']
-        npoints = len(l_means)
+        t_type = self.cache['m_mean'].type()
+
+        # Load the necessary values from the cache.
+        class_s_mean = self.cache['class_s_mean']
+        class_s_quad = self.cache['class_s_quad']
+        m_mean = self.cache['m_mean']
+        m_quad = self.cache['m_quad']
+        class_mean_mean = self.cache['class_mean_mean']
+        class_mean_quad = self.cache['class_mean_quad']
+        prec = self.cache['prec']
+        log_prec = self.cache['log_prec']
+
         nparams_matrix = []
         for i in range(len(self)):
-            class_mean = self.cache['class_mean_mean'][i] @ self.cache['class_s_mean']
-            lnorm_quad = torch.zeros(npoints).type(l_means.type())
-            lnorm_quad += torch.sum(l_quad.view(npoints, -1) * \
-                self.cache['noise_s_quad'].view(-1), dim=1)
-            lnorm_quad += self.cache['class_mean_quad'][i].view(-1) @ \
-                self.cache['class_s_quad'].view(-1) + self.cache['m_quad']
-            lnorm_quad += 2 * noise_mean @ self.cache['m_mean']
 
-            padding = torch.ones(self._data_dim).type(l_means.type())
+            # Intermediary computation.
+            class_mean = class_mean_mean[i] @ class_s_mean
+            lnorm_quad = torch.zeros(self._data_dim).type(t_type)
+            lnorm_quad += class_mean_quad[i].view(-1) @ \
+                class_s_quad.view(-1) + m_quad
+            lnorm_quad += 2 * class_mean @ m_mean
+
+            broadcasting_array = torch.ones(self._data_dim).type(t_type)
+            broadcasting_array /= self._data_dim
             nparams_matrix.append(torch.cat([
-                -.5 * (self.cache['prec'] / self._data_dim) * padding,
-                class_mean,
-                -.5 * self.cache['prec'] * lnorm_quad,
-                .5 * self._data_dim * self.cache['log_prec'],
+                -.5 * prec * broadcasting_array,
+                prec * (class_mean - m_mean),
+                -.5 * prec * lnorm_quad * broadcasting_array,
+                .5 * self._data_dim * log_prec * broadcasting_array,
             ]))
+
         return torch.stack(nparams_matrix)
 
     ####################################################################
