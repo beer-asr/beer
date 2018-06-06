@@ -111,6 +111,9 @@ class Mixture(BayesianModel):
         self._resps = None
         return retval
 
+    def local_kl_div_posterior_prior(self):
+        return self.modelset.local_kl_div_posterior_prior()
+
     ####################################################################
     # VAELatentPrior interface.
     ####################################################################
