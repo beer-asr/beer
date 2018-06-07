@@ -103,14 +103,11 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
     def __setattr__(self, name, value):
         if isinstance(value, BayesianParameter):
-            print('registering parameter:', name, value)
             self._parameters.append(value)
         elif isinstance(value, BayesianParameterSet):
-            print('registering parameter set:', name, value)
             for parameter in value:
                 self._parameters.append(parameter)
         elif isinstance(value, BayesianModel):
-            print('registering model:', name, value)
             self._parameters += value.parameters
         super().__setattr__(name, value)
 

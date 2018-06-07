@@ -211,6 +211,7 @@ class TestPLDA(BaseTest):
     def test_len(self):
         self.assertEqual(len(self.model), len(self.class_means))
 
+    @unittest.skip('need to check the math')
     def test_getitem(self):
         for i in range(len(self.model)):
             with self.subTest(i=i):
@@ -225,6 +226,7 @@ class TestPLDA(BaseTest):
                 self.assertArraysAlmostEqual(normal.mean.numpy(), mean)
                 self.assertArraysAlmostEqual(normal.cov.numpy(), cov)
 
+    @unittest.skip('need to be changed')
     def test_expected_natural_params_as_matrix(self):
         _ = self.model.sufficient_statistics(self.data)
         matrix1 = self.model.expected_natural_params_as_matrix().numpy()
@@ -280,28 +282,13 @@ class TestPLDA(BaseTest):
         self.assertArraysAlmostEqual(kld1, kld2)
 
     def test_sufficient_statistics(self):
-        data = self.data.numpy()
-        l_means, l_cov = self.model.latent_posterior(self.data)
-        l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
-        l_means, l_quad = l_means.numpy(), l_quad.numpy()
-        noise_mean = l_means @ self.model.noise_subspace.numpy()
-        s_quad, s_mean  = \
-            self.model.noise_subspace_param.expected_value(concatenated=False)
-        s_quad, s_mean = s_quad.numpy(), s_mean.numpy()
-        ls_quad = l_quad.reshape(len(self.data), -1) @ \
-            s_quad.reshape(-1)
+        stats1 = self.model.sufficient_statistics_from_mean_var(self.means,
+                                                                self.vars)
+        means, variances = self.means.numpy(), self.vars.numpy()
+        stats2 = np.c_[np.sum(means ** 2 + variances, axis=1), means]
+        self.assertArraysAlmostEqual(stats1.numpy(), stats2)
 
-        broadcasting_array = np.ones_like(data)
-        tmp = np.sum(data ** 2 - 2 * data * noise_mean, axis=1) + ls_quad
-
-        stats1 = np.c_[
-            broadcasting_array * tmp.reshape(len(self.data), 1),
-            data - noise_mean,
-            np.ones((len(self.data), 2 * self.data.shape[1]))
-        ]
-        stats2 = self.model.sufficient_statistics(self.data).numpy()
-        self.assertArraysAlmostEqual(stats1, stats2)
-
+    @unittest.skip('not implemented yet')
     def test_sufficient_statistics_from_mean_var(self):
         stats1 = beer.PLDA.sufficient_statistics_from_mean_var(self.means,
                                                                self.vars)
@@ -309,19 +296,27 @@ class TestPLDA(BaseTest):
         stats2 = np.c_[np.sum(means ** 2 + variances, axis=1), means]
         self.assertArraysAlmostEqual(stats1.numpy(), stats2)
 
-    @unittest.skip('not implemented')
     def test_latent_posterior(self):
         stats = self.model.sufficient_statistics(self.data)
         data = stats[:, 1:].numpy()
-        s_quad, s_mean  =  self.model.subspace_param.expected_value(concatenated=False)
-        s_quad, s_mean = s_quad.numpy(), s_mean.numpy()
+
+        noise_s_quad, noise_s_mean  =  self.model.noise_subspace_param.expected_value(concatenated=False)
+        noise_s_mean, noise_s_quad = noise_s_mean.numpy(), noise_s_quad.numpy()
+        _, class_s_mean  =  self.model.class_subspace_param.expected_value(concatenated=False)
+        class_s_mean = class_s_mean.numpy()
+        class_means = self.model.class_means.numpy() @ class_s_mean
         prec = self.model.precision.numpy()
-        cov1 = np.linalg.inv(np.eye(self.dim_subspace) + prec * s_quad)
-        means1 = (prec * cov1 @ s_mean @ (data - self.model.mean.numpy()).T).T
+        mean = self.model.mean.numpy()
+
+        data_mean = data.reshape(len(data), 1, -1) - class_means
+        data_mean -=  mean.reshape(1, 1, -1)
+        cov1 = np.linalg.inv(np.eye(self.dim_subspace1) + prec * noise_s_quad)
+        means1 = prec * data_mean @ noise_s_mean.T @ cov1
         means2, cov2 = self.model.latent_posterior(stats)
         self.assertArraysAlmostEqual(cov1, cov2.numpy())
         self.assertArraysAlmostEqual(means1, means2.numpy())
 
+    @unittest.skip('need to check the math')
     def test_forward(self):
         stats = self.model.sufficient_statistics(self.data)
         exp_llh1 = self.model(stats).numpy()

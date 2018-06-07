@@ -415,7 +415,6 @@ class PLDA(BayesianModelSet):
         Returns:
             :any:`PPCA`
         '''
-        print('class:', cls)
         # Precision.
         shape = torch.tensor([pseudo_counts]).type(mean.type())
         rate = torch.tensor([pseudo_counts / float(precision)]).type(mean.type())
@@ -500,65 +499,40 @@ class PLDA(BayesianModelSet):
             'class_mean_mean': torch.stack(class_mean_mean),
             'class_mean_quad': torch.stack(class_mean_quad)
         }
-    def _compute_distance_term(self, s_stats, l_means, l_quad):
-        _, _, s_quad, s_mean, m_quad, m_mean = self._get_expectation()
-        data_mean = s_stats[:, 1:] - m_mean.view(1, -1)
-        distance_term = torch.zeros(len(s_stats)).type(s_stats.type())
-        distance_term += s_stats[:, 0]
-        distance_term += - 2 * s_stats[:, 1:] @ m_mean
-        distance_term += - 2 * torch.sum((l_means @ s_mean) * data_mean, dim=1)
-        distance_term += l_quad.view(len(s_stats), -1) @ s_quad.view(-1)
-        distance_term += m_quad
-        return distance_term
 
-    def latent_posterior(self, data):
-        self.cache.update(self._get_expectation())
+    def latent_posterior(self, stats):
+        # Extract the portion of the s. statistics we need.
+        data = stats[:, 1:]
+        length = len(stats)
+
         prec = self.cache['prec']
         noise_s_quad = self.cache['noise_s_quad']
         noise_s_mean = self.cache['noise_s_mean']
-        class_s_mean = self.cache['class_s_mean']
-        class_mean_mean = self.cache['class_mean_mean']
         m_mean = self.cache['m_mean']
-        lposterior_cov = torch.inverse(
-            torch.eye(self._subspace1_dim).type(data.type()) + prec * noise_s_quad)
-        lposterior_means = prec * lposterior_cov @ noise_s_mean @ (data - m_mean).t()
-        return lposterior_means.t(), lposterior_cov
+        class_means = self.cache['class_mean_mean'] @ self.cache['class_s_mean']
+
+        # The covariance matrix is the same for all the latent variables.
+        l_cov = torch.inverse(
+            torch.eye(self._subspace1_dim).type(data.type()) +
+            prec * noise_s_quad)
+
+        # Compute the means conditioned on the class.
+        data_mean = data.view(length, 1, -1) - class_means
+        data_mean -= m_mean.view(1, 1, -1)
+        l_means = prec *  data_mean @ noise_s_mean.t() @ l_cov
+        return l_means, l_cov
 
     ####################################################################
     # BayesianModel interface.
     ####################################################################
 
     def sufficient_statistics(self, data):
-        return data
+        # To avoid computing the expecation all the time, we store them
+        # in the cache.
+        self.cache.update(self._get_expectation())
 
-    def _internal_sufficient_statistics(self, data, resps):
-        # Estimate the noise variables. This will implicitly load the
-        # cache.
-        l_means, l_cov = self.latent_posterior(data)
-        l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
-        l_kl_div = self.kl_div_latent_posterior(l_means, l_cov)
-        l_quad = l_quad.view(len(data), -1)
-        noise_mean = l_means @ self.cache['noise_s_mean']
-        ls_quad = l_quad.view(len(data), -1) @ self.cache['noise_s_quad'].view(-1)
-
-        # Add more values to the cache as it will be necessary for
-        # later steps.
-        self.cache['latent_means'] = l_means
-        self.cache['latent_quad'] = l_quad
-        self.cache['kl_divergence'] = l_kl_div
-        self.cache['noise_mean'] = noise_mean
-        self.cache['noise_ls_quad'] = ls_quad
-
-        # Intermediary computation
-        broadcasting_array = torch.ones_like(data).type(data.type())
-        stats1 = torch.sum(data ** 2 - 2 * data * noise_mean, dim=1) + ls_quad
-
-        # Sufficient statistics of the model.
-        return torch.cat([
-            broadcasting_array * stats1.view(-1, 1),
-            data - noise_mean,
-            torch.ones(len(data), 2 * data.shape[1]).type(data.type())
-        ], dim=-1)
+        return torch.cat([torch.sum(data ** 2, dim=1).view(-1, 1), data],
+                          dim=-1)
 
     def forward(self, s_stats, latent_variables=None):
         exp_llh = s_stats @ self.expected_natural_params_as_matrix().t()
@@ -592,10 +566,10 @@ class PLDA(BayesianModelSet):
 
         expected_class_means = resps @ class_mean_mean
         data_noise_mean = s_stats[:, self._data_dim: 2 * self._data_dim]
-        data_mean = data_noise_mean + noise_mean - m_mean[None, :]
+        data_mean = data_noise_mean + noise_mean
         data_mean -= expected_class_means
         acc_s_mean = (l_means.t() @ data_mean)
-        m_stats = resps.t() @ (data_noise_mean - m_mean[None, :])
+        m_stats = resps.t() @ data_noise_mean
         acc_stats = {
             self.precision_param: torch.cat([
                 .5 * torch.tensor(len(s_stats) * self._data_dim).view(1).type(t_type),
@@ -603,7 +577,7 @@ class PLDA(BayesianModelSet):
             ]),
             self.mean_param: torch.cat([
                 - .5 * torch.tensor(len(s_stats) * prec).view(1).type(t_type),
-                prec * torch.sum(data_noise_mean - expected_class_means @ class_s_mean, dim=0)
+                prec * torch.sum(data_noise_mean + m_mean - expected_class_means @ class_s_mean, dim=0)
             ]),
             self.noise_subspace_param:  torch.cat([
                 - .5 * prec * l_quad.sum(dim=0).view(-1),
@@ -634,13 +608,12 @@ class PLDA(BayesianModelSet):
     ####################################################################
 
     def __getitem__(self, key):
-        _, s_mean = self.class_subspace_param.expected_value(concatenated=False)
+        _, class_s_mean = self.class_subspace_param.expected_value(concatenated=False)
         _, mean = self.class_mean_params[key].expected_value(concatenated=False)
-        mean = self.mean + s_mean.t() @ mean
-        _, s_mean = self.noise_subspace_param.expected_value(concatenated=False)
-        s_quad = s_mean.t() @ s_mean
-        cov = torch.eye(len(s_quad)).type(s_quad.type()) / self.precision
-        cov += s_quad
+        mean = self.mean + class_s_mean.t() @ mean
+        _, noise_s_mean = self.noise_subspace_param.expected_value(concatenated=False)
+        cov = noise_s_mean.t() @ noise_s_mean
+        cov += torch.eye(self._data_dim).type(cov.type()) / self.precision
         return NormalSetElement(mean=mean, cov=cov)
 
     def __len__(self):
@@ -652,8 +625,6 @@ class PLDA(BayesianModelSet):
         # Load the necessary values from the cache.
         class_s_mean = self.cache['class_s_mean']
         class_s_quad = self.cache['class_s_quad']
-        m_mean = self.cache['m_mean']
-        m_quad = self.cache['m_quad']
         class_mean_mean = self.cache['class_mean_mean']
         class_mean_quad = self.cache['class_mean_quad']
         prec = self.cache['prec']
@@ -664,18 +635,15 @@ class PLDA(BayesianModelSet):
 
             # Intermediary computation.
             class_mean = class_mean_mean[i] @ class_s_mean
-            lnorm_quad = torch.zeros(self._data_dim).type(t_type)
-            lnorm_quad += class_mean_quad[i].view(-1) @ \
-                class_s_quad.view(-1) + m_quad
-            lnorm_quad += 2 * class_mean @ m_mean
+            lnorm_quad = class_mean_quad[i].view(-1) @ class_s_quad.view(-1)
+            #lnorm_quad += 2 * class_mean @ m_mean
 
             broadcasting_array = torch.ones(self._data_dim).type(t_type)
-            broadcasting_array /= self._data_dim
             nparams_matrix.append(torch.cat([
-                -.5 * prec * broadcasting_array,
-                prec * (class_mean + m_mean),
-                -.5 * prec * lnorm_quad * broadcasting_array,
-                .5 * self._data_dim * log_prec * broadcasting_array,
+                -.5 * prec * broadcasting_array / self._data_dim,
+                prec * class_mean,
+                -.5 * prec * lnorm_quad * broadcasting_array / self._data_dim,
+                .5  * log_prec * broadcasting_array,
             ]))
 
         return torch.stack(nparams_matrix)
