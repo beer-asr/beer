@@ -648,9 +648,6 @@ class PLDA(BayesianModelSet):
             for i in range(len(self))
         ]).sum(dim=0).view(-1)
 
-        #import pdb
-        #pdb.set_trace()
-
         acc_stats = {
             self.precision_param: torch.cat([
                 .5 * torch.tensor(len(s_stats) * self._data_dim).view(1).type(t_type),

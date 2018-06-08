@@ -211,15 +211,13 @@ class TestPLDA(BaseTest):
     def test_len(self):
         self.assertEqual(len(self.model), len(self.class_means))
 
-    @unittest.skip('need to check the math')
     def test_getitem(self):
         for i in range(len(self.model)):
             with self.subTest(i=i):
                 prec = self.model.precision.numpy()
                 _, s_mean = self.model.noise_subspace_param.expected_value(concatenated=False)
                 s_mean = s_mean.numpy()
-                s_quad = s_mean.T @ s_mean
-                cov = np.eye(self.dim) / prec + s_quad
+                cov = s_mean.T @ s_mean + np.identity(self.dim) / prec
                 normal = self.model[i]
                 _, s_mean = self.model.class_subspace_param.expected_value(concatenated=False)
                 mean = self.model.mean + s_mean.t() @ self.class_means[i]
@@ -233,7 +231,6 @@ class TestPLDA(BaseTest):
 
         l_means, l_cov = self.model.latent_posterior(self.data)
         l_means, l_cov = l_means.numpy(), l_cov.numpy()
-        l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
         log_prec, prec = self.model.precision_param.expected_value(concatenated=False)
         log_prec, prec = log_prec.numpy(), prec.numpy()
         noise_s_quad, noise_s_mean = self.model.noise_subspace_param.expected_value(concatenated=False)
