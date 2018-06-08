@@ -87,7 +87,7 @@ class PPCA(BayesianModel):
         self.mean_param = BayesianParameter(prior_mean, posterior_mean)
         self.precision_param = BayesianParameter(prior_prec, posterior_prec)
         self.subspace_param = BayesianParameter(prior_subspace,
-                                                 posterior_subspace)
+                                                posterior_subspace)
         self._subspace_dim, self._data_dim = self.subspace.size()
 
     @classmethod
@@ -132,7 +132,7 @@ class PPCA(BayesianModel):
 
     @property
     def subspace(self):
-        _, exp_value2 =  self.subspace_param.expected_value(concatenated=False)
+        _, exp_value2 = self.subspace_param.expected_value(concatenated=False)
         return exp_value2
 
     def _get_expectation(self):
@@ -174,7 +174,7 @@ class PPCA(BayesianModel):
     @staticmethod
     def sufficient_statistics(data):
         return torch.cat([torch.sum(data ** 2, dim=1).view(-1, 1), data],
-                          dim=-1)
+                         dim=-1)
 
     def forward(self, s_stats, latent_variables=None):
         feadim = s_stats.size(1) - 1
@@ -248,7 +248,7 @@ class PPCA(BayesianModel):
         return torch.cat([torch.sum(mean ** 2 + var, dim=1).view(-1, 1), mean],
                          dim=1)
 
-    def local_kl_div_posterior_prior(self):
+    def local_kl_div_posterior_prior(self, parent_msg=None):
         return self.cache['kl_divergence']
 
     def expected_natural_params(self, mean, var, latent_variables=None,
@@ -297,7 +297,7 @@ class PPCA(BayesianModel):
         np3 += -.5 * prec * m_quad
         np3 /= self._data_dim
         np4 = .5 * log_prec * torch.ones(s_stats.size(0),
-                                          mean.size(1)).type(mean.type())
+                                         mean.size(1)).type(mean.type())
 
         # Cache some computation for a quick accumulation of the
         # sufficient statistics.
@@ -423,10 +423,10 @@ class PLDA(BayesianModelSet):
         posterior_class_subspace = MatrixNormalPrior(class_subspace, cov)
 
         # cov = same as class subspace.
-        class_mean_priors, class_mean_posteriors  = [], []
-        for mean in class_means:
-            class_mean_priors.append(NormalFullCovariancePrior(mean, cov))
-            class_mean_posteriors.append(NormalFullCovariancePrior(mean, cov))
+        class_mean_priors, class_mean_posteriors = [], []
+        for mean_i in class_means:
+            class_mean_priors.append(NormalFullCovariancePrior(mean_i, cov))
+            class_mean_posteriors.append(NormalFullCovariancePrior(mean_i, cov))
 
         return cls(prior_mean, posterior_mean, prior_prec, posterior_prec,
                    prior_noise_subspace, posterior_noise_subspace,
@@ -476,7 +476,7 @@ class PLDA(BayesianModelSet):
             class_mean_mean.append(mean)
             class_mean_quad.append(mean_quad)
         return {
-            'log_prec': log_prec,  'prec': prec,
+            'log_prec': log_prec, 'prec': prec,
             'm_quad':m_quad, 'm_mean': m_mean,
             'noise_s_quad':noise_s_quad, 'noise_s_mean': noise_s_mean,
             'class_s_quad':class_s_quad, 'class_s_mean': class_s_mean,
@@ -545,7 +545,7 @@ class PLDA(BayesianModelSet):
         # in the cache.
         self.cache.update(self._get_expectation())
         return torch.cat([torch.sum(data ** 2, dim=1).view(-1, 1), data],
-                          dim=-1)
+                         dim=-1)
 
     def forward(self, s_stats, latent_variables=None):
         # Estimate the posterior distribution of the latent variables.
@@ -579,7 +579,7 @@ class PLDA(BayesianModelSet):
         lnorm = l_quads @ noise_s_quad.view(-1)
         lnorm += (class_quads).view(len(self), 1) + m_quad
         lnorm += 2 * torch.sum(
-            noise_means * (class_means.view(len(self), 1, -1) +
+            noise_means * (class_means.view(len(self), 1, -1) + \
             global_mean.view(1, 1, -1)), dim=-1)
         lnorm += 2 * (class_means @ global_mean).view(-1, 1)
 
@@ -619,7 +619,7 @@ class PLDA(BayesianModelSet):
         class_means = class_mean_mean @ class_s_mean
         self.clear_cache()
 
-        noise_class_mean =  noise_means + class_means[:, None, :]
+        noise_class_mean = noise_means + class_means[:, None, :]
         noise_class_mean = (resps.t()[:, :, None] * noise_class_mean).sum(dim=0)
         acc_mean = torch.sum(data - noise_class_mean, dim=0)
 
@@ -783,7 +783,7 @@ class PLDA(BayesianModelSet):
         np3 += -.5 * prec * m_quad
         np3 /= self._data_dim
         np4 = .5 * log_prec * torch.ones(s_stats.size(0),
-                                          mean.size(1)).type(mean.type())
+                                         mean.size(1)).type(mean.type())
 
         # Cache some computation for a quick accumulation of the
         # sufficient statistics.
