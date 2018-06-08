@@ -14,6 +14,23 @@ import torch
 import beer
 from basetest import BaseTest
 
+
+class TestKLDivStdNormal(BaseTest):
+    def setUp(self):
+        self.dim = int(10 + torch.randint(100, (1, 1)).item())
+        self.npoints = int(1 + torch.randint(100, (1, 1)).item())
+        self.means = torch.randn(self.npoints, self.dim).type(self.type)
+        rand_vec = torch.randn(self.dim, 1).type(self.type)
+        self.cov = torch.eye(self.dim).type(self.type) + rand_vec @ rand_vec.t()
+
+    def test_kl_div(self):
+        kld1 = beer.models.subspace.kl_div_std_norm(self.means, self.cov)
+        means, cov = self.means.numpy(), self.cov.numpy()
+        sign, logdet = np.linalg.slogdet(cov)
+        kld2 = .5 * (-sign * logdet + np.trace(cov) - self.dim)
+        kld2 += .5 * np.sum(means**2, axis=1)
+        self.assertArraysAlmostEqual(kld1, kld2)
+
 ########################################################################
 # PPCA.
 ########################################################################
@@ -43,17 +60,6 @@ class TestPPCA(BaseTest):
         self.assertAlmostEqual(float(self.model.precision), float(self.prec), places=self.tolplaces)
         self.assertArraysAlmostEqual(self.model.mean.numpy(), self.mean)
         self.assertArraysAlmostEqual(self.model.subspace.numpy(), self.subspace)
-
-    def test_kl_div_latent_posteriors(self):
-        stats = self.model.sufficient_statistics(self.data)
-        l_means, l_cov = self.model.latent_posterior(stats)
-        kld1 = beer.PPCA.kl_div_latent_posterior(l_means, l_cov)
-        l_means, l_cov = l_means.numpy(), l_cov.numpy()
-        s_dim = self.dim_subspace
-        sign, logdet = np.linalg.slogdet(l_cov)
-        kld2 = .5 * (-sign * logdet + np.trace(l_cov) - s_dim)
-        kld2 += .5 * np.sum(l_means**2, axis=1)
-        self.assertArraysAlmostEqual(kld1, kld2)
 
     def test_sufficient_statistics(self):
         data = self.data.numpy()
@@ -85,7 +91,6 @@ class TestPPCA(BaseTest):
         exp_llh1 = self.model(stats).numpy()
 
         l_means, l_cov = self.model.latent_posterior(stats)
-        kld = beer.PPCA.kl_div_latent_posterior(l_means, l_cov).numpy()
         l_means, l_cov = l_means.numpy(), l_cov.numpy()
         l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
         log_prec, prec = self.model.precision_param.expected_value(concatenated=False)
@@ -386,4 +391,4 @@ class TestPLDA(BaseTest):
         self.assertEqual(nparams1.shape[1], 4 * self.means.shape[1])
         self.assertArraysAlmostEqual(nparams1, nparams2)
 
-__all__ = ['TestPPCA', 'TestPLDA']
+__all__ = ['TestKLDivStdNormal', 'TestPPCA', 'TestPLDA']

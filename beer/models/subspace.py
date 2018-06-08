@@ -15,6 +15,27 @@ from ..expfamilyprior import MatrixNormalPrior
 from ..expfamilyprior import NormalFullCovariancePrior
 
 
+def kl_div_std_norm(means, cov):
+    '''KL divergence between a set of Normal distributions with a
+    shared covariance matrix and a standard Normal N(0, I).
+
+    Args:
+        means (``torch.Tensor[N, dim]``): Means of the
+            Normal distributions where N is  the number of frames and
+            dim is the dimension of the random variable.
+        cov (``torch.Tensor[s_dim, s_dim]``): Shared covariance matrix.
+
+    Returns:
+        ``torch.Tensor[N]``: Per-distribution KL-divergence.
+
+    '''
+    dim = means.size(1)
+    _, logdet = torch.slogdet(cov)
+    return .5 * (-dim - logdet + torch.trace(cov) + \
+        torch.sum(means ** 2, dim=1))
+
+
+
 ########################################################################
 # Probabilistic Principal Component Analysis (PPCA)
 ########################################################################
@@ -43,28 +64,6 @@ class PPCA(BayesianModel):
                 [ 0.5193,  0.6301, -0.3425,  1.2708]])
 
     '''
-
-    @staticmethod
-    def kl_div_latent_posterior(l_means, l_cov):
-        '''KL divergence between the posterior distribution of the
-        latent variables and their prior (standard normal).
-
-        Args:
-            l_means (``torch.Tensor[N, s_dim]``): Means of the
-                posteriors where N is  the number of frames (= the
-                number of posterior) and s_dim is the dimension of
-                the subspace.
-            l_cov (``torch.Tensor[s_dim, s_dim]``): Covariance matrix
-                shared accross posteriors.
-
-        Returns:
-            ``torch.Tensor[N]``: Per-frame KL-divergence.
-
-        '''
-        s_dim = l_means.size(1)
-        _, logdet = torch.slogdet(l_cov)
-        return .5 * (- s_dim - logdet + torch.trace(l_cov) + \
-            torch.sum(l_means ** 2, dim=1))
 
     def __init__(self, prior_mean, posterior_mean, prior_prec, posterior_prec,
                  prior_subspace, posterior_subspace):
@@ -180,7 +179,7 @@ class PPCA(BayesianModel):
         else:
             l_means, l_cov = self.latent_posterior(s_stats)
             l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
-            l_kl_div = self.kl_div_latent_posterior(l_means, l_cov)
+            l_kl_div = kl_div_std_norm(l_means, l_cov)
         l_quad = l_quad.view(len(s_stats), -1)
 
         log_prec, prec, _, s_mean, _, m_mean = self._get_expectation()
@@ -277,7 +276,7 @@ class PPCA(BayesianModel):
         else:
             l_means, l_cov = self.latent_posterior(s_stats)
             l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
-            l_kl_div = self.kl_div_latent_posterior(l_means, l_cov)
+            l_kl_div = kl_div_std_norm(l_means, l_cov)
         l_quad = l_quad.view(len(s_stats), -1)
 
         log_prec, prec, s_quad, s_mean, m_quad, m_mean = self._get_expectation()
@@ -327,28 +326,6 @@ class PLDA(BayesianModelSet):
             class.
 
     '''
-
-    @staticmethod
-    def kl_div_latent_posterior(l_means, l_cov):
-        '''KL divergence between the posterior distribution of the
-        latent variables and their prior (standard normal).
-
-        Args:
-            l_means (``torch.Tensor[N, s_dim]``): Means of the
-                posteriors where N is  the number of frames (= the
-                number of posterior) and s_dim is the dimension of
-                the subspace.
-            l_cov (``torch.Tensor[s_dim, s_dim]``): Covariance matrix
-                shared accross posteriors.
-
-        Returns:
-            ``torch.Tensor[N]``: Per-frame KL-divergence.
-
-        '''
-        s_dim = l_means.size(1)
-        _, logdet = torch.slogdet(l_cov)
-        return .5 * (- s_dim - logdet + torch.trace(l_cov) + \
-            torch.sum(l_means ** 2, dim=1))
 
     def __init__(self, prior_mean, posterior_mean, prior_prec, posterior_prec,
                  prior_noise_subspace, posterior_noise_subspace,
@@ -536,7 +513,7 @@ class PLDA(BayesianModelSet):
         self.cache['l_cov'] = l_cov
 
         self.cache['l_kl_divs'] = torch.stack([
-            self.kl_div_latent_posterior(l_means[:, i, :], l_cov)
+            kl_div_std_norm(l_means[:, i, :], l_cov)
             for i in range(len(self))
         ])
 
@@ -775,7 +752,7 @@ class PLDA(BayesianModelSet):
         else:
             l_means, l_cov = self.latent_posterior(s_stats)
             l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
-            l_kl_div = self.kl_div_latent_posterior(l_means, l_cov)
+            l_kl_div = kl_div_std_norm(l_means, l_cov)
         l_quad = l_quad.view(len(s_stats), -1)
 
         log_prec, prec, s_quad, s_mean, m_quad, m_mean = self._get_expectation()
