@@ -271,18 +271,6 @@ class TestPLDA(BaseTest):
 
     ####################################################################
 
-    @unittest.skip('not implemented')
-    def test_kl_div_latent_posteriors(self):
-        stats = self.model.sufficient_statistics(self.data)
-        l_means, l_cov = self.model.latent_posterior(data)
-        kld1 = beer.PPCA.kl_div_latent_posterior(l_means, l_cov)
-        l_means, l_cov = l_means.numpy(), l_cov.numpy()
-        s_dim = self.dim_subspace
-        sign, logdet = np.linalg.slogdet(l_cov)
-        kld2 = .5 * (-sign * logdet + np.trace(l_cov) - s_dim)
-        kld2 += .5 * np.sum(l_means**2, axis=1)
-        self.assertArraysAlmostEqual(kld1, kld2)
-
     def test_sufficient_statistics(self):
         stats1 = self.model.sufficient_statistics_from_mean_var(self.means,
                                                                 self.vars)

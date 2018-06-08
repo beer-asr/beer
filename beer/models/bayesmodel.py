@@ -125,9 +125,12 @@ class BayesianModel(metaclass=abc.ABCMeta):
     def clear_cache(self):
         self._cache = {}
 
-    def local_kl_div_posterior_prior(self):
+    def local_kl_div_posterior_prior(self, parent_msg=None):
         '''KL divergence between the posterior/prior distribution over the
         "local" parameters
+
+        parent_msg (object): Message from the parent/co-parents
+                to compute the local KL divergence.
 
         Returns:
             ``torch.Tensor`` or 0.
