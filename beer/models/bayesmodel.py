@@ -116,13 +116,32 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
     @property
     def parameters(self):
+        '''All the :any:`BayesianParameters` of the model.'''
         return self._parameters
 
     @property
+    def grouped_parameters(self):
+        '''All the Bayes parameters of the model organized into groups
+        to be optimized with a coordinate.
+
+        Note:
+            By default, for efficiency reason, all the parameters are
+            put in a single group. Models which need a different
+            behavior have to override this method.
+
+        '''
+        return [self._parameters]
+
+    @property
     def cache(self):
+        '''Dictionary object used to store intermediary results while
+        computing the ELBO.
+
+        '''
         return self._cache
 
     def clear_cache(self):
+        '''Clear the cache.'''
         self._cache = {}
 
     def local_kl_div_posterior_prior(self, parent_msg=None):

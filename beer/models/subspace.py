@@ -164,6 +164,13 @@ class PPCA(BayesianModel):
     # BayesianModel interface.
     ####################################################################
 
+    #@property
+    #def grouped_parameters(self):
+    #    return [
+    #        [self.mean_param, self.precision_param],
+    #        [self.subspace_param]
+    #    ]
+
     @staticmethod
     def sufficient_statistics(data):
         return torch.cat([torch.sum(data ** 2, dim=1).view(-1, 1), data],
@@ -522,6 +529,16 @@ class PLDA(BayesianModelSet):
     ####################################################################
     # BayesianModel interface.
     ####################################################################
+
+    @property
+    def grouped_parameters(self):
+        return [
+            [self.precision_param,
+             self.mean_param,
+             self.noise_subspace_param,
+             self.class_subspace_param],
+            [*self.class_mean_params],
+        ]
 
     def sufficient_statistics(self, data):
         # To avoid computing the expecation all the time, we store them
