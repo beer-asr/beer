@@ -500,7 +500,7 @@ class PLDA(BayesianModelSet):
             'class_mean_quad': torch.stack(class_mean_quad)
         }
 
-    def _latent_posterior(self, stats):
+    def latent_posterior(self, stats):
         # Extract the portion of the s. statistics we need.
         data = stats[:, 1:]
         length = len(stats)
@@ -540,6 +540,8 @@ class PLDA(BayesianModelSet):
             for i in range(len(self))
         ])
 
+        return l_means, l_cov
+
     ####################################################################
     # BayesianModel interface.
     ####################################################################
@@ -553,7 +555,7 @@ class PLDA(BayesianModelSet):
 
     def forward(self, s_stats, latent_variables=None):
         # Estimate the posterior distribution of the latent variables.
-        self._latent_posterior(s_stats)
+        self.latent_posterior(s_stats)
 
         # Load the necessary value from the cache.
         prec = self.cache['prec']
@@ -607,8 +609,7 @@ class PLDA(BayesianModelSet):
         t_type = s_stats.type()
 
         # Separate the s. statistics.
-        data_quad, data = s_stats[:, 0], s_stats[:, 1:]
-        npoints = len(data)
+        _, data = s_stats[:, 0], s_stats[:, 1:]
 
         # Load cached values and clear the cache.
         deltas = self.cache['deltas']

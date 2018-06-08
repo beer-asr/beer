@@ -298,25 +298,26 @@ class TestPLDA(BaseTest):
 
     def test_latent_posterior(self):
         stats = self.model.sufficient_statistics(self.data)
+        l_means1, l_cov1 = self.model.latent_posterior(stats)
+        l_means1, l_cov1 = l_means1.numpy(), l_cov1.numpy()
         data = stats[:, 1:].numpy()
 
         noise_s_quad, noise_s_mean  =  self.model.noise_subspace_param.expected_value(concatenated=False)
         noise_s_mean, noise_s_quad = noise_s_mean.numpy(), noise_s_quad.numpy()
-        _, class_s_mean  =  self.model.class_subspace_param.expected_value(concatenated=False)
-        class_s_mean = class_s_mean.numpy()
+        class_s_mean  =  self.model.class_subspace.numpy()
+        m_mean = self.model.mean.numpy()
         class_means = self.model.class_means.numpy() @ class_s_mean
         prec = self.model.precision.numpy()
-        mean = self.model.mean.numpy()
 
-        data_mean = data.reshape(len(data), 1, -1) - class_means
-        data_mean -=  mean.reshape(1, 1, -1)
-        cov1 = np.linalg.inv(np.eye(self.dim_subspace1) + prec * noise_s_quad)
-        means1 = prec * data_mean @ noise_s_mean.T @ cov1
-        means2, cov2 = self.model.latent_posterior(stats)
-        self.assertArraysAlmostEqual(cov1, cov2.numpy())
-        self.assertArraysAlmostEqual(means1, means2.numpy())
+        l_cov2 = np.linalg.inv(np.identity(self.dim_subspace1) + prec * noise_s_quad)
+        data_mean = data.reshape(len(stats), 1, -1) - class_means
+        data_mean -= m_mean.reshape(1, 1, -1)
+        l_means2 = prec *  data_mean @ noise_s_mean.T @ l_cov2
 
-    @unittest.skip('need to check the math')
+        self.assertArraysAlmostEqual(l_cov1, l_cov2)
+        self.assertArraysAlmostEqual(l_means1, l_means2)
+
+    @unittest.skip('not implemented')
     def test_forward(self):
         stats = self.model.sufficient_statistics(self.data)
         exp_llh1 = self.model(stats).numpy()
