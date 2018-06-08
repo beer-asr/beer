@@ -70,7 +70,7 @@ class TestMixture(BaseTest):
             with self.subTest(i=i):
                 stats = model.sufficient_statistics(self.data)
                 pc_exp_llh = (model.modelset(stats) + \
-                    model.weights_params.expected_value().view(1, -1))
+                    model.weights_param.expected_value().view(1, -1))
                 pc_exp_llh = pc_exp_llh.numpy()
                 exp_llh1 = logsumexp(pc_exp_llh, axis=1)
                 exp_llh2 = model(stats).numpy()
@@ -85,7 +85,7 @@ class TestMixture(BaseTest):
                 elabels = elabels.numpy()
                 stats = model.sufficient_statistics(self.data)
                 pc_exp_llh = model.modelset(stats) + \
-                    model.weights_params.expected_value().view(1, -1)
+                    model.weights_param.expected_value().view(1, -1)
                 pc_exp_llh = pc_exp_llh.numpy()
                 pc_exp_llh += mask
                 exp_llh1 = logsumexp(pc_exp_llh, axis=1)
