@@ -500,7 +500,7 @@ class PLDA(BayesianModelSet):
             'class_mean_quad': torch.stack(class_mean_quad)
         }
 
-    def latent_posterior(self, stats):
+    def _latent_posterior(self, stats):
         # Extract the portion of the s. statistics we need.
         data = stats[:, 1:]
         length = len(stats)
@@ -520,7 +520,25 @@ class PLDA(BayesianModelSet):
         data_mean = data.view(length, 1, -1) - class_means
         data_mean -= m_mean.view(1, 1, -1)
         l_means = prec *  data_mean @ noise_s_mean.t() @ l_cov
-        return l_means, l_cov
+
+        # Intermediary computation that will be necessary to compute the
+        # elbo / accumuate the statistics.
+        self.cache['noise_means'] = torch.stack([
+            l_means[:, i, :] @ noise_s_mean
+            for i in range(len(self))
+        ])
+        l_quad = torch.stack([
+            l_cov + l_means[:, i, :, None] * l_means[:, i, None, :]
+            for i in range(len(self))
+        ])
+        self.cache['l_quads'] = l_quad.view(len(self), len(stats), -1)
+        self.cache['l_means'] = l_means
+        self.cache['l_cov'] = l_cov
+
+        self.cache['l_kl_divs'] = torch.stack([
+            self.kl_div_latent_posterior(l_means[:, i, :], l_cov)
+            for i in range(len(self))
+        ])
 
     ####################################################################
     # BayesianModel interface.
@@ -530,18 +548,56 @@ class PLDA(BayesianModelSet):
         # To avoid computing the expecation all the time, we store them
         # in the cache.
         self.cache.update(self._get_expectation())
-
         return torch.cat([torch.sum(data ** 2, dim=1).view(-1, 1), data],
                           dim=-1)
 
     def forward(self, s_stats, latent_variables=None):
-        exp_llh = s_stats @ self.expected_natural_params_as_matrix().t()
+        # Estimate the posterior distribution of the latent variables.
+        self._latent_posterior(s_stats)
 
-        # We store the distance term of the Gaussian likelihood for the
-        # training of the precision parameters.
-        dist = exp_llh[:, 0] - .5 * (self._data_dim * self.cache['log_prec'])
-        self.cache['distance'] = - 2 * torch.sum(dist / self.cache['prec'])
-        return exp_llh - .5 * self._data_dim * math.log(2 * math.pi)
+        # Load the necessary value from the cache.
+        prec = self.cache['prec']
+        log_prec = self.cache['log_prec']
+        noise_means = self.cache['noise_means']
+        global_mean = self.cache['m_mean']
+        class_s_mean = self.cache['class_s_mean']
+        class_mean_mean = self.cache['class_mean_mean']
+        l_quads = self.cache['l_quads']
+        class_s_quad = self.cache['class_s_quad']
+        class_mean_quad = self.cache['class_mean_quad']
+        noise_s_quad = self.cache['noise_s_quad'].view(-1)
+        m_quad = self.cache['m_quad']
+        noise_means = self.cache['noise_means']
+        class_means = class_mean_mean @ class_s_mean
+        class_quads = class_mean_quad.view(len(self), -1) @ \
+            class_s_quad.view(-1)
+
+        # Separate the s. statistics.
+        data_quad, data = s_stats[:, 0], s_stats[:, 1:]
+        npoints = len(data)
+
+        # Intermediary computations to compute the exp. llh for each
+        # components.
+        means = noise_means + class_means.view(len(self), 1, -1) + \
+            global_mean.view(1, 1, -1)
+        lnorm = l_quads @ noise_s_quad.view(-1)
+        lnorm += (class_quads).view(len(self), 1) + m_quad
+        lnorm += 2 * torch.sum(
+            noise_means * (class_means.view(len(self), 1, -1) +
+            global_mean.view(1, 1, -1)), dim=-1)
+        lnorm += 2 * (class_means @ global_mean).view(-1, 1)
+
+        deltas = -2 * torch.sum(means * data.view(1, npoints, -1), dim=-1)
+        deltas += data_quad.view(1, -1)
+        deltas += lnorm
+
+        exp_llhs = -.5 * (prec * deltas - self._data_dim * log_prec + \
+            self._data_dim * math.log(2 * math.pi))
+
+        # We store values necessary for the accumulation.
+        self.cache['deltas'] = deltas
+
+        return exp_llhs.t()
 
     def accumulate(self, s_stats, parent_msg=None):
         if parent_msg is None:
@@ -550,53 +606,79 @@ class PLDA(BayesianModelSet):
 
         t_type = s_stats.type()
 
+        # Separate the s. statistics.
+        data_quad, data = s_stats[:, 0], s_stats[:, 1:]
+        npoints = len(data)
+
         # Load cached values and clear the cache.
-        distance = self.cache['distance']
-        l_means = self.cache['latent_means']
-        l_quad = self.cache['latent_quad']
+        deltas = self.cache['deltas']
+        l_means = self.cache['l_means']
+        l_quads = self.cache['l_quads']
         prec = self.cache['prec']
-        noise_mean = self.cache['noise_mean']
+        noise_means = self.cache['noise_means']
         m_mean = self.cache['m_mean']
         class_s_mean = self.cache['class_s_mean']
         class_s_quad = self.cache['class_s_quad']
         class_mean_mean = self.cache['class_mean_mean']
         class_mean_quad = self.cache['class_mean_quad']
-        #noise_mean = self.cache['noise_mean']
+        class_means = class_mean_mean @ class_s_mean
         self.clear_cache()
 
-        expected_class_means = resps @ class_mean_mean
-        data_noise_mean = s_stats[:, self._data_dim: 2 * self._data_dim]
-        data_mean = data_noise_mean + noise_mean
-        data_mean -= expected_class_means
-        acc_s_mean = (l_means.t() @ data_mean)
-        m_stats = resps.t() @ data_noise_mean
+        noise_class_mean =  noise_means + class_means[:, None, :]
+        noise_class_mean = (resps.t()[:, :, None] * noise_class_mean).sum(dim=0)
+        acc_mean = torch.sum(data - noise_class_mean, dim=0)
+
+        acc_noise_s_stats1 = (resps.t()[:, :, None] * l_quads).sum(dim=0)
+        acc_noise_s_stats1 = acc_noise_s_stats1.sum(dim=0)
+        data_class_means = (class_means - m_mean[None, :])
+        data_class_means = resps.t()[:, :, None] * (data[None, :, :] - \
+            data_class_means[:, None, :])
+        acc_noise_s_stats2 = torch.stack([
+            l_means[:, i, :].t() @ data_class_means[i]
+            for i in range(len(self))
+        ]).sum(dim=0).view(-1)
+
+        acc_class_s_stats1 = \
+            (resps @ class_mean_quad.view(len(self), -1)).sum(dim=0)
+        data_noise_means = (data - noise_means - m_mean)
+        class_mean_n = resps.t()[:, :, None] * class_mean_mean[:, None, :]
+        acc_class_s_stats2 = torch.stack([
+            class_mean_n[i].t() @ data_noise_means[i]
+            for i in range(len(self))
+        ]).sum(dim=0).view(-1)
+
+        #import pdb
+        #pdb.set_trace()
+
         acc_stats = {
             self.precision_param: torch.cat([
                 .5 * torch.tensor(len(s_stats) * self._data_dim).view(1).type(t_type),
-                -.5 * distance.view(1)
+                -.5 * torch.sum(resps.t() * deltas).view(1)
             ]),
             self.mean_param: torch.cat([
                 - .5 * torch.tensor(len(s_stats) * prec).view(1).type(t_type),
-                prec * torch.sum(data_noise_mean + m_mean - expected_class_means @ class_s_mean, dim=0)
+                prec * acc_mean
             ]),
             self.noise_subspace_param:  torch.cat([
-                - .5 * prec * l_quad.sum(dim=0).view(-1),
-                prec * acc_s_mean.view(-1)
+                - .5 * prec * acc_noise_s_stats1,
+                prec * acc_noise_s_stats2
             ]),
             self.class_subspace_param:  torch.cat([
-                - .5 * prec * (resps @ class_mean_quad.view(len(self), -1)).sum(dim=0),
-                prec * (class_mean_mean.t() @ m_stats).view(-1)
+                - .5 * prec * acc_class_s_stats1,
+                prec * acc_class_s_stats2
             ])
         }
 
         # Accumulate the statistics for the class means.
-        #import pdb
-        #pdb.set_trace()
+        class_mean_acc_stats1 = class_s_quad.view(-1)
+        w_data_noise_means = resps.t()[:, :, None] * data_noise_means
+        class_mean_acc_stats2 = \
+            (class_s_mean @ w_data_noise_means.sum(dim=1).t())
         for i, mean_param in enumerate(self.class_mean_params):
             class_mean_acc_stats = {
                 mean_param: torch.cat([
-                    -.5 * prec * resps[:, i].sum() * class_s_quad.view(-1),
-                    prec * class_s_mean @ m_stats[i]
+                    -.5 * prec * resps[:, i].sum() * class_mean_acc_stats1,
+                    prec * class_mean_acc_stats2[:, i]
                 ])
             }
             acc_stats.update(class_mean_acc_stats)
@@ -648,8 +730,11 @@ class PLDA(BayesianModelSet):
 
         return torch.stack(nparams_matrix)
 
-    def local_kl_div_posterior_prior(self):
-        return self.cache['kl_divergence']
+    def local_kl_div_posterior_prior(self, parent_msg=None):
+        if parent_msg is None:
+            raise ValueError('"parent_msg" should not be None')
+        resps = parent_msg
+        return torch.sum(resps * self.cache['l_kl_divs'].t(), dim=-1)
 
     ####################################################################
     # VAELatentPrior interface.

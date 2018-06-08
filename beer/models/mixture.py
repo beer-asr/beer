@@ -96,23 +96,24 @@ class Mixture(BayesianModel):
             onehot_labels = onehot(latent_variables, len(self.modelset))
             onehot_labels = onehot_labels.type(per_component_exp_llh.type())
             exp_llh = (per_component_exp_llh * onehot_labels).sum(dim=-1)
-            self._resps = onehot_labels
+            self.cache['resps'] = onehot_labels
         else:
             exp_llh = logsumexp(per_component_exp_llh, dim=1).view(-1)
-            self._resps = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
+            self.cache['resps'] = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
 
         return exp_llh
 
     def accumulate(self, s_stats, parent_msg=None):
+        resps = self.cache['resps']
         retval = {
-            self.weights_params: self._resps.sum(dim=0),
-            **self.modelset.accumulate(s_stats, self._resps)
+            self.weights_params: resps.sum(dim=0),
+            **self.modelset.accumulate(s_stats, resps)
         }
-        self._resps = None
+        self.clear_cache()
         return retval
 
     def local_kl_div_posterior_prior(self):
-        return self.modelset.local_kl_div_posterior_prior()
+        return self.modelset.local_kl_div_posterior_prior(self.cache['resps'])
 
     ####################################################################
     # VAELatentPrior interface.
