@@ -317,16 +317,47 @@ class TestPLDA(BaseTest):
         self.assertArraysAlmostEqual(l_cov1, l_cov2)
         self.assertArraysAlmostEqual(l_means1, l_means2)
 
-    @unittest.skip('not implemented')
     def test_forward(self):
         stats = self.model.sufficient_statistics(self.data)
-        exp_llh1 = self.model(stats).numpy()
+        exp_llhs1 = self.model(stats).numpy()
 
         stats = stats.numpy()
-        matrix = self.model.expected_natural_params_as_matrix().numpy()
-        exp_llh2 = stats @ matrix.T -.5 * self.dim * np.log(2 * np.pi)
+        prec = self.model.cache['prec'].numpy()
+        log_prec = self.model.cache['log_prec'].numpy()
+        noise_means = self.model.cache['noise_means'].numpy()
+        global_mean = self.model.cache['m_mean'].numpy()
+        class_s_mean = self.model.cache['class_s_mean'].numpy()
+        class_mean_mean = self.model.cache['class_mean_mean'].numpy()
+        l_quads = self.model.cache['l_quads'].numpy()
+        class_s_quad = self.model.cache['class_s_quad'].numpy()
+        class_mean_quad = self.model.cache['class_mean_quad'].numpy()
+        noise_s_quad = self.model.cache['noise_s_quad'].numpy().reshape(-1)
+        m_quad = self.model.cache['m_quad'].numpy()
+        noise_means = self.model.cache['noise_means'].numpy()
+        class_means = class_mean_mean @ class_s_mean
+        class_quads = class_mean_quad.reshape(self.nclasses, -1) @ \
+            class_s_quad.reshape(-1)
 
-        self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
+        data_quad, data = stats[:, 0], stats[:, 1:]
+        npoints = len(data)
+
+        means = noise_means + class_means.reshape(self.nclasses, 1, -1) + \
+            global_mean.reshape(1, 1, -1)
+        lnorm = l_quads @ noise_s_quad.reshape(-1)
+        lnorm += (class_quads).reshape(self.nclasses, 1) + m_quad
+        lnorm += 2 * np.sum(
+            noise_means * (class_means.reshape(self.nclasses, 1, -1) +
+            global_mean.reshape(1, 1, -1)), axis=-1)
+        lnorm += 2 * (class_means @ global_mean).reshape(-1, 1)
+
+        deltas = -2 * np.sum(means * data.reshape(1, npoints, -1), axis=-1)
+        deltas += data_quad.reshape(1, -1)
+        deltas += lnorm
+
+        exp_llhs2 = -.5 * (prec * deltas - self.dim * log_prec + \
+            self.dim * math.log(2 * math.pi))
+
+        self.assertArraysAlmostEqual(exp_llhs1, exp_llhs2.T)
 
     @unittest.skip('not implemented')
     def test_expected_natural_params(self):
