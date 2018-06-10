@@ -117,7 +117,7 @@ class Mixture(BayesianModel):
         self.clear_cache()
         return retval
 
-    def local_kl_div_posterior_prior(self):
+    def local_kl_div_posterior_prior(self, parent_msg=None):
         return self.modelset.local_kl_div_posterior_prior(self.cache['resps'])
 
     ####################################################################
@@ -129,25 +129,25 @@ class Mixture(BayesianModel):
 
     def expected_natural_params(self, mean, var, latent_variables=None,
                                 nsamples=1):
+        nframes = len(mean)
+        ncomps = len(self.modelset)
 
         # Estimate the responsibilities if not given.
         if latent_variables is not None:
             onehot_labels = onehot(latent_variables, len(self.modelset))
             resps = onehot_labels.type(mean.type())
         else:
-            samples = mean + torch.sqrt(var) * torch.randn(nsamples,
-                                                           *mean.size())
-            samples = samples.view(-1, mean.size(1)).type(mean.type())
+            noise =  torch.randn(nsamples, *mean.size()).type(mean.type())
+            samples = (mean + torch.sqrt(var) * noise).view(nframes * nsamples, -1)
             s_stats = self.sufficient_statistics(samples)
             resps = torch.exp(self.log_predictions(s_stats))
-            resps = resps.view(nsamples, mean.size(0),
-                                     len(self.modelset)).mean(dim=0)
+            resps = resps.view(nsamples, nframes, ncomps).mean(dim=0)
+
+        # Store the responsibilities to accumulate the s. statistics.
         self.cache['resps'] = resps
 
-        # Recompute the s. statistics.
-        s_stats = self.sufficient_statistics_from_mean_var(mean, var)
-        return self.modelset.expected_natural_params_from_resps_and_stats(resps,
-            s_stats).detach()
+        s_stats = self.modelset.sufficient_statistics_from_mean_var(mean, var)
+        return self.modelset.expected_natural_params_from_resps(resps), s_stats
 
 
 __all__ = ['Mixture']

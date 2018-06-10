@@ -134,21 +134,22 @@ class NormalDiagonalCovariance(BayesianModel):
         and variances.
 
         Args:
-            mean (Tensor): Per-frame mean of the posterior distribution.
-            var (Tensor): Per-frame variance of the posterior
+            mean (``torch.Tensor``): Per-frame mean of the posterior
+                distribution.
+            var (``torch.Tensor``): Per-frame variance of the posterior
                 distribution.
             latent_variables (Tensor): Frame labelling (if any).
             nsamples (int): Number of samples to estimate the
                 natural parameters.
 
         Returns:
-            (Tensor): Expected value of the natural parameters.
+            (``torch.Tensor``): Expected value of the natural parameters.
 
         '''
         s_stats = self.sufficient_statistics_from_mean_var(mean, var)
         nparams = self.mean_prec_param.expected_value()
         ones = torch.ones(s_stats.size(0), nparams.size(0)).type(s_stats.type())
-        return ones * nparams
+        return ones * nparams, s_stats
 
 
 class NormalFullCovariance(BayesianModel):
@@ -331,7 +332,7 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
     def __len__(self):
         return len(self._components)
 
-    def expected_natural_params_from_resps_and_stats(self, resps, stats):
+    def expected_natural_params_from_resps(self, resps):
         matrix = self.expected_natural_params_as_matrix()
         return resps @ matrix
 
@@ -438,7 +439,7 @@ class NormalFullCovarianceSet(BayesianModelSet):
     def __len__(self):
         return len(self._components)
 
-    def expected_natural_params_from_resps_and_stats(self, resps, stats):
+    def expected_natural_params_from_resps(self, resps):
         matrix = self.expected_natural_params_as_matrix()
         return resps @ matrix
 
@@ -547,7 +548,7 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
     def __len__(self):
         return self.means_prec_param.posterior.ncomp
 
-    def expected_natural_params_from_resps_and_stats(self, resps, stats):
+    def expected_natural_params_from_resps(self, resps):
         matrix = self.expected_natural_params_as_matrix()
         return resps @ matrix
 
@@ -670,7 +671,7 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
     def __len__(self):
         return self.means_prec_param.posterior.ncomp
 
-    def expected_natural_params_from_resps_and_stats(self, resps, stats):
+    def expected_natural_params_from_resps(self, resps):
         matrix = self.expected_natural_params_as_matrix()
         return resps @ matrix
 

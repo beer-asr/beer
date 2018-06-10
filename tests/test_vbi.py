@@ -96,7 +96,7 @@ class TestEvidenceLowerbound(BaseTest):
         weights = torch.ones(ncomps).type(self.type) / ncomps
         pseudo_counts = 1.
 
-        pldaset = beer.PLDA.create(mean, prec, noise_s, class_s, means, pseudo_counts)
+        pldaset = beer.PLDASet.create(mean, prec, noise_s, class_s, means, pseudo_counts)
         self.plda = beer.Mixture.create(weights, pldaset, pseudo_counts)
 
     def test_optim1(self):

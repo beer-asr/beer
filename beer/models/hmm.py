@@ -204,10 +204,6 @@ class AlignModelSet(BayesianModelSet):
         self.state_ids = torch.tensor(state_ids).long()
         self._idxs = list(range(len(self.state_ids)))
 
-    def _expected_natural_params_as_matrix(self):
-        parameters = self.model_set.expected_natural_params_as_matrix()
-        return parameters[self.state_ids]
-
     ####################################################################
     # BayesianModel interface.
     ####################################################################
@@ -247,8 +243,15 @@ class AlignModelSet(BayesianModelSet):
     def __len__(self):
         return len(self.state_ids)
 
+    # TODO: This is code is to change as it would be more
+    # consistent if the object change the responsibilities and
+    # give the modified resps to the internal model set.
+    def expected_natural_params_as_matrix(self):
+        parameters = self.model_set.expected_natural_params_as_matrix()
+        return parameters[self.state_ids]
+
     def expected_natural_params_from_resps(self, resps):
-        matrix = self._expected_natural_params_as_matrix()
+        matrix = self.expected_natural_params_as_matrix()
         return resps @ matrix
 
 

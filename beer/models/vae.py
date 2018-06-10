@@ -41,11 +41,13 @@ class VAE(BayesianModel):
 
         enc_state = self.encoder(data)
         mean, var = enc_state.mean, enc_state.var
-        self.cache['latent_stats'] = \
-            self.latent_model.sufficient_statistics_from_mean_var(mean, var)
-        exp_np_params = self.latent_model.expected_natural_params(
+        #self.cache['latent_stats'] = \
+        #    self.latent_model.sufficient_statistics_from_mean_var(mean, var)
+
+        exp_np_params, s_stats = self.latent_model.expected_natural_params(
             mean.detach(), var.detach(), latent_variables=latent_variables,
             nsamples=self.nsamples)
+        self.cache['latent_stats'] = s_stats
         samples = mean + torch.sqrt(var) * torch.randn(self.nsamples,
                                                        data.size(0),
                                                        mean.size(1))

@@ -143,7 +143,8 @@ class TestPPCA(BaseTest):
         self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
     def test_expected_natural_params(self):
-        nparams1 = self.model.expected_natural_params(self.means, self.vars).numpy()
+        nparams1, _ = self.model.expected_natural_params(self.means, self.vars)
+        nparams1 = nparams1.numpy()
 
         stats = self.model.sufficient_statistics_from_mean_var(self.means, self.vars)
         l_means, l_cov = self.model.latent_posterior(stats)
@@ -229,46 +230,6 @@ class TestPLDASet(BaseTest):
                 self.assertArraysAlmostEqual(normal.mean.numpy(), mean)
                 self.assertArraysAlmostEqual(normal.cov.numpy(), cov)
 
-    @unittest.skip('need to be changed')
-    def test_expected_natural_params_as_matrix(self):
-        _ = self.model.sufficient_statistics(self.data)
-        matrix1 = self.model.expected_natural_params_as_matrix().numpy()
-
-        l_means, l_cov = self.model.latent_posterior(self.data)
-        l_means, l_cov = l_means.numpy(), l_cov.numpy()
-        log_prec, prec = self.model.precision_param.expected_value(concatenated=False)
-        log_prec, prec = log_prec.numpy(), prec.numpy()
-        noise_s_quad, noise_s_mean = self.model.noise_subspace_param.expected_value(concatenated=False)
-        noise_s_mean, noise_s_quad = noise_s_mean.numpy(), noise_s_quad.numpy()
-        class_s_quad, class_s_mean = self.model.class_subspace_param.expected_value(concatenated=False)
-        class_s_mean, class_s_quad = class_s_mean.numpy(), class_s_quad.numpy()
-        m_quad, m_mean = self.model.mean_param.expected_value(concatenated=False)
-        m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
-        class_mean_mean, class_mean_quad = [], []
-        for mean_param in self.model.class_mean_params:
-            mean_quad, mean = mean_param.expected_value(concatenated=False)
-            class_mean_mean.append(mean.numpy())
-            class_mean_quad.append(mean_quad.numpy())
-
-        dim = self.dim
-        nparams_matrix = []
-        for i in range(self.nclasses):
-            class_mean = class_mean_mean[i] @ class_s_mean
-            lnorm_quad = np.zeros(self.dim)
-            lnorm_quad += class_mean_quad[i].reshape(-1) @ \
-                class_s_quad.reshape(-1) + m_quad
-            lnorm_quad += 2 * class_mean @ m_mean
-
-            nparams_matrix.append(np.r_[
-                -.5 * (prec / dim) * np.ones(dim),
-                prec * (class_mean - self.model.mean),
-                -.5 * prec * lnorm_quad * np.ones(dim) / dim,
-                .5 * log_prec * np.ones(dim) / dim,
-            ])
-        matrix2 = np.r_[nparams_matrix]
-
-        self.assertArraysAlmostEqual(matrix1, matrix2)
-
     ####################################################################
 
     def test_sufficient_statistics(self):
@@ -278,10 +239,9 @@ class TestPLDASet(BaseTest):
         stats2 = np.c_[np.sum(means ** 2 + variances, axis=1), means]
         self.assertArraysAlmostEqual(stats1.numpy(), stats2)
 
-    @unittest.skip('not implemented yet')
     def test_sufficient_statistics_from_mean_var(self):
-        stats1 = beer.PLDA.sufficient_statistics_from_mean_var(self.means,
-                                                               self.vars)
+        stats1 = self.model.sufficient_statistics_from_mean_var(self.means,
+                                                                self.vars)
         means, variances = self.means.numpy(), self.vars.numpy()
         stats2 = np.c_[np.sum(means ** 2 + variances, axis=1), means]
         self.assertArraysAlmostEqual(stats1.numpy(), stats2)
@@ -349,34 +309,5 @@ class TestPLDASet(BaseTest):
 
         self.assertArraysAlmostEqual(exp_llhs1, exp_llhs2.T)
 
-    @unittest.skip('not implemented')
-    def test_expected_natural_params(self):
-        nparams1 = self.model.expected_natural_params(self.means, self.vars).numpy()
 
-        stats = self.model.sufficient_statistics_from_mean_var(self.means, self.vars)
-        l_means, l_cov = self.model.latent_posterior(stats)
-        l_means, l_cov = l_means.numpy(), l_cov.numpy()
-        l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
-        l_quad = l_quad.reshape(len(self.data), -1)
-        log_prec, prec = self.model.precision_param.expected_value(concatenated=False)
-        log_prec, prec = log_prec.numpy(), prec.numpy()
-        s_quad, s_mean = self.model.subspace_param.expected_value(concatenated=False)
-        s_mean, s_quad = s_mean.numpy(), s_quad.numpy()
-        m_quad, m_mean = self.model.mean_param.expected_value(concatenated=False)
-        m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
-
-        np1 = -.5 * prec * np.ones((len(stats), self.dim))
-        np2 = prec * (l_means @ s_mean + m_mean)
-        np3 = np.zeros((len(stats), self.dim))
-        np3 += -.5 * prec * (l_quad.reshape(len(stats), -1) @ s_quad.reshape(-1)).reshape(-1, 1)
-        np3 += - (prec * l_means @ s_mean @ m_mean).reshape(-1, 1)
-        np3 += -.5 * prec * m_quad
-        np3 /= self.dim
-        np4 = .5 * log_prec * np.ones((len(stats), self.dim))
-        nparams2 = np.hstack([np1, np2, np3, np4])
-
-        self.assertEqual(nparams1.shape[0], len(self.means))
-        self.assertEqual(nparams1.shape[1], 4 * self.means.shape[1])
-        self.assertArraysAlmostEqual(nparams1, nparams2)
-
-__all__ = ['TestKLDivStdNormal', 'TestPPCA', 'TestPLDA']
+__all__ = ['TestKLDivStdNormal', 'TestPPCA', 'TestPLDASet']
