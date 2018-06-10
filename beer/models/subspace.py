@@ -9,6 +9,8 @@ from .bayesmodel import BayesianParameterSet
 from .bayesmodel import BayesianModel
 from .bayesmodel import BayesianModelSet
 from .normal import NormalSetElement
+from .mixture import Mixture
+from ..expfamilyprior import DirichletPrior
 from ..expfamilyprior import GammaPrior
 from ..expfamilyprior import NormalIsotropicCovariancePrior
 from ..expfamilyprior import MatrixNormalPrior
@@ -316,8 +318,9 @@ class PPCA(BayesianModel):
 # Probabilistic Linear Discriminant Analysis (PLDA)
 ########################################################################
 
-class PLDA(BayesianModelSet):
-    '''Probabilistic Linear Discriminant Analysis (PPCA).
+class PLDASet(BayesianModelSet):
+    '''Set of Normal distribution for the Probabilistic Linear
+    Discriminant Analysis (PLDA) model.
 
     Attributes:
         mean (``torch.Tensor``): Expected mean.
@@ -329,8 +332,6 @@ class PLDA(BayesianModelSet):
             Mean of the matrix defining the "class" subspace.
             (across-class variations).
         class_means: (``torch.Tensor[]``)
-        weights (``torch.Tensor[n_class]``): Prior weight for each
-            class.
 
     '''
 
@@ -590,8 +591,11 @@ class PLDA(BayesianModelSet):
         exp_llhs = -.5 * (prec * deltas - self._data_dim * log_prec + \
             self._data_dim * math.log(2 * math.pi))
 
-        # We store values necessary for the accumulation.
+        # We store values necessary for the accumulation and to compute
+        # the expected value of the natural parameters.
         self.cache['deltas'] = deltas
+        self.cache['means'] = means
+        self.cache['lnorm'] = lnorm
 
         return exp_llhs.t()
 
@@ -728,12 +732,33 @@ class PLDA(BayesianModelSet):
         resps = parent_msg
         return torch.sum(resps * self.cache['l_kl_divs'].t(), dim=-1)
 
+    def expected_natural_params_from_resps_and_stats(self, resps, stats):
+        # We need to compute the log likelihood to get all the
+        # necesary computations.
+        self(stats)
+
+        means = self.cache['means']
+        prec = self.cache['prec']
+        log_prec = self.cache['log_prec']
+        lnorm = self.cache['lnorm']
+
+        broadcasting_array = torch.ones(len(resps), self._data_dim)
+        np1 = -.5 * prec * broadcasting_array
+        np2 = prec * (resps.t()[:, :, None] * means).sum(dim=0)
+        np3 = -.5 * prec * (lnorm.t() * resps).sum(dim=-1).view(-1, 1) * \
+            broadcasting_array / self._data_dim
+        np4 = .5 * log_prec * broadcasting_array
+
+        return torch.cat([np1, np2, np3, np4], dim=-1)
+
     ####################################################################
     # VAELatentPrior interface.
     ####################################################################
 
-    @staticmethod
-    def sufficient_statistics_from_mean_var(mean, var):
+    def sufficient_statistics_from_mean_var(self, mean, var):
+        # To avoid computing the expecation all the time, we store them
+        # in the cache.
+        self.cache.update(self._get_expectation())
         return torch.cat([torch.sum(mean ** 2 + var, dim=1).view(-1, 1), mean],
                          dim=1)
 
@@ -798,4 +823,88 @@ class PLDA(BayesianModelSet):
         return torch.cat([np1, np2, np3, np4], dim=1).detach()
 
 
-__all__ = ['PPCA', 'PLDA']
+class PLDA(Mixture):
+    '''Probabilistic Linear Discriminant Analysis (PPCA).
+
+    Attributes:
+        mean (``torch.Tensor``): Expected mean.
+        precision (``torch.Tensor[1]``): Expected precision (scalar).
+        noise_subspace (``torch.Tensor[noise_subspace_dim, data_dim]``):
+            Mean of the matrix defining the "noise" subspace.
+            (within-class variations).
+        class_subspace (``torch.Tensor[class_subspace_dim, data_dim]``):
+            Mean of the matrix defining the "class" subspace.
+            (across-class variations).
+        class_means: (``torch.Tensor[]``)
+        weights (``torch.Tensor[n_class]``): Prior weight for each
+            class.
+
+    '''
+
+    def __init__(self, prior_weights, posterior_weights, pldaset):
+        '''
+        Args:
+            prior_weights (:any:`DirichletPrior`): Prior distribution
+                over the weights of the mixture.
+            posterior_weights (any:`DirichletPrior`): Posterior
+                distribution over the weights of the mixture.
+            pldaset (:any:`PLDASet`): Set of Normal distribution with
+                shared noise/class subspace model.
+
+        '''
+        super().__init__(prior_weights, posterior_weights, pldaset)
+
+    @classmethod
+    def create(cls, mean, precision, noise_subspace, class_subspace,
+               class_means, weights, pseudo_counts=1.):
+        '''Create a PLDA model.
+
+        Args:
+            mean (``torch.Tensor``): Mean of the model.
+            precision (float): Global precision of the model.
+            noise_subspace (``torch.Tensor[subspace_dim, data_dim]``):
+                Mean of the noise subspace matrix. `subspace_dim` and
+                `data_dim` are the dimension of the subspace and the
+                data respectively.
+            class_subspace (``torch.Tensor[subspace_dim, data_dim]``):
+                Mean of the class subspace matrix. `subspace_dim` and
+                `data_dim` are the dimension of the subspace and the
+                data respectively.
+            class_means (``torch.Tensor[nclass, dim]``): Means of the
+                class as a matrix.
+            weights (``torch.Tensor``): Mixing weights.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+
+        Returns:
+            :any:`PLDA`
+
+        '''
+        pldaset = PLDASet.create(mean, precision, noise_subspace,
+                                class_subspace, class_means, pseudo_counts)
+        prior_weights = DirichletPrior(pseudo_counts * weights)
+        posterior_weights = DirichletPrior(pseudo_counts * weights)
+        return cls(prior_weights, posterior_weights, pldaset)
+
+    @property
+    def mean(self):
+        return self.pldaset.mean
+
+    @property
+    def precision(self):
+        return self.pldaset.precision
+
+    @property
+    def noise_subspace(self):
+        return self.pldaset.noise_subspace
+
+    @property
+    def class_subspace(self):
+        return self.pldaset.class_subspace
+
+    @property
+    def class_means(self):
+        return self.pldaset.class_means
+
+
+__all__ = ['PPCA', 'PLDASet', 'PLDA']

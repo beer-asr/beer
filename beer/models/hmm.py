@@ -4,7 +4,6 @@
 import torch
 import numpy as np
 from .bayesmodel import BayesianModel, BayesianModelSet
-from .bayesmodel import BayesianParameter
 from ..utils import onehot, logsumexp
 
 
@@ -205,15 +204,13 @@ class AlignModelSet(BayesianModelSet):
         self.state_ids = torch.tensor(state_ids).long()
         self._idxs = list(range(len(self.state_ids)))
 
-    def __getitem__(self, key):
-        '''Args:
-        key (int): state index.
+    def _expected_natural_params_as_matrix(self):
+        parameters = self.model_set.expected_natural_params_as_matrix()
+        return parameters[self.state_ids]
 
-        '''
-        return self.model_set[self.state_ids[key]]
-
-    def __len__(self):
-        return len(self.state_ids)
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
 
     def sufficient_statistics(self, data):
         return len(data), self.model_set.sufficient_statistics(data)
@@ -236,9 +233,23 @@ class AlignModelSet(BayesianModelSet):
 
         return self.model_set.accumulate(s_stats, parent_msg=new_weights)
 
-    def expected_natural_params_as_matrix(self):
-        parameters = self.model_set.expected_natural_params_as_matrix()
-        return parameters[self.state_ids]
+    ####################################################################
+    # BayesianModelSet interface.
+    ####################################################################
+
+    def __getitem__(self, key):
+        '''Args:
+        key (int): state index.
+
+        '''
+        return self.model_set[self.state_ids[key]]
+
+    def __len__(self):
+        return len(self.state_ids)
+
+    def expected_natural_params_from_resps(self, resps):
+        matrix = self._expected_natural_params_as_matrix()
+        return resps @ matrix
 
 
 __all__ = ['HMM', 'AlignModelSet']

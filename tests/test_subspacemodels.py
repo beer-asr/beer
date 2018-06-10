@@ -172,7 +172,7 @@ class TestPPCA(BaseTest):
         self.assertArraysAlmostEqual(nparams1, nparams2)
 
 
-class TestPLDA(BaseTest):
+class TestPLDASet(BaseTest):
 
     def setUp(self):
         self.dim = int(10 + torch.randint(100, (1, 1)).item())
@@ -195,9 +195,9 @@ class TestPLDA(BaseTest):
         self.subspace2 = q_mat.t().type(self.type)
         self.class_means = torch.randn(self.nclasses, self.dim_subspace2).type(self.type)
         self.pseudo_counts = 1e-1 + 100 * torch.rand(1).item()
-        self.model = beer.PLDA.create(self.mean, self.prec, self.subspace1,
-                                      self.subspace2, self.class_means,
-                                      self.pseudo_counts)
+        self.model = beer.PLDASet.create(self.mean, self.prec, self.subspace1,
+                                         self.subspace2, self.class_means,
+                                         self.pseudo_counts)
 
     def test_create(self):
         self.assertAlmostEqual(float(self.model.precision), float(self.prec), places=self.tolplaces)

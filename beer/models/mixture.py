@@ -129,19 +129,25 @@ class Mixture(BayesianModel):
 
     def expected_natural_params(self, mean, var, latent_variables=None,
                                 nsamples=1):
+
+        # Estimate the responsibilities if not given.
         if latent_variables is not None:
             onehot_labels = onehot(latent_variables, len(self.modelset))
-            self.cache['resps'] = onehot_labels.type(mean.type())
+            resps = onehot_labels.type(mean.type())
         else:
             samples = mean + torch.sqrt(var) * torch.randn(nsamples,
                                                            *mean.size())
             samples = samples.view(-1, mean.size(1)).type(mean.type())
             s_stats = self.sufficient_statistics(samples)
             resps = torch.exp(self.log_predictions(s_stats))
-            self.cache['resps'] = resps.view(nsamples, mean.size(0),
+            resps = resps.view(nsamples, mean.size(0),
                                      len(self.modelset)).mean(dim=0)
-        matrix = self.modelset.expected_natural_params_as_matrix()
-        return self.cache['resps'] @ matrix
+        self.cache['resps'] = resps
+
+        # Recompute the s. statistics.
+        s_stats = self.sufficient_statistics_from_mean_var(mean, var)
+        return self.modelset.expected_natural_params_from_resps_and_stats(resps,
+            s_stats).detach()
 
 
 __all__ = ['Mixture']

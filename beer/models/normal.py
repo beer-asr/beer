@@ -296,6 +296,10 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
         ]
         return cls(prior, posteriors)
 
+    def expected_natural_params_as_matrix(self):
+        return torch.cat([param.expected_value()[None]
+                          for param in self.parameters], dim=0)
+
     ####################################################################
     # BayesianModel interface.
     ####################################################################
@@ -327,10 +331,9 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
     def __len__(self):
         return len(self._components)
 
-    # Invalid method name.
-    def expected_natural_params_as_matrix(self):
-        return torch.cat([param.expected_value()[None]
-                          for param in self.parameters], dim=0)
+    def expected_natural_params_from_resps_and_stats(self, resps, stats):
+        matrix = self.expected_natural_params_as_matrix()
+        return resps @ matrix
 
     ####################################################################
     # VAELatentPrior interface.
@@ -340,6 +343,7 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
     def sufficient_statistics_from_mean_var(mean, var):
         return NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
             mean, var)
+
 
 
 class NormalFullCovarianceSet(BayesianModelSet):
@@ -399,6 +403,10 @@ class NormalFullCovarianceSet(BayesianModelSet):
         ]
         return cls(prior, posteriors)
 
+    def expected_natural_params_as_matrix(self):
+        return torch.cat([param.expected_value()[None]
+                          for param in self.parameters], dim=0)
+
     ####################################################################
     # BayesianModel interface.
     ####################################################################
@@ -430,10 +438,9 @@ class NormalFullCovarianceSet(BayesianModelSet):
     def __len__(self):
         return len(self._components)
 
-    # Invalid method name.
-    def expected_natural_params_as_matrix(self):
-        return torch.cat([param.expected_value()[None]
-                          for param in self.parameters], dim=0)
+    def expected_natural_params_from_resps_and_stats(self, resps, stats):
+        matrix = self.expected_natural_params_as_matrix()
+        return resps @ matrix
 
 
 class NormalSetSharedDiagonalCovariance(BayesianModelSet):
@@ -482,6 +489,18 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
         posterior = JointNormalGammaPrior(means, scales, shape, rate)
         return cls(prior, posterior)
 
+    def _expected_nparams(self):
+        np1, np2, np3, np4 = \
+            self.means_prec_param.expected_value(concatenated=False)
+        return torch.cat([np1.view(-1), np4.view(-1)]), \
+            torch.cat([np2, np3], dim=1)
+
+    def expected_natural_params_as_matrix(self):
+        np1, np2, np3, np4 = \
+            self.means_prec_param.expected_value(concatenated=False)
+        ones = torch.ones_like(np2)
+        return torch.cat([ones * np1, np2, np3, ones * np4], dim=1)
+
     ####################################################################
     # BayesianModel interface.
     ####################################################################
@@ -528,22 +547,13 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
     def __len__(self):
         return self.means_prec_param.posterior.ncomp
 
-    # Invalid method name.
-    def expected_natural_params_as_matrix(self):
-        np1, np2, np3, np4 = \
-            self.means_prec_param.expected_value(concatenated=False)
-        ones = torch.ones_like(np2)
-        return torch.cat([ones * np1, np2, np3, ones * np4], dim=1)
+    def expected_natural_params_from_resps_and_stats(self, resps, stats):
+        matrix = self.expected_natural_params_as_matrix()
+        return resps @ matrix
 
     ####################################################################
     # VAELatentPrior interface.
     ####################################################################
-
-    def _expected_nparams(self):
-        np1, np2, np3, np4 = \
-            self.means_prec_param.expected_value(concatenated=False)
-        return torch.cat([np1.view(-1), np4.view(-1)]), \
-            torch.cat([np2, np3], dim=1)
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
@@ -604,6 +614,15 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
         return np1.view(-1), \
             torch.cat([np2, np3[:, None]], dim=1), np4
 
+    def expected_natural_params_as_matrix(self):
+        dim = self.means_prec_param.posterior.dim
+        np1, np2, np3, np4 = \
+            self.means_prec_param.expected_value(concatenated=False)
+        ones1 = torch.ones(self._ncomp, dim ** 2).type(np1.type())
+        ones2 = torch.ones(self._ncomp, 1).type(np1.type())
+        return torch.cat([ones1 * np1.view(-1)[None, :],
+                          np2, np3.view(-1, 1), ones2 * np4], dim=1)
+
     ####################################################################
     # BayesianModel interface.
     ####################################################################
@@ -651,14 +670,9 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
     def __len__(self):
         return self.means_prec_param.posterior.ncomp
 
-    def expected_natural_params_as_matrix(self):
-        dim = self.means_prec_param.posterior.dim
-        np1, np2, np3, np4 = \
-            self.means_prec_param.expected_value(concatenated=False)
-        ones1 = torch.ones(self._ncomp, dim ** 2).type(np1.type())
-        ones2 = torch.ones(self._ncomp, 1).type(np1.type())
-        return torch.cat([ones1 * np1.view(-1)[None, :],
-                          np2, np3.view(-1, 1), ones2 * np4], dim=1)
+    def expected_natural_params_from_resps_and_stats(self, resps, stats):
+        matrix = self.expected_natural_params_as_matrix()
+        return resps @ matrix
 
 
 __all__ = ['NormalDiagonalCovariance', 'NormalFullCovariance',
