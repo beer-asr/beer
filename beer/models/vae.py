@@ -29,26 +29,25 @@ class VAE(BayesianModel):
         self.latent_model = latent_model
         self.nsamples = nsamples
 
-        # Temporary cache variable(s) used during training.
-        self._s_stats = None
-
     @staticmethod
     def sufficient_statistics(data):
         return data
 
     def forward(self, s_stats, latent_variables=None):
         # For the case of the VAE, the sufficient statistics is just
-        # the data itself. We just rename the s_stats to avoid
+        # the data itself. We just rename s_stats to avoid
         # confusion with the sufficient statistics of the latent model.
         data = s_stats
 
         enc_state = self.encoder(data)
         mean, var = enc_state.mean, enc_state.var
-        self._s_stats = \
-            self.latent_model.sufficient_statistics_from_mean_var(mean, var)
-        exp_np_params = self.latent_model.expected_natural_params(
+        #self.cache['latent_stats'] = \
+        #    self.latent_model.sufficient_statistics_from_mean_var(mean, var)
+
+        exp_np_params, s_stats = self.latent_model.expected_natural_params(
             mean.detach(), var.detach(), latent_variables=latent_variables,
             nsamples=self.nsamples)
+        self.cache['latent_stats'] = s_stats
         samples = mean + torch.sqrt(var) * torch.randn(self.nsamples,
                                                        data.size(0),
                                                        mean.size(1))
@@ -56,19 +55,13 @@ class VAE(BayesianModel):
         llh = self.decoder(samples).log_likelihood(data)
         return llh
 
-    def local_kl_div_posterior_prior(self):
+    def local_kl_div_posterior_prior(self, parent_msg=None):
         return self.cache['kl_divergence'] + \
             self.latent_model.local_kl_div_posterior_prior()
 
-    #def evaluate(self, data):
-    #    'Convenience function mostly for plotting and debugging.'
-    #    torch_data = Variable(torch.from_numpy(data).float())
-    #    state = self(torch_data, sampling=sampling)
-    #    loss, llh, kld = self.loss(torch_data, state)
-    #    return -loss, llh, kld, state['encoder_state'].mean, \
-    #        state['encoder_state'].std_dev ** 2
-
     def accumulate(self, _, parent_msg=None):
-        return self.latent_model.accumulate(self._s_stats, parent_msg)
+        latent_stats = self.cache['latent_stats']
+        self.clear_cache()
+        return self.latent_model.accumulate(latent_stats, parent_msg)
 
 __all__ = ['VAE']

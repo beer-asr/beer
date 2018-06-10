@@ -14,11 +14,27 @@ import torch
 import beer
 from basetest import BaseTest
 
+
+class TestKLDivStdNormal(BaseTest):
+    def setUp(self):
+        self.dim = int(10 + torch.randint(100, (1, 1)).item())
+        self.npoints = int(1 + torch.randint(100, (1, 1)).item())
+        self.means = torch.randn(self.npoints, self.dim).type(self.type)
+        rand_vec = torch.randn(self.dim, 1).type(self.type)
+        self.cov = torch.eye(self.dim).type(self.type) + rand_vec @ rand_vec.t()
+
+    def test_kl_div(self):
+        kld1 = beer.models.subspace.kl_div_std_norm(self.means, self.cov)
+        means, cov = self.means.numpy(), self.cov.numpy()
+        sign, logdet = np.linalg.slogdet(cov)
+        kld2 = .5 * (-sign * logdet + np.trace(cov) - self.dim)
+        kld2 += .5 * np.sum(means**2, axis=1)
+        self.assertArraysAlmostEqual(kld1, kld2)
+
 ########################################################################
 # PPCA.
 ########################################################################
 
-# pylint: disable=R0902
 class TestPPCA(BaseTest):
 
     def setUp(self):
@@ -44,17 +60,6 @@ class TestPPCA(BaseTest):
         self.assertAlmostEqual(float(self.model.precision), float(self.prec), places=self.tolplaces)
         self.assertArraysAlmostEqual(self.model.mean.numpy(), self.mean)
         self.assertArraysAlmostEqual(self.model.subspace.numpy(), self.subspace)
-
-    def test_kl_div_latent_posteriors(self):
-        stats = self.model.sufficient_statistics(self.data)
-        l_means, l_cov = self.model.latent_posterior(stats)
-        kld1 = beer.PPCA.kl_div_latent_posterior(l_means, l_cov)
-        l_means, l_cov = l_means.numpy(), l_cov.numpy()
-        s_dim = self.dim_subspace
-        sign, logdet = np.linalg.slogdet(l_cov)
-        kld2 = .5 * (-sign * logdet + np.trace(l_cov) - s_dim)
-        kld2 += .5 * np.sum(l_means**2, axis=1)
-        self.assertArraysAlmostEqual(kld1, kld2)
 
     def test_sufficient_statistics(self):
         data = self.data.numpy()
@@ -86,7 +91,6 @@ class TestPPCA(BaseTest):
         exp_llh1 = self.model(stats).numpy()
 
         l_means, l_cov = self.model.latent_posterior(stats)
-        kld = beer.PPCA.kl_div_latent_posterior(l_means, l_cov).numpy()
         l_means, l_cov = l_means.numpy(), l_cov.numpy()
         l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
         log_prec, prec = self.model.precision_param.expected_value(concatenated=False)
@@ -139,7 +143,8 @@ class TestPPCA(BaseTest):
         self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
     def test_expected_natural_params(self):
-        nparams1 = self.model.expected_natural_params(self.means, self.vars).numpy()
+        nparams1, _ = self.model.expected_natural_params(self.means, self.vars)
+        nparams1 = nparams1.numpy()
 
         stats = self.model.sufficient_statistics_from_mean_var(self.means, self.vars)
         l_means, l_cov = self.model.latent_posterior(stats)
@@ -167,4 +172,142 @@ class TestPPCA(BaseTest):
         self.assertEqual(nparams1.shape[1], 4 * self.means.shape[1])
         self.assertArraysAlmostEqual(nparams1, nparams2)
 
-__all__ = ['TestPPCA']
+
+class TestPLDASet(BaseTest):
+
+    def setUp(self):
+        self.dim = int(10 + torch.randint(100, (1, 1)).item())
+        self.nclasses = int(1 + torch.randint(20, (1, 1)).item())
+        self.dim_subspace1 = int(1 + torch.randint(self.dim - 1, (1, 1)).item())
+        self.dim_subspace2 = int(1 + torch.randint(self.dim - 1, (1, 1)).item())
+        self.npoints = int(1 + torch.randint(100, (1, 1)).item())
+        self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.means = torch.randn(self.npoints, self.dim).type(self.type)
+        self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
+
+        # Create the PLDA model
+        self.mean = torch.randn(self.dim).type(self.type)
+        self.prec = (1 + torch.randn(1) ** 2).type(self.type)
+        rand_mat = torch.randn(self.dim_subspace1, self.dim)
+        q_mat, _  = torch.qr(rand_mat.t())
+        self.subspace1 = q_mat.t().type(self.type)
+        rand_mat = torch.randn(self.dim_subspace2, self.dim)
+        q_mat, _  = torch.qr(rand_mat.t())
+        self.subspace2 = q_mat.t().type(self.type)
+        self.class_means = torch.randn(self.nclasses, self.dim_subspace2).type(self.type)
+        self.pseudo_counts = 1e-1 + 100 * torch.rand(1).item()
+        self.model = beer.PLDASet.create(self.mean, self.prec, self.subspace1,
+                                         self.subspace2, self.class_means,
+                                         self.pseudo_counts)
+
+    def test_create(self):
+        self.assertAlmostEqual(float(self.model.precision), float(self.prec), places=self.tolplaces)
+        self.assertArraysAlmostEqual(self.model.mean.numpy(), self.mean)
+        self.assertArraysAlmostEqual(self.model.noise_subspace.numpy(),
+                                     self.subspace1.numpy())
+        self.assertArraysAlmostEqual(self.model.class_subspace.numpy(),
+                                     self.subspace2.numpy())
+        self.assertArraysAlmostEqual(self.model.class_means.numpy(),
+                                     self.class_means.numpy())
+
+    ####################################################################
+    # BayesianModelSet interface.
+    ####################################################################
+
+    def test_len(self):
+        self.assertEqual(len(self.model), len(self.class_means))
+
+    def test_getitem(self):
+        for i in range(len(self.model)):
+            with self.subTest(i=i):
+                prec = self.model.precision.numpy()
+                _, s_mean = self.model.noise_subspace_param.expected_value(concatenated=False)
+                s_mean = s_mean.numpy()
+                cov = s_mean.T @ s_mean + np.identity(self.dim) / prec
+                normal = self.model[i]
+                _, s_mean = self.model.class_subspace_param.expected_value(concatenated=False)
+                mean = self.model.mean + s_mean.t() @ self.class_means[i]
+                self.assertArraysAlmostEqual(normal.mean.numpy(), mean)
+                self.assertArraysAlmostEqual(normal.cov.numpy(), cov)
+
+    ####################################################################
+
+    def test_sufficient_statistics(self):
+        stats1 = self.model.sufficient_statistics_from_mean_var(self.means,
+                                                                self.vars)
+        means, variances = self.means.numpy(), self.vars.numpy()
+        stats2 = np.c_[np.sum(means ** 2 + variances, axis=1), means]
+        self.assertArraysAlmostEqual(stats1.numpy(), stats2)
+
+    def test_sufficient_statistics_from_mean_var(self):
+        stats1 = self.model.sufficient_statistics_from_mean_var(self.means,
+                                                                self.vars)
+        means, variances = self.means.numpy(), self.vars.numpy()
+        stats2 = np.c_[np.sum(means ** 2 + variances, axis=1), means]
+        self.assertArraysAlmostEqual(stats1.numpy(), stats2)
+
+    def test_latent_posterior(self):
+        stats = self.model.sufficient_statistics(self.data)
+        l_means1, l_cov1 = self.model.latent_posterior(stats)
+        l_means1, l_cov1 = l_means1.numpy(), l_cov1.numpy()
+        data = stats[:, 1:].numpy()
+
+        noise_s_quad, noise_s_mean  =  self.model.noise_subspace_param.expected_value(concatenated=False)
+        noise_s_mean, noise_s_quad = noise_s_mean.numpy(), noise_s_quad.numpy()
+        class_s_mean  =  self.model.class_subspace.numpy()
+        m_mean = self.model.mean.numpy()
+        class_means = self.model.class_means.numpy() @ class_s_mean
+        prec = self.model.precision.numpy()
+
+        l_cov2 = np.linalg.inv(np.identity(self.dim_subspace1) + prec * noise_s_quad)
+        data_mean = data.reshape(len(stats), 1, -1) - class_means
+        data_mean -= m_mean.reshape(1, 1, -1)
+        l_means2 = prec *  data_mean @ noise_s_mean.T @ l_cov2
+
+        self.assertArraysAlmostEqual(l_cov1, l_cov2)
+        self.assertArraysAlmostEqual(l_means1, l_means2)
+
+    def test_forward(self):
+        stats = self.model.sufficient_statistics(self.data)
+        exp_llhs1 = self.model(stats).numpy()
+
+        stats = stats.numpy()
+        prec = self.model.cache['prec'].numpy()
+        log_prec = self.model.cache['log_prec'].numpy()
+        noise_means = self.model.cache['noise_means'].numpy()
+        global_mean = self.model.cache['m_mean'].numpy()
+        class_s_mean = self.model.cache['class_s_mean'].numpy()
+        class_mean_mean = self.model.cache['class_mean_mean'].numpy()
+        l_quads = self.model.cache['l_quads'].numpy()
+        class_s_quad = self.model.cache['class_s_quad'].numpy()
+        class_mean_quad = self.model.cache['class_mean_quad'].numpy()
+        noise_s_quad = self.model.cache['noise_s_quad'].numpy().reshape(-1)
+        m_quad = self.model.cache['m_quad'].numpy()
+        noise_means = self.model.cache['noise_means'].numpy()
+        class_means = class_mean_mean @ class_s_mean
+        class_quads = class_mean_quad.reshape(self.nclasses, -1) @ \
+            class_s_quad.reshape(-1)
+
+        data_quad, data = stats[:, 0], stats[:, 1:]
+        npoints = len(data)
+
+        means = noise_means + class_means.reshape(self.nclasses, 1, -1) + \
+            global_mean.reshape(1, 1, -1)
+        lnorm = l_quads @ noise_s_quad.reshape(-1)
+        lnorm += (class_quads).reshape(self.nclasses, 1) + m_quad
+        lnorm += 2 * np.sum(
+            noise_means * (class_means.reshape(self.nclasses, 1, -1) +
+            global_mean.reshape(1, 1, -1)), axis=-1)
+        lnorm += 2 * (class_means @ global_mean).reshape(-1, 1)
+
+        deltas = -2 * np.sum(means * data.reshape(1, npoints, -1), axis=-1)
+        deltas += data_quad.reshape(1, -1)
+        deltas += lnorm
+
+        exp_llhs2 = -.5 * (prec * deltas - self.dim * log_prec + \
+            self.dim * math.log(2 * math.pi))
+
+        self.assertArraysAlmostEqual(exp_llhs1, exp_llhs2.T)
+
+
+__all__ = ['TestKLDivStdNormal', 'TestPPCA', 'TestPLDASet']

@@ -63,7 +63,8 @@ class TestNormalDiagonalCovariance(BaseTest):
         self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
 
     def test_expected_natural_params(self):
-        np1 = self.model.expected_natural_params(self.means, self.vars).numpy()
+        np1, _ = self.model.expected_natural_params(self.means, self.vars)
+        np1 = np1.numpy()
         np2 = self.model.parameters[0].expected_value().numpy()
         np2 = np.ones((self.means.size(0), len(np2))) * np2
         self.assertArraysAlmostEqual(np1, np2)

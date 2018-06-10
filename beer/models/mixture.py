@@ -35,9 +35,8 @@ class Mixture(BayesianModel):
 
         '''
         super().__init__()
-        self.weights_params = BayesianParameter(prior_weights, posterior_weights)
+        self.weights_param = BayesianParameter(prior_weights, posterior_weights)
         self.modelset = modelset
-        self._resps = None
 
     @classmethod
     def create(cls, weights, modelset, pseudo_counts=1.):
@@ -61,7 +60,7 @@ class Mixture(BayesianModel):
     @property
     def weights(self):
         'Expected value of the weights of the mixture.'
-        weights = torch.exp(self.weights_params.expected_value())
+        weights = torch.exp(self.weights_param.expected_value())
         return weights / weights.sum()
 
     def log_predictions(self, s_stats):
@@ -76,7 +75,7 @@ class Mixture(BayesianModel):
 
         '''
         per_component_exp_llh = self.modelset(s_stats)
-        per_component_exp_llh += self.weights_params.expected_value().view(1, -1)
+        per_component_exp_llh += self.weights_param.expected_value().view(1, -1)
         lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
         return per_component_exp_llh - lognorm.view(-1, 1)
 
@@ -84,11 +83,17 @@ class Mixture(BayesianModel):
     # BayesianModel interface.
     ####################################################################
 
+    @property
+    def grouped_parameters(self):
+        groups = self.modelset.grouped_parameters
+        groups[0].insert(0, self.weights_param)
+        return groups
+
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
     def forward(self, s_stats, latent_variables=None):
-        log_weights = self.weights_params.expected_value().view(1, -1)
+        log_weights = self.weights_param.expected_value().view(1, -1)
         per_component_exp_llh = self.modelset(s_stats)
         per_component_exp_llh += log_weights
 
@@ -96,20 +101,24 @@ class Mixture(BayesianModel):
             onehot_labels = onehot(latent_variables, len(self.modelset))
             onehot_labels = onehot_labels.type(per_component_exp_llh.type())
             exp_llh = (per_component_exp_llh * onehot_labels).sum(dim=-1)
-            self._resps = onehot_labels
+            self.cache['resps'] = onehot_labels
         else:
             exp_llh = logsumexp(per_component_exp_llh, dim=1).view(-1)
-            self._resps = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
+            self.cache['resps'] = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
 
         return exp_llh
 
     def accumulate(self, s_stats, parent_msg=None):
+        resps = self.cache['resps']
         retval = {
-            self.weights_params: self._resps.sum(dim=0),
-            **self.modelset.accumulate(s_stats, self._resps)
+            self.weights_param: resps.sum(dim=0),
+            **self.modelset.accumulate(s_stats, resps)
         }
-        self._resps = None
+        self.clear_cache()
         return retval
+
+    def local_kl_div_posterior_prior(self, parent_msg=None):
+        return self.modelset.local_kl_div_posterior_prior(self.cache['resps'])
 
     ####################################################################
     # VAELatentPrior interface.
@@ -120,19 +129,25 @@ class Mixture(BayesianModel):
 
     def expected_natural_params(self, mean, var, latent_variables=None,
                                 nsamples=1):
+        nframes = len(mean)
+        ncomps = len(self.modelset)
+
+        # Estimate the responsibilities if not given.
         if latent_variables is not None:
             onehot_labels = onehot(latent_variables, len(self.modelset))
-            self._resps = onehot_labels.type(mean.type())
+            resps = onehot_labels.type(mean.type())
         else:
-            samples = mean + torch.sqrt(var) * torch.randn(nsamples,
-                                                           *mean.size())
-            samples = samples.view(-1, mean.size(1)).type(mean.type())
+            noise =  torch.randn(nsamples, *mean.size()).type(mean.type())
+            samples = (mean + torch.sqrt(var) * noise).view(nframes * nsamples, -1)
             s_stats = self.sufficient_statistics(samples)
             resps = torch.exp(self.log_predictions(s_stats))
-            self._resps = resps.view(nsamples, mean.size(0),
-                                     len(self.modelset)).mean(dim=0)
-        matrix = self.modelset.expected_natural_params_as_matrix()
-        return self._resps @ matrix
+            resps = resps.view(nsamples, nframes, ncomps).mean(dim=0)
+
+        # Store the responsibilities to accumulate the s. statistics.
+        self.cache['resps'] = resps
+
+        s_stats = self.modelset.sufficient_statistics_from_mean_var(mean, var)
+        return self.modelset.expected_natural_params_from_resps(resps), s_stats
 
 
 __all__ = ['Mixture']
