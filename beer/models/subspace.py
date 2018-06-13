@@ -634,9 +634,9 @@ class PLDASet(BayesianModelSet):
         class_means = class_mean_mean @ class_s_mean
         self.clear_cache()
 
-        noise_class_mean = noise_means + class_means[:, None, :]
-        noise_class_mean = (resps.t()[:, :, None] * noise_class_mean).sum(dim=0)
-        acc_mean = torch.sum(data - noise_class_mean, dim=0)
+        data_noise_class_mean = data - (noise_means + class_means[:, None, :])
+        data_noise_class_mean = (resps.t()[:, :, None] * data_noise_class_mean).sum(dim=0)
+        acc_mean = torch.sum(data_noise_class_mean, dim=0)
 
         acc_noise_s_stats1 = (resps.t()[:, :, None] * l_quads).sum(dim=0)
         acc_noise_s_stats1 = acc_noise_s_stats1.sum(dim=0)
@@ -645,18 +645,18 @@ class PLDASet(BayesianModelSet):
             data_class_means[:, None, :])
         acc_noise_s_stats2 = torch.stack([
             l_means[:, i, :].t() @ data_class_means[i]
+            #data_class_means[i].t() @ l_means[:, i, :]
             for i in range(len(self))
         ]).sum(dim=0).view(-1)
 
         acc_class_s_stats1 = \
             (resps @ class_mean_quad.view(len(self), -1)).sum(dim=0)
+        acc_class_s_stats1 = acc_class_s_stats1.view(self._subspace2_dim,  self._subspace2_dim, )
         data_noise_means = (data - noise_means - m_mean)
-        class_mean_n = resps.t()[:, :, None] * class_mean_mean[:, None, :]
-        acc_class_s_stats2 = torch.stack([
-            class_mean_n[i].t() @ data_noise_means[i]
-            for i in range(len(self))
-        ]).sum(dim=0).view(-1)
-
+        acc_means = (resps.t()[:, :, None] * data_noise_means).sum(dim=1)
+        acc_class_s_stats2 = acc_means[:, :, None] * class_mean_mean[:, None, :]
+        acc_class_s_stats2 = acc_class_s_stats2.sum(dim=0).t().contiguous().view(-1)
+        acc_class_s_stats1 = .5 * (acc_class_s_stats1 + acc_class_s_stats1.t())
         acc_stats = {
             self.precision_param: torch.cat([
                 .5 * torch.tensor(len(s_stats) * self._data_dim).view(1).type(t_type),
@@ -671,7 +671,7 @@ class PLDASet(BayesianModelSet):
                 prec * acc_noise_s_stats2
             ]),
             self.class_subspace_param:  torch.cat([
-                - .5 * prec * acc_class_s_stats1,
+                - .5 * prec * acc_class_s_stats1.view(-1),
                 prec * acc_class_s_stats2
             ])
         }
@@ -680,12 +680,12 @@ class PLDASet(BayesianModelSet):
         class_mean_acc_stats1 = class_s_quad.view(-1)
         w_data_noise_means = resps.t()[:, :, None] * data_noise_means
         class_mean_acc_stats2 = \
-            (class_s_mean @ w_data_noise_means.sum(dim=1).t())
+            (class_s_mean @ w_data_noise_means.sum(dim=1).t()).t()
         for i, mean_param in enumerate(self.class_mean_params):
             class_mean_acc_stats = {
                 mean_param: torch.cat([
                     -.5 * prec * resps[:, i].sum() * class_mean_acc_stats1,
-                    prec * class_mean_acc_stats2[:, i]
+                    prec * class_mean_acc_stats2[i]
                 ])
             }
             acc_stats.update(class_mean_acc_stats)
@@ -698,8 +698,8 @@ class PLDASet(BayesianModelSet):
 
     def __getitem__(self, key):
         _, class_s_mean = self.class_subspace_param.expected_value(concatenated=False)
-        _, mean = self.class_mean_params[key].expected_value(concatenated=False)
-        mean = self.mean + class_s_mean.t() @ mean
+        _, class_mean = self.class_mean_params[key].expected_value(concatenated=False)
+        mean = self.mean + class_s_mean.t() @ class_mean
         _, noise_s_mean = self.noise_subspace_param.expected_value(concatenated=False)
         cov = noise_s_mean.t() @ noise_s_mean
         cov += torch.eye(self._data_dim).type(cov.type()) / self.precision
