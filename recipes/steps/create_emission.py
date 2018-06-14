@@ -24,12 +24,15 @@ def main():
         choices=['True', 'False'])
     parser.add_argument('--var_normalize', default='True',
         choices=['True', 'False'])
+    parser.add_argument('--noise_std', type=float, default=0., 
+        help='Noise std for creating modelset')
     args = parser.parse_args()
 
     nstates = args.nstates
     stats = np.load(args.stats)
     modeltype = args.emission_type
     mdl = args.model_dir + '/emission.mdl'
+    noise_std = args.noise_std
 
     models = [beer.NormalDiagonalCovarianceSet,
               beer.NormalFullCovarianceSet,
@@ -46,7 +49,7 @@ def main():
     if args.var_normalize == 'True':
         std = torch.ones_like(var)
 
-    modelset = model.create(mean, std, nstates, noise_std=0.)
+    modelset = model.create(mean, std, nstates, noise_std=noise_std)
 
     with open(mdl, 'wb') as m:
         pickle.dump(modelset, m)

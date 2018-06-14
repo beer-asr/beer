@@ -22,7 +22,7 @@ def read_phones(phonefile):
     return phones_dict
 
 def feature_transform(feat, mean_norm='False', var_norm='False', mean=None,
-                      std=None, context=0):
+                      std=None, context=5):
 
     '''Perform feature transformation with mean/var normalization, and append
     context
@@ -46,7 +46,7 @@ def feature_transform(feat, mean_norm='False', var_norm='False', mean=None,
         else:
             feat -= mean
      #xiao_xiong_has_made_a_bug = None
-    if context != 0:
+    if context is not None:
         padded = np.r_[np.repeat(feat[0][None], context, axis=0),
                            feat, np.repeat(feat[-1][None], context, axis=0)]
         feat_stacked = np.zeros((len(feat), (2 * context + 1) * feat.shape[1]))
@@ -62,11 +62,11 @@ def main():
     parser.add_argument('feats', type=str, help='Feature file')
     parser.add_argument('labels', type=str, help='Label file')
     parser.add_argument('emissions', type=str, help='Emission modelset file')
+    parser.add_argument('phonelist', type=str, help='List of phonemes and ids')
+    parser.add_argument('nstate_per_phone', type=int)
     parser.add_argument('feat_stats', type=str, default=None,
         help='Feature statistics: mean, standard deviation, count')
     parser.add_argument('hmm_model_dir', type=str, help='Output trained HMM model')
-    parser.add_argument('--training_type', type=str, default='viterbi',
-        choices=['baum_welch', 'viterbi'])
     parser.add_argument('--mean_normalize', default='True',
         choices=['True', 'False'])
     parser.add_argument('--var_normalize', default='False',
@@ -84,8 +84,9 @@ def main():
     # Read arguments
     feats = np.load(args.feats)
     labels = np.load(args.labels)
+    phones_dict = read_phones(args.phonelist)
     hmm_mdl_dir = args.hmm_model_dir
-    training_type = args.training_type
+    nstate_per_phone = args.nstate_per_phone
     stats = np.load(args.feat_stats)
     mean_norm = args.mean_normalize
     var_norm = args.var_normalize
@@ -98,10 +99,10 @@ def main():
 
     global_mean = stats['mean']
     global_std = stats['std']
-    tot_counts = int(stats['count'])
+    tot_counts = stats['count']
 
-    log_format = "%(asctime)s :%(lineno)d %(levelname)s:%(message)s"
-    logging.basicConfig(level=logging.INFO, format=log_format)
+    log_format = "%(asctime)s (%module)s:%(lineno)d) %(levelname)s:%(message)s"
+    logging.basicConfig(filename='hmm.log', level=logging.INFO, format=log_format)
 
     # Prepare data
     keys = list(feats.keys())
@@ -113,31 +114,30 @@ def main():
     elbo_fn = beer.EvidenceLowerBound(tot_counts)
     params = emissions.parameters
     optimizer = beer.BayesianModelOptimizer(params, lrate)
+    nstates = len(phones_dict) * nstate_per_phone
 
     for epoch in range(epochs):
         logging.info("Epoch: %d", epoch)
         hmm_epoch = hmm_mdl_dir + '/' + str(epoch) + '.mdl'
         for batch_keys in batches:
             optimizer.zero_grad()
-            elbo_value = 0.
-            batch_nutt = len(batch_keys)
             for utt in batch_keys:
                 logging.info("Training with utterance %s", utt)
                 ft = feature_transform(feats[utt], mean_norm=mean_norm,
                      var_norm=var_norm, mean=global_mean, std=global_std,
                      context=context)
+                print(utt, feats[utt].shape, ft.shape)
                 lab = labels[utt]
                 init_state = torch.tensor([0])
                 final_state = torch.tensor([len(lab) - 1])
-                trans_mat_ali = beer.HMM.create_ali_trans_mat(len(lab))
+                trans_mat_ali = beer.HMM.create_ali_trans_mat(len(lab) *
+                                nstate_per_phone)
                 ali_sets = beer.AlignModelSet(emissions, lab)
                 hmm_ali = beer.HMM.create(init_state, final_state,
-                          trans_mat_ali, ali_sets, training_type)
+                          trans_mat_ali, ali_sets)
                 elbo = elbo_fn(hmm_ali, torch.from_numpy(ft).float())
                 elbo.natural_backward()
-                elbo_value += float(elbo) 
-            logging.info("Elbo value is %f", elbo_value / (tot_counts *
-                batch_nutt))
+            logging.info("Elbo is %f", float(elbo) / tot_counts)
             optimizer.step()
         with open(hmm_epoch, 'wb') as m:
             pickle.dump(emissions, m)
