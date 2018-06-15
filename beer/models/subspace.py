@@ -176,6 +176,37 @@ class PPCA(BayesianModel):
         return torch.cat([torch.sum(data ** 2, dim=1).view(-1, 1), data],
                          dim=-1)
 
+    def float(self):
+        return self.__class__(
+            self.mean_param.prior.float(),
+            self.mean_param.posterior.float(),
+            self.precision_param.prior.float(),
+            self.precision_param.posterior.float(),
+            self.subspace_param.prior.float(),
+            self.subspace_param.posterior.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.mean_param.prior.double(),
+            self.mean_param.posterior.double(),
+            self.precision_param.prior.double(),
+            self.precision_param.posterior.double(),
+            self.subspace_param.prior.double(),
+            self.subspace_param.posterior.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.mean_param.prior.to(device),
+            self.mean_param.posterior.to(device),
+            self.precision_param.prior.to(device),
+            self.precision_param.posterior.to(device),
+            self.subspace_param.prior.to(device),
+            self.subspace_param.posterior.to(device)
+        )
+
+
     def forward(self, s_stats, latent_variables=None):
         feadim = s_stats.size(1) - 1
 
@@ -598,6 +629,48 @@ class PLDASet(BayesianModelSet):
         self._precompute(stats)
 
         return stats
+
+    def float(self):
+        return self.__class__(
+            self.mean_param.prior.float(),
+            self.mean_param.posterior.float(),
+            self.precision_param.prior.float(),
+            self.precision_param.posterior.float(),
+            self.noise_subspace_param.prior.float(),
+            self.noise_subspace_param.posterior.float(),
+            self.class_subspace_param.prior.float(),
+            self.class_subspace_param.posterior.float(),
+            [param.prior.float() for param in self.class_mean_params],
+            [param.posterior.float() for param in self.class_mean_params]
+        )
+
+    def double(self):
+        return self.__class__(
+            self.mean_param.prior.double(),
+            self.mean_param.posterior.double(),
+            self.precision_param.prior.double(),
+            self.precision_param.posterior.double(),
+            self.noise_subspace_param.prior.double(),
+            self.noise_subspace_param.posterior.double(),
+            self.class_subspace_param.prior.double(),
+            self.class_subspace_param.posterior.double(),
+            [param.prior.double() for param in self.class_mean_params],
+            [param.posterior.double() for param in self.class_mean_params]
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.mean_param.prior.to(device),
+            self.mean_param.posterior.to(device),
+            self.precision_param.prior.to(device),
+            self.precision_param.posterior.to(device),
+            self.noise_subspace_param.prior.to(device),
+            self.noise_subspace_param.posterior.to(device),
+            self.class_subspace_param.prior.to(device),
+            self.class_subspace_param.posterior.to(device),
+            [param.prior.to(device) for param in self.class_mean_params],
+            [param.posterior.to(device) for param in self.class_mean_params]
+        )
 
     def forward(self, s_stats, latent_variables=None):
         # Load the necessary value from the cache.

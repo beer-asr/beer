@@ -131,6 +131,36 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         self._natural_hparams = copied_value
         self._log_norm_value = torch.tensor(log_norm_value)
 
+    def float(self):
+        '''Create a new :any:`ExpFamilyPrior` with all the parameters set
+        to float precision.
+
+        Returns:
+            :any:`ExpFamilyPrior`
+
+        '''
+        return self.__class__(self.natural_hparams.float())
+
+    def double(self):
+        '''Create a new :any:`ExpFamilyPrior` with all the parameters set to
+        double precision.
+
+        Returns:
+            :any:`ExpFamilyPrior`
+
+        '''
+        return self.__class__(self.natural_hparams.double())
+
+    def to(self, device):
+        '''Create a new :any:`ExpFamilyPrior` with all the parameters
+        allocated on `device`.
+
+        Returns:
+            :any:`ExpFamilyPrior`
+
+        '''
+        return self.__class__(self.natural_hparams.to(device))
+
     @abc.abstractmethod
     def split_sufficient_statistics(self, s_stats):
         '''Abstract method to be implemented by subclasses of

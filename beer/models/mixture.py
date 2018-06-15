@@ -92,6 +92,27 @@ class Mixture(BayesianModel):
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
+    def float(self):
+        return self.__class__(
+            self.weights_param.prior.float(),
+            self.weights_param.posterior.float(),
+            self.modelset.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.weights_param.prior.double(),
+            self.weights_param.posterior.double(),
+            self.modelset.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.weights_param.prior.to(device),
+            self.weights_param.posterior.to(device),
+            self.modelset.to(device)
+        )
+
     def forward(self, s_stats, latent_variables=None):
         log_weights = self.weights_param.expected_value().view(1, -1)
         per_component_exp_llh = self.modelset(s_stats)

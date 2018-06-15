@@ -165,6 +165,29 @@ class HMM(BayesianModel):
             path.insert(0, backtrack[i, path[0]])
         return torch.LongTensor(path)
 
+    def float(self):
+        return self.__class__(
+            self.init_states,
+            self.final_states,
+            self.trans_mat,
+            self.modelset.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.init_states,
+            self.final_states,
+            self.trans_mat,
+            self.modelset.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.init_states,
+            self.final_states,
+            self.trans_mat,
+            self.modelset.to(device)
+        )
 
     def forward(self, s_stats, latent_variables=None):
         pc_exp_llh = self.modelset(s_stats)
@@ -210,6 +233,24 @@ class AlignModelSet(BayesianModelSet):
 
     def sufficient_statistics(self, data):
         return len(data), self.model_set.sufficient_statistics(data)
+
+    def float(self):
+        return self.__class__(
+            self.model_set.float(),
+            self.state_ids
+        )
+
+    def double(self):
+        return self.__class__(
+            self.model_set.double(),
+            self.state_ids
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.model_set.to(device),
+            self.state_ids
+        )
 
     def forward(self, len_s_stats, latent_variables=None):
         length, s_stats = len_s_stats

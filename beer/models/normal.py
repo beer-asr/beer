@@ -109,6 +109,24 @@ class NormalDiagonalCovariance(BayesianModel):
         return torch.cat([data ** 2, data, torch.ones_like(data),
                           torch.ones_like(data)], dim=-1)
 
+    def float(self):
+        return self.__class__(
+            self.mean_prec_param.prior.float(),
+            self.mean_prec_param.posterior.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.mean_prec_param.prior.double(),
+            self.mean_prec_param.posterior.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.mean_prec_param.prior.to(device),
+            self.mean_prec_param.posterior.to(device)
+        )
+
     def forward(self, s_stats, latent_variables=None):
         feadim = .25 * s_stats.size(1)
         exp_llh = s_stats @ self.mean_prec_param.expected_value()
@@ -224,6 +242,24 @@ class NormalFullCovariance(BayesianModel):
             torch.ones(data.size(0), 1).type(data.type())
         ], dim=-1)
 
+    def float(self):
+        return self.__class__(
+            self.mean_prec_param.prior.float(),
+            self.mean_prec_param.posterior.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.mean_prec_param.prior.double(),
+            self.mean_prec_param.posterior.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.mean_prec_param.prior.to(device),
+            self.mean_prec_param.posterior.to(device)
+        )
+
     def forward(self, s_stats, latent_variables=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - s_stats.size(1))))
         exp_llh = s_stats @ self.mean_prec_param.expected_value()
@@ -308,6 +344,21 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
     @staticmethod
     def sufficient_statistics(data):
         return NormalDiagonalCovariance.sufficient_statistics(data)
+
+    def float(self):
+        new_prior = self._components[0].prior.float()
+        new_posts = [comp.posterior.float() for comp in self._components]
+        return self.__class__(new_prior, new_posts)
+
+    def double(self):
+        new_prior = self._components[0].prior.double()
+        new_posts = [comp.posterior.double() for comp in self._components]
+        return self.__class__(new_prior, new_posts)
+
+    def to(self, device):
+        new_prior = self._components[0].prior.to(device)
+        new_posts = [comp.posterior.to(device) for comp in self._components]
+        return self.__class__(new_prior, new_posts)
 
     def forward(self, s_stats, latent_variables=None):
         feadim = .25 * s_stats.size(1)
@@ -416,6 +467,24 @@ class NormalFullCovarianceSet(BayesianModelSet):
     def sufficient_statistics(data):
         return NormalFullCovariance.sufficient_statistics(data)
 
+    def float(self):
+        return self.__class__(
+            self.mean_prec_param.prior.float(),
+            self.mean_prec_param.posterior.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.mean_prec_param.prior.double(),
+            self.mean_prec_param.posterior.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.mean_prec_param.prior.to(device),
+            self.mean_prec_param.posterior.to(device)
+        )
+
     def forward(self, s_stats, latent_variables=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - s_stats.size(1))))
         retval = s_stats @ self.expected_natural_params_as_matrix().t()
@@ -511,6 +580,24 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
         s_stats1 = torch.cat([data**2, torch.ones_like(data)], dim=1)
         s_stats2 = torch.cat([data, torch.ones_like(data)], dim=1)
         return s_stats1, s_stats2
+
+    def float(self):
+        return self.__class__(
+            self.means_prec_param.prior.float(),
+            self.means_prec_param.posterior.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.means_prec_param.prior.double(),
+            self.means_prec_param.posterior.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.means_prec_param.prior.to(device),
+            self.means_prec_param.posterior.to(device)
+        )
 
     def forward(self, s_stats, latent_variables=None):
         s_stats1, s_stats2 = s_stats
@@ -634,6 +721,24 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
         s_stats2 = torch.cat([data, torch.ones(data.size(0), 1).type(data.type())],
                              dim=1)
         return s_stats1, s_stats2
+
+    def float(self):
+        return self.__class__(
+            self.means_prec_param.prior.float(),
+            self.means_prec_param.posterior.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.means_prec_param.prior.double(),
+            self.means_prec_param.posterior.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.means_prec_param.prior.to(device),
+            self.means_prec_param.posterior.to(device)
+        )
 
     def forward(self, s_stats, latent_variables=None):
         s_stats1, s_stats2 = s_stats
