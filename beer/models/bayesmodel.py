@@ -116,18 +116,40 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
     @property
     def parameters(self):
+        '''All the :any:`BayesianParameters` of the model.'''
         return self._parameters
 
     @property
+    def grouped_parameters(self):
+        '''All the Bayes parameters of the model organized into groups
+        to be optimized with a coordinate.
+
+        Note:
+            By default, for efficiency reason, all the parameters are
+            put in a single group. Models which need a different
+            behavior have to override this method.
+
+        '''
+        return [self._parameters]
+
+    @property
     def cache(self):
+        '''Dictionary object used to store intermediary results while
+        computing the ELBO.
+
+        '''
         return self._cache
 
     def clear_cache(self):
+        '''Clear the cache.'''
         self._cache = {}
 
-    def local_kl_div_posterior_prior(self):
+    def local_kl_div_posterior_prior(self, parent_msg=None):
         '''KL divergence between the posterior/prior distribution over the
         "local" parameters
+
+        parent_msg (object): Message from the parent/co-parents
+                to compute the local KL divergence.
 
         Returns:
             ``torch.Tensor`` or 0.
@@ -146,7 +168,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
         retval = 0.
         for parameter in self.parameters:
             retval += ExpFamilyPrior.kl_div(parameter.posterior,
-                                            parameter.prior)
+                                            parameter.prior).view(1)
         return retval
 
     @abc.abstractmethod
@@ -240,37 +262,23 @@ class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def expected_natural_params_as_matrix(self):
+    def expected_natural_params_from_resps(self, resps):
         '''Abstract method to be implemented by subclasses of
-        :any:`BayesianModel`.
+        :any:`BayesianModelSet`.
 
-        Compute the expected value natural of the set parameters as
-        a matrix.
-
-        Returns:
-            ``torch.Tensor``: The set of natural parameters in a matrix.
-        '''
-    @abc.abstractmethod
-    def forward(self, s_stats, latent_variables=None):
-        '''Abstract method to be implemented by subclasses of
-        :any:`BayesianModel`.
-
-        Compute the Evidence Lower-BOund (ELBO) of the data given the
-        model for each model.
+        Compute the expected value natural of the parameters as
+        a vector for each frame.
 
         Args:
-            s_stats (``torch.Tensor[n_frames, dim]``): Sufficient
-                statistics of the model.
-            latent_variables (object): Latent variable that can be
-                provided to the model (optional). Note that type of
-                the latent variables depends on the model. If a model
-                does not use any latent variable, it will ignore this
-                parameter.
+            ``torch.Tensor[nframes, nclasses]``: Per-frame
+                responsibilities to averge the natural parameters of the
+                set's components.
 
         Returns:
-            ``torch.Tensor[n_frames, n_models]``: ELBO.
+            ``torch.Tensor[nframes, dim]``
         '''
-        raise NotImplementedError
+        pass
+
 
 __all__ = ['BayesianModel', 'BayesianModelSet', 'BayesianParameter',
            'BayesianParameterSet']

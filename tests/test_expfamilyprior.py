@@ -15,6 +15,42 @@ from basetest import BaseTest
 
 
 ########################################################################
+# JointExpFamilyPrior.
+########################################################################
+
+class TestJointExpFamilyPrior(BaseTest):
+
+    def setUp(self):
+        dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.concentrations = (torch.randn(dim) ** 2).type(self.type)
+        self.prior1 = beer.DirichletPrior(self.concentrations)
+        self.concentrations = (torch.randn(dim) ** 2).type(self.type)
+        self.prior2 = beer.DirichletPrior(self.concentrations)
+        self.prior = beer.JointExpFamilyPrior([self.prior1, self.prior2])
+
+    def test_init(self):
+        nhp1 = self.prior.natural_hparams.numpy()
+        nhp2 = np.r_[self.prior1.natural_hparams.numpy(),
+                     self.prior2.natural_hparams.numpy()]
+        self.assertArraysAlmostEqual(nhp1, nhp2)
+
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.prior, self.prior)), 0.)
+
+    def test_exp_sufficient_statistics(self):
+        stats1 = self.prior.expected_sufficient_statistics.numpy()
+        stats2 = np.r_[self.prior1.expected_sufficient_statistics.numpy(),
+                       self.prior2.expected_sufficient_statistics.numpy()]
+        self.assertArraysAlmostEqual(stats1, stats2)
+
+    def test_log_norm(self):
+        lnorm1 = self.prior.log_norm(self.prior.natural_hparams).numpy()
+        lnorm2 = self.prior1.log_norm(self.prior1.natural_hparams).numpy()
+        lnorm2 += self.prior2.log_norm(self.prior2.natural_hparams).numpy()
+        self.assertAlmostEqual(lnorm1, lnorm2, places=self.tolplaces)
+
+########################################################################
 # Dirichlet prior.
 ########################################################################
 
@@ -555,5 +591,5 @@ __all__ = [
     'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior',
     'TestNormalWishartPrior', 'TestJointNormalWishartPrior',
     'TestNormalFullCovariancePrior', 'TestNormalIsotropicCovariancePrior',
-    'TestMatrixNormalPrior', 'TestGammaPrior'
+    'TestMatrixNormalPrior', 'TestGammaPrior', 'TestJointExpFamilyPrior'
 ]

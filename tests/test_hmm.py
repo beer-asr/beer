@@ -85,7 +85,7 @@ def create_trans_mat(unigram, nstate_per_unit, gamma):
 
     trans_mat = np.zeros((len(unigram) * nstate_per_unit,
                           len(unigram) * nstate_per_unit))
-    initial_states = np.arange(0, len(unigram) * nstate_per_unit, 
+    initial_states = np.arange(0, len(unigram) * nstate_per_unit,
                                nstate_per_unit)
 
     for i, j in enumerate(unigram):
@@ -94,11 +94,11 @@ def create_trans_mat(unigram, nstate_per_unit, gamma):
             trans_mat[i, i] += gamma
         else:
             for n in range(nstate_per_unit-1):
-                trans_mat[i*nstate_per_unit+n, 
+                trans_mat[i*nstate_per_unit+n,
                           i*nstate_per_unit+n : i*nstate_per_unit+n+2] = .5
-            trans_mat[i*nstate_per_unit+nstate_per_unit-1, 
+            trans_mat[i*nstate_per_unit+nstate_per_unit-1,
                       i*nstate_per_unit+nstate_per_unit-1] = gamma
-            trans_mat[i*nstate_per_unit+nstate_per_unit-1, 
+            trans_mat[i*nstate_per_unit+nstate_per_unit-1,
                       initial_states] = (1 - gamma) * unigram
     return trans_mat
 
@@ -120,11 +120,11 @@ class TestCreateTransMatrix(BaseTest):
         self.unigram = pdf.sample()
         self.gamma = np.random.ranf()
         self.tot_states = int(1 + np.random.randint(10, size=1))
-    
+
     def test_create_trans_mat(self):
-        trans_mat1 = create_trans_mat(np.asarray(self.unigram), 
+        trans_mat1 = create_trans_mat(np.asarray(self.unigram),
                                       self.nstate_per_unit, self.gamma)
-        trans_mat2 = beer.HMM.create_trans_mat(self.unigram, 
+        trans_mat2 = beer.HMM.create_trans_mat(self.unigram,
                                                self.nstate_per_unit, self.gamma)
         self.assertArraysAlmostEqual(trans_mat1, trans_mat2.numpy())
 
@@ -141,10 +141,10 @@ class TestForwardBackwardViterbi(BaseTest):
         self.npoints = int(1 + np.random.randint(100, size=1)) + self.nstates
 
         n_init_states = int(1 + np.random.randint(self.nstates, size=1))
-        self.init_states = list(np.random.choice(range(0, self.nstates), 
+        self.init_states = list(np.random.choice(range(0, self.nstates),
                                                  n_init_states, replace=False))
         n_final_states = int(1 + np.random.randint(self.nstates, size=1))
-        self.final_states = list(np.random.choice(range(0, self.nstates), 
+        self.final_states = list(np.random.choice(range(0, self.nstates),
                                                  n_final_states, replace=False))
         tmp_trans = np.random.ranf((self.nstates, self.nstates))
         self.trans_mat = torch.from_numpy(tmp_trans / \
@@ -152,14 +152,14 @@ class TestForwardBackwardViterbi(BaseTest):
         tmp_llh = np.random.ranf((self.npoints, self.nstates))
         self.llhs = torch.from_numpy(np.log(tmp_llh / \
             tmp_llh.sum(axis=1).reshape(-1, 1))).type(self.type)
-    
+
     def test_forward(self):
-        log_alphas1 = forward(self.init_states, self.trans_mat.numpy(), 
+        log_alphas1 = forward(self.init_states, self.trans_mat.numpy(),
                               self.llhs.numpy())
         log_alphas2 = beer.HMM.baum_welch_forward(self.init_states, self.trans_mat,
                                        self.llhs).numpy()
         self.assertArraysAlmostEqual(log_alphas1, log_alphas2)
-    
+
     def test_backward(self):
         log_betas1 = backward(self.final_states, self.trans_mat.numpy(),
                               self.llhs.numpy())
@@ -169,8 +169,8 @@ class TestForwardBackwardViterbi(BaseTest):
 
 
     def test_viterbi(self):
-        path1 = viterbi(self.init_states, self.final_states, 
-                        self.trans_mat.numpy(), 
+        path1 = viterbi(self.init_states, self.final_states,
+                        self.trans_mat.numpy(),
                         self.llhs.numpy())
         path2 = beer.HMM.viterbi(self.init_states, self.final_states,
                                  self.trans_mat, self.llhs).numpy()
@@ -185,8 +185,8 @@ class TestAlignModelSet(BaseTest):
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
         self.nstates = int(1 + torch.randint(100, (1, 1)).item())
         self.nseqs = int(1 + torch.randint(50, (1, 1)).item())
-        self.ali_seqs = np.random.randint(0, self.nstates, 
-                                          size=self.nseqs).tolist()       
+        self.ali_seqs = np.random.randint(0, self.nstates,
+                                          size=self.nseqs).tolist()
         self.modelsets = [
             beer.NormalDiagonalCovarianceSet.create(
                 torch.zeros(self.dim).type(self.type),
@@ -216,30 +216,20 @@ class TestAlignModelSet(BaseTest):
         self.alimodelsets = []
         for modelset in self.modelsets:
             self.alimodelsets.append(beer.AlignModelSet(modelset, self.ali_seqs))
-        
+
     def test_sufficient_statistics(self):
         for i, m in enumerate(self.alimodelsets):
              with self.subTest(i=i):
                 stats1 = self.modelsets[i].sufficient_statistics(self.data)
                 _, stats2 = m.sufficient_statistics(self.data)
                 self.assertArraysAlmostEqual(stats1[0].numpy(), stats2[0].numpy())
-        
+
     def test_forward(self):
         for i, m in enumerate(self.alimodelsets):
             with self.subTest(i=i):
                 len_stats = m.sufficient_statistics(self.data)
                 shape1 = (self.npoints, self.nseqs)
                 shape2 = m.forward(len_stats).shape
-                self.assertEqual(shape1[0], shape2[0])
-                self.assertEqual(shape1[1], shape2[1])
-
-    def test_expected_natural_params_as_matrix(self):
-        for i, m in enumerate(self.alimodelsets):
-            with self.subTest(i=i):
-                shape1 = (self.npoints, 
-                    self.modelsets[i].expected_natural_params_as_matrix().shape[1])
-                shape2 = (self.npoints,
-                    m.expected_natural_params_as_matrix().shape[1])
                 self.assertEqual(shape1[0], shape2[0])
                 self.assertEqual(shape1[1], shape2[1])
 
@@ -280,8 +270,8 @@ class TestHMM(BaseTest):
         ]
 
         n_init_states = int(1 + torch.randint(self.nstates, (1, 1)).item())
-        self.init_states = list(np.random.choice(range(0, self.nstates), 
-                                                 n_init_states, 
+        self.init_states = list(np.random.choice(range(0, self.nstates),
+                                                 n_init_states,
                                                  replace=False))
         n_final_states = int(1 + torch.randint(self.nstates, (1, 1)).item())
         self.final_states = list(np.random.choice(range(0, self.nstates),
@@ -294,7 +284,7 @@ class TestHMM(BaseTest):
         for modelset in modelsets:
             self.hmms.append(beer.HMM.create(self.init_states, self.final_states,
                              self.trans_mat, modelset))
-    
+
     def test_create(self):
         for i, hmm in enumerate(self.hmms):
             with self.subTest(i=i):
@@ -319,7 +309,8 @@ class TestHMM(BaseTest):
         for i, model in enumerate(self.hmms):
             with self.subTest(i=i):
                 label_idxs = torch.zeros(self.data.size(0)).long()
-                elabels = beer.onehot(label_idxs, len(model.modelset))
+                elabels = beer.onehot(label_idxs, len(model.modelset),
+                                      dtype=self.data.dtype)
                 mask = torch.log(elabels).numpy()
                 elabels = elabels.numpy()
                 stats = model.sufficient_statistics(self.data)
@@ -330,5 +321,5 @@ class TestHMM(BaseTest):
                 exp_llh2 = model(stats, label_idxs).numpy()
                 self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
-__all__ = ['TestHMM', 'TestForwardBackwardViterbi', 
+__all__ = ['TestHMM', 'TestForwardBackwardViterbi',
            'TestCreateTransMatrix', 'TestAlignModelSet']

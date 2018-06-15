@@ -4,7 +4,6 @@
 import torch
 import numpy as np
 from .bayesmodel import BayesianModel, BayesianModelSet
-from .bayesmodel import BayesianParameter
 from ..utils import onehot, logsumexp
 
 
@@ -171,18 +170,17 @@ class HMM(BayesianModel):
     def forward(self, s_stats, latent_variables=None):
         pc_exp_llh = self.modelset(s_stats)
         if latent_variables is not None:
-            onehot_labels = onehot(latent_variables, len(self.modelset))
-            onehot_labels = onehot_labels.type(pc_exp_llh.type())
+            onehot_labels = onehot(latent_variables, len(self.modelset),
+                                   dtype=pc_exp_llh.dtype)
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
             self._resps = onehot_labels
         elif self.training_type == 'viterbi':
             onehot_labels = onehot(HMM.viterbi(self.init_states, 
                                   self.final_states, self.trans_mat, pc_exp_llh), 
-                                  len(self.modelset))
-            onehot_labels = onehot_labels.type(pc_exp_llh.type())
+                                  len(self.modelset), dtype=pc_exp_llh.dtype)
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
             self._resps = onehot_labels
-        elif self.training_type == 'baum_welch':
+        else:
             log_alphas = HMM.baum_welch_forward(self.init_states, self.trans_mat, pc_exp_llh)
             log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat, pc_exp_llh)
             exp_llh = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
@@ -210,15 +208,9 @@ class AlignModelSet(BayesianModelSet):
         self.state_ids = torch.tensor(state_ids).long()
         self._idxs = list(range(len(self.state_ids)))
 
-    def __getitem__(self, key):
-        '''Args:
-        key (int): state index.
-
-        '''
-        return self.model_set[self.state_ids[key]]
-
-    def __len__(self):
-        return len(self.state_ids)
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
 
     def sufficient_statistics(self, data):
         return len(data), self.model_set.sufficient_statistics(data)
@@ -241,9 +233,30 @@ class AlignModelSet(BayesianModelSet):
 
         return self.model_set.accumulate(s_stats, parent_msg=new_weights)
 
+    ####################################################################
+    # BayesianModelSet interface.
+    ####################################################################
+
+    def __getitem__(self, key):
+        '''Args:
+        key (int): state index.
+
+        '''
+        return self.model_set[self.state_ids[key]]
+
+    def __len__(self):
+        return len(self.state_ids)
+
+    # TODO: This is code is to change as it would be more
+    # consistent if the object change the responsibilities and
+    # give the modified resps to the internal model set.
     def expected_natural_params_as_matrix(self):
         parameters = self.model_set.expected_natural_params_as_matrix()
         return parameters[self.state_ids]
+
+    def expected_natural_params_from_resps(self, resps):
+        matrix = self.expected_natural_params_as_matrix()
+        return resps @ matrix
 
 
 __all__ = ['HMM', 'AlignModelSet']
