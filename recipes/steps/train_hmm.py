@@ -118,10 +118,10 @@ def main():
         logging.info("Epoch: %d", epoch)
         hmm_epoch = hmm_mdl_dir + '/' + str(epoch) + '.mdl'
         for batch_keys in batches:
-            optimizer.zero_grad()
             elbo_value = 0.
             batch_nutt = len(batch_keys)
             for utt in batch_keys:
+                optimizer.zero_grad()
                 logging.info("Training with utterance %s", utt)
                 ft = feature_transform(feats[utt], mean_norm=mean_norm,
                      var_norm=var_norm, mean=global_mean, std=global_std,
