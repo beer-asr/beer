@@ -21,6 +21,7 @@ class TestUtilityFunctions(BaseTest):
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.matrix = torch.randn(self.dim, self.dim)
 
     def test_logsumexp(self):
         val1 = beer.logsumexp(self.data, dim=0).numpy()
@@ -32,9 +33,15 @@ class TestUtilityFunctions(BaseTest):
 
     def test_onehot(self):
         ref = torch.range(0, 2).long()
-        labs1 = beer.onehot(ref, 3).long()
+        labs1 = beer.onehot(ref, 3, dtype=ref.dtype)
         labs2 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         self.assertArraysAlmostEqual(labs1.numpy(), labs2)
+
+    def test_symmetrize_matrix(self):
+        sym_mat1 = beer.symmetrize_matrix(self.matrix).numpy()
+        mat = self.matrix.numpy()
+        sym_mat2 = .5 * (mat + mat.T)
+        self.assertArraysAlmostEqual(sym_mat1, sym_mat2)
 
 
 __all__ = ['TestUtilityFunctions']
