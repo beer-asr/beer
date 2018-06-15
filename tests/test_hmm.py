@@ -309,7 +309,8 @@ class TestHMM(BaseTest):
         for i, model in enumerate(self.hmms):
             with self.subTest(i=i):
                 label_idxs = torch.zeros(self.data.size(0)).long()
-                elabels = beer.onehot(label_idxs, len(model.modelset))
+                elabels = beer.onehot(label_idxs, len(model.modelset),
+                                      dtype=self.data.dtype)
                 mask = torch.log(elabels).numpy()
                 elabels = elabels.numpy()
                 stats = model.sufficient_statistics(self.data)
