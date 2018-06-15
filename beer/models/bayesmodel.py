@@ -26,9 +26,11 @@ class BayesianParameter:
 
     def __init__(self, prior, posterior):
         self.prior, self.posterior = prior, posterior
-        tensor_type = self.prior.natural_hparams.type()
+        dtype = self.prior.natural_hparams.dtype
+        device = self.prior.natural_hparams.device
         self.natural_grad = \
-            torch.zeros_like(self.prior.natural_hparams).type(tensor_type)
+            torch.zeros_like(self.prior.natural_hparams, dtype=dtype,
+                            device=device)
 
     def __hash__(self):
         return hash(repr(self))
@@ -236,8 +238,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
         Returns:
             ``torch.Tensor`` or 0.
         '''
-        t_type = self._parameters[0].expected_value().type()
-        return torch.tensor(0.).type(t_type)
+        val = self._parameters[0].expected_value()
+        return torch.tensor(0., dtype=val.dtype, device=val.device)
 
     def kl_div_posterior_prior(self):
         '''Kullback-Leibler divergence between the posterior/prior

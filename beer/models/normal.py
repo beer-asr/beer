@@ -166,7 +166,8 @@ class NormalDiagonalCovariance(BayesianModel):
         '''
         s_stats = self.sufficient_statistics_from_mean_var(mean, var)
         nparams = self.mean_prec_param.expected_value()
-        ones = torch.ones(s_stats.size(0), nparams.size(0)).type(s_stats.type())
+        ones = torch.ones(s_stats.size(0), nparams.size(0), dtype=s_stats.dtype,
+                          device=s_stats.device)
         return ones * nparams, s_stats
 
 
@@ -238,8 +239,9 @@ class NormalFullCovariance(BayesianModel):
     def sufficient_statistics(data):
         return torch.cat([
             (data[:, :, None] * data[:, None, :]).view(len(data), -1),
-            data, torch.ones(data.size(0), 1).type(data.type()),
-            torch.ones(data.size(0), 1).type(data.type())
+            data, torch.ones(data.size(0), 1, dtype=data.dtype,
+                             device=data.device),
+            torch.ones(data.size(0), 1, dtype=data.dtype, device=data.device)
         ], dim=-1)
 
     def float(self):
@@ -327,7 +329,8 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
         prior = NormalGammaPrior(mean, scale, shape, rate)
         posteriors = [
             NormalGammaPrior(
-                mean + noise_std * torch.randn(len(mean)).type(mean.type()),
+                mean + noise_std * torch.randn(len(mean), dtype=mean.dtype,
+                                               device=mean.device),
                 scale, shape, rate
             ) for _ in range(ncomp)
         ]
@@ -346,18 +349,21 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
         return NormalDiagonalCovariance.sufficient_statistics(data)
 
     def float(self):
-        new_prior = self._components[0].prior.float()
-        new_posts = [comp.posterior.float() for comp in self._components]
+        new_prior = self._components[0].mean_prec_param.prior.float()
+        new_posts = [comp.mean_prec_param.posterior.float()
+                     for comp in self._components]
         return self.__class__(new_prior, new_posts)
 
     def double(self):
-        new_prior = self._components[0].prior.double()
-        new_posts = [comp.posterior.double() for comp in self._components]
+        new_prior = self._components[0].mean_prec_param.prior.double()
+        new_posts = [comp.mean_prec_param.posterior.double()
+                     for comp in self._components]
         return self.__class__(new_prior, new_posts)
 
     def to(self, device):
-        new_prior = self._components[0].prior.to(device)
-        new_posts = [comp.posterior.to(device) for comp in self._components]
+        new_prior = self._components[0].mean_prec_param.prior.to(device)
+        new_posts = [comp.mean_prec_param.posterior.to(device)
+                     for comp in self._components]
         return self.__class__(new_prior, new_posts)
 
     def forward(self, s_stats, latent_variables=None):
@@ -449,7 +455,8 @@ class NormalFullCovarianceSet(BayesianModelSet):
         prior = NormalWishartPrior(mean, scale, scale_matrix, dof)
         posteriors = [
             NormalWishartPrior(
-                mean + noise_std * torch.randn(len(mean)).type(mean.type()),
+                mean + noise_std * torch.randn(len(mean), dtype=mean.dtype,
+                                               device=mean.device),
                 scale, scale_matrix, dof
             ) for _ in range(ncomp)
         ]
@@ -468,22 +475,22 @@ class NormalFullCovarianceSet(BayesianModelSet):
         return NormalFullCovariance.sufficient_statistics(data)
 
     def float(self):
-        return self.__class__(
-            self.mean_prec_param.prior.float(),
-            self.mean_prec_param.posterior.float()
-        )
+        new_prior = self._components[0].mean_prec_param.prior.float()
+        new_posts = [comp.mean_prec_param.posterior.float()
+                     for comp in self._components]
+        return self.__class__(new_prior, new_posts)
 
     def double(self):
-        return self.__class__(
-            self.mean_prec_param.prior.double(),
-            self.mean_prec_param.posterior.double()
-        )
+        new_prior = self._components[0].mean_prec_param.prior.double()
+        new_posts = [comp.mean_prec_param.posterior.double()
+                     for comp in self._components]
+        return self.__class__(new_prior, new_posts)
 
     def to(self, device):
-        return self.__class__(
-            self.mean_prec_param.prior.to(device),
-            self.mean_prec_param.posterior.to(device)
-        )
+        new_prior = self._components[0].mean_prec_param.prior.to(device)
+        new_posts = [comp.mean_prec_param.posterior.to(device)
+                     for comp in self._components]
+        return self.__class__(new_prior, new_posts)
 
     def forward(self, s_stats, latent_variables=None):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - s_stats.size(1))))
@@ -550,11 +557,14 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
             :any:`NormalSetSharedDiagonalCovariance`
         '''
         dim = len(mean)
-        scales = torch.ones(ncomp, dim).type(mean.type()) * pseudo_counts
+        scales = torch.ones(ncomp, dim, dtype=mean.dtype,
+                            device=mean.device) * pseudo_counts
         shape = torch.ones_like(diag_cov) * pseudo_counts
         rate = diag_cov * pseudo_counts
-        p_means = mean + torch.zeros_like(scales).type(mean.type())
-        means = mean +  noise_std * torch.randn(ncomp, dim).type(mean.type())
+        p_means = mean + torch.zeros_like(scales, dtype=mean.dtype,
+                                          device=mean.device,)
+        means = mean +  noise_std * torch.randn(ncomp, dim, dtype=mean.dtype,
+                                                device=mean.device)
         prior = JointNormalGammaPrior(p_means, scales, shape, rate)
         posterior = JointNormalGammaPrior(means, scales, shape, rate)
         return cls(prior, posterior)
@@ -616,7 +626,8 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
             s_stats1[:, :feadim].sum(dim=0),
             (weights.t() @ s_stats2[:, :feadim]).view(-1),
             (weights.t() @ s_stats2[:, feadim:]).view(-1),
-            len(s_stats1) * torch.ones(feadim).type(s_stats1.type())
+            len(s_stats1) * torch.ones(feadim, dtype=s_stats1.dtype,
+                                       device=s_stats1.device)
         ])
         return {self.means_prec_param: acc_stats}
 
@@ -687,11 +698,14 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
             :any:`NormalSetSharedFullCovariance`
         '''
         dim = len(mean)
-        scales = torch.ones(ncomp).type(mean.type()) * pseudo_counts
+        scales = torch.ones(ncomp, dtype=mean.dtype,
+                            device=mean.device) * pseudo_counts
         dof = pseudo_counts + dim - 1
         scale_matrix = torch.inverse(cov *  dof)
-        p_means = mean + torch.zeros(ncomp, dim).type(mean.type())
-        means = mean + noise_std * torch.randn(ncomp, dim).type(mean.type())
+        p_means = mean + torch.zeros(ncomp, dim, dtype=mean.dtype,
+                                     device=mean.device)
+        means = mean + noise_std * torch.randn(ncomp, dim, dtype=mean.dtype,
+                                              device=mean.device)
         prior = JointNormalWishartPrior(p_means, scales, scale_matrix, dof)
         posteriors = JointNormalWishartPrior(means, scales, scale_matrix, dof)
         return cls(prior, posteriors)
@@ -706,8 +720,9 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
         dim = self.means_prec_param.posterior.dim
         np1, np2, np3, np4 = \
             self.means_prec_param.expected_value(concatenated=False)
-        ones1 = torch.ones(self._ncomp, dim ** 2).type(np1.type())
-        ones2 = torch.ones(self._ncomp, 1).type(np1.type())
+        ones1 = torch.ones(self._ncomp, dim ** 2, dtype=np1.dtype,
+                           device=np1.device)
+        ones2 = torch.ones(self._ncomp, 1, dtype=np1.dtype, device=np2.device)
         return torch.cat([ones1 * np1.view(-1)[None, :],
                           np2, np3.view(-1, 1), ones2 * np4], dim=1)
 
@@ -718,8 +733,9 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
     @staticmethod
     def sufficient_statistics(data):
         s_stats1 = (data[:, :, None] * data[:, None, :]).view(len(data), -1)
-        s_stats2 = torch.cat([data, torch.ones(data.size(0), 1).type(data.type())],
-                             dim=1)
+        s_stats2 = torch.cat([data, torch.ones(data.size(0), 1,
+                                               dtype=data.dtype,
+                                               device=data.device)], dim=1)
         return s_stats1, s_stats2
 
     def float(self):
@@ -758,7 +774,7 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
             s_stats1.sum(dim=0),
             (weights.t() @ s_stats2[:, :feadim]).view(-1),
             weights.sum(dim=0),
-            len(weights) * torch.ones(1).type(weights.type())
+            len(weights) * torch.ones(1, dtype=weights.dtype, device=weights.device)
         ])
         return {self.means_prec_param: acc_stats}
 

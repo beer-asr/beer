@@ -33,7 +33,7 @@ class TestUtilityFunctions(BaseTest):
 
     def test_onehot(self):
         ref = torch.range(0, 2).long()
-        labs1 = beer.onehot(ref, 3, dtype=ref.dtype)
+        labs1 = beer.onehot(ref, 3, dtype=ref.dtype, device=self.data.device)
         labs2 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         self.assertArraysAlmostEqual(labs1.numpy(), labs2)
 

@@ -310,7 +310,8 @@ class TestHMM(BaseTest):
             with self.subTest(i=i):
                 label_idxs = torch.zeros(self.data.size(0)).long()
                 elabels = beer.onehot(label_idxs, len(model.modelset),
-                                      dtype=self.data.dtype)
+                                      dtype=self.data.dtype,
+                                      device=self.data.device)
                 mask = torch.log(elabels).numpy()
                 elabels = elabels.numpy()
                 stats = model.sufficient_statistics(self.data)

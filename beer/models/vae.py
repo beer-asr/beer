@@ -33,6 +33,30 @@ class VAE(BayesianModel):
     def sufficient_statistics(data):
         return data
 
+    def float(self):
+        return self.__class__(
+            self.encoder.float(),
+            self.decoder.float(),
+            self.latent_model.float(),
+            self.nsamples
+        )
+
+    def double(self):
+        return self.__class__(
+            self.encoder.double(),
+            self.decoder.double(),
+            self.latent_model.double(),
+            self.nsamples
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.encoder.to(device),
+            self.decoder.to(device),
+            self.latent_model.to(device),
+            self.nsamples
+        )
+
     def forward(self, s_stats, latent_variables=None):
         # For the case of the VAE, the sufficient statistics is just
         # the data itself. We just rename s_stats to avoid
@@ -41,16 +65,15 @@ class VAE(BayesianModel):
 
         enc_state = self.encoder(data)
         mean, var = enc_state.mean, enc_state.var
-        #self.cache['latent_stats'] = \
-        #    self.latent_model.sufficient_statistics_from_mean_var(mean, var)
-
         exp_np_params, s_stats = self.latent_model.expected_natural_params(
             mean.detach(), var.detach(), latent_variables=latent_variables,
             nsamples=self.nsamples)
         self.cache['latent_stats'] = s_stats
         samples = mean + torch.sqrt(var) * torch.randn(self.nsamples,
                                                        data.size(0),
-                                                       mean.size(1))
+                                                       mean.size(1),
+                                                       dtype=s_stats.dtype,
+                                                       device=s_stats.device)
         self.cache['kl_divergence'] = enc_state.kl_div(exp_np_params)
         llh = self.decoder(samples).log_likelihood(data)
         return llh
