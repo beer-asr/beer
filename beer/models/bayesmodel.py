@@ -26,9 +26,11 @@ class BayesianParameter:
 
     def __init__(self, prior, posterior):
         self.prior, self.posterior = prior, posterior
-        tensor_type = self.prior.natural_hparams.type()
+        dtype = self.prior.natural_hparams.dtype
+        device = self.prior.natural_hparams.device
         self.natural_grad = \
-            torch.zeros_like(self.prior.natural_hparams).type(tensor_type)
+            torch.zeros_like(self.prior.natural_hparams, dtype=dtype,
+                            device=device)
 
     def __hash__(self):
         return hash(repr(self))
@@ -55,6 +57,51 @@ class BayesianParameter:
         '''Reset the natural gradient to zero.'''
         self.natural_grad.zero_()
 
+    def float(self):
+        '''Convert value of the parameter to float precision.
+
+        Returns:
+            :any:`BayesianParameter`
+
+        '''
+        new_prior = prior.float()
+        new_posterior = posterior.float()
+        new_ngrad = self.natural_grad.float()
+        new_param = BayesianParameter(new_prior, new_posterior)
+        new_param.natural_grad = new_ngrad
+        return new_param
+
+    def double(self):
+        '''Convert the value of the parameter to double precision.
+
+        Returns:
+            :any:`BayesianParameter`
+
+        '''
+        new_prior = prior.double()
+        new_posterior = posterior.double()
+        new_ngrad = self.natural_grad.double()
+        new_param = BayesianParameter(new_prior, new_posterior)
+        new_param.natural_grad = new_ngrad
+        return new_param
+
+    def to(self, device):
+        '''Move the internal buffer of the parameter to the given
+        device.
+
+        Parameters:
+            device (``torch.device``): Device on which to move on
+
+        Returns:
+            :any:`BayesianParameter`
+
+        '''
+        new_prior = prior.to(device)
+        new_posterior = posterior.double(device)
+        new_ngrad = self.natural_grad.to(device)
+        new_param = BayesianParameter(new_prior, new_posterior)
+        new_param.natural_grad = new_ngrad
+        return new_param
 
 class BayesianParameterSet:
     '''Set of Bayesian parameters.
@@ -74,6 +121,43 @@ class BayesianParameterSet:
 
     def __getitem__(self, key):
         return self._parameters[key]
+
+    def float(self):
+        '''Convert value of the parameter to float precision.
+
+        Returns:
+            :any:`BayesianParameterSet`
+
+        '''
+        return BayesianParameterSet([
+            param.float() for param in self._parameters
+        ])
+
+    def double(self):
+        '''Convert the value of the parameter to double precision.
+
+        Returns:
+            :any:`BayesianParameterSet`
+
+        '''
+        return BayesianParameterSet([
+            param.double() for param in self._parameters
+        ])
+
+    def to(self, device):
+        '''Move the internal buffer of the parameter to the given
+        device.
+
+        Parameters:
+            device (``torch.device``): Device on which to move on
+
+        Returns:
+            :any:`BayesianParameterSet`
+
+        '''
+        return BayesianParameterSet([
+            param.to(device) for param in self._parameters
+        ])
 
 
 class BayesianModel(metaclass=abc.ABCMeta):
@@ -154,8 +238,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
         Returns:
             ``torch.Tensor`` or 0.
         '''
-        t_type = self._parameters[0].expected_value().type()
-        return torch.tensor(0.).type(t_type)
+        val = self._parameters[0].expected_value()
+        return torch.tensor(0., dtype=val.dtype, device=val.device)
 
     def kl_div_posterior_prior(self):
         '''Kullback-Leibler divergence between the posterior/prior
@@ -170,6 +254,42 @@ class BayesianModel(metaclass=abc.ABCMeta):
             retval += ExpFamilyPrior.kl_div(parameter.posterior,
                                             parameter.prior).view(1)
         return retval
+
+    @abc.abstractmethod
+    def float(self):
+        '''Create a new :any:`BayesianModel` with all the parameters set
+        to float precision.
+
+        Returns:
+            :any:`BayesianModel`
+
+        '''
+        pass
+
+    @abc.abstractmethod
+    def double(self):
+        '''Abstract method to be implemented by subclasses of
+        :any:`BayesianModel`.
+
+        Create a new :any:`BayesianModel` with all the parameters set to
+        double precision.
+
+        Returns:
+            :any:`BayesianModel`
+
+        '''
+        pass
+
+    @abc.abstractmethod
+    def to(self, device):
+        '''Create a new :any:`BayesianModel` with all the parameters
+        allocated on `device`.
+
+        Returns:
+            :any:`BayesianModel`
+
+        '''
+        pass
 
     @abc.abstractmethod
     def accumulate(self, s_stats, parent_msg=None):
@@ -188,7 +308,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
             dict: Dictionary of accumulated statistics for each parameter.
 
         '''
-        raise NotImplementedError
+        pass
 
     @abc.abstractmethod
     def forward(self, s_stats, latent_variables=None):
@@ -211,7 +331,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
             ``torch.Tensor[n_frames]``: ELBO.
 
         '''
-        raise NotImplementedError
+        pass
 
     @abc.abstractmethod
     def sufficient_statistics(self, data):
@@ -228,7 +348,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
                 statistics of the data.
 
         '''
-        raise NotImplementedError
+        pass
 
 
 class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):

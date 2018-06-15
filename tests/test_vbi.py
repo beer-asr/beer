@@ -13,10 +13,14 @@ from basetest import BaseTest
 # to 0 will make the test fails if one of such update occurs.
 TOLERANCE = 1e-6
 
+# Number of iteration to run while testing the VBI algorithm.
+N_ITER = 30
+
 class TestEvidenceLowerbound(BaseTest):
 
     def setUp(self):
-        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.device = 'cpu'
+        self.dim = int(10 + torch.randint(100, (1, 1)).item())
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
 
@@ -106,7 +110,7 @@ class TestEvidenceLowerbound(BaseTest):
             with self.subTest(i=i):
                 optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
                 previous = -float('inf')
-                for _ in range(100):
+                for _ in range(N_ITER):
                     optim.zero_grad()
                     elbo = elbo_fn(model, self.data)
                     elbo.natural_backward()
@@ -122,7 +126,7 @@ class TestEvidenceLowerbound(BaseTest):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
                     *model.grouped_parameters, lrate=1.)
                 previous = -float('inf')
-                for _ in range(100):
+                for _ in range(N_ITER):
                     optim.zero_grad()
                     elbo = elbo_fn(model, self.data)
                     elbo.natural_backward()
@@ -131,7 +135,6 @@ class TestEvidenceLowerbound(BaseTest):
                     self.assertGreaterEqual(elbo - previous, -TOLERANCE)
                     previous = elbo
 
-    @unittest.skip('not implemented')
     def test_type_switch1_float(self):
         elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, orig_model in enumerate(self.models):
@@ -139,7 +142,7 @@ class TestEvidenceLowerbound(BaseTest):
             with self.subTest(i=i):
                 optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
                 previous = -float('inf')
-                for _ in range(100):
+                for _ in range(N_ITER):
                     optim.zero_grad()
                     elbo = elbo_fn(model, self.data.float())
                     elbo.natural_backward()
@@ -148,7 +151,6 @@ class TestEvidenceLowerbound(BaseTest):
                     self.assertGreaterEqual(elbo - previous, -TOLERANCE)
                     previous = elbo
 
-    @unittest.skip('not implemented')
     def test_type_switch2_float(self):
         elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, orig_model in enumerate([self.ppca, self.plda]):
@@ -157,9 +159,75 @@ class TestEvidenceLowerbound(BaseTest):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
                     *model.grouped_parameters, lrate=1.)
                 previous = -float('inf')
-                for _ in range(100):
+                for _ in range(N_ITER):
                     optim.zero_grad()
-                    elbo = elbo_fn(model, self.data)
+                    elbo = elbo_fn(model, self.data.float())
+                    elbo.natural_backward()
+                    optim.step()
+                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
+                    self.assertGreaterEqual(elbo - previous, -TOLERANCE)
+                    previous = elbo
+
+    def test_type_switch1_double(self):
+        elbo_fn = beer.EvidenceLowerBound(len(self.data))
+        for i, orig_model in enumerate(self.models):
+            model = orig_model.double()
+            with self.subTest(i=i):
+                optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
+                previous = -float('inf')
+                for _ in range(N_ITER):
+                    optim.zero_grad()
+                    elbo = elbo_fn(model, self.data.double())
+                    elbo.natural_backward()
+                    optim.step()
+                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
+                    self.assertGreaterEqual(elbo - previous, -TOLERANCE)
+                    previous = elbo
+
+    def test_type_switch2_double(self):
+        elbo_fn = beer.EvidenceLowerBound(len(self.data))
+        for i, orig_model in enumerate([self.ppca, self.plda]):
+            model = orig_model.double()
+            with self.subTest(i=i):
+                optim = beer.BayesianModelCoordinateAscentOptimizer(
+                    *model.grouped_parameters, lrate=1.)
+                previous = -float('inf')
+                for _ in range(N_ITER):
+                    optim.zero_grad()
+                    elbo = elbo_fn(model, self.data.double())
+                    elbo.natural_backward()
+                    optim.step()
+                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
+                    self.assertGreaterEqual(elbo - previous, -TOLERANCE)
+                    previous = elbo
+
+    def test_change_device1(self):
+        elbo_fn = beer.EvidenceLowerBound(len(self.data))
+        for i, orig_model in enumerate(self.models):
+            model = orig_model.to(self.device)
+            with self.subTest(i=i):
+                optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
+                previous = -float('inf')
+                for _ in range(N_ITER):
+                    optim.zero_grad()
+                    elbo = elbo_fn(model, self.data.to(self.device))
+                    elbo.natural_backward()
+                    optim.step()
+                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
+                    self.assertGreaterEqual(elbo - previous, -TOLERANCE)
+                    previous = elbo
+
+    def test_change_device2(self):
+        elbo_fn = beer.EvidenceLowerBound(len(self.data))
+        for i, orig_model in enumerate([self.ppca, self.plda]):
+            model = orig_model.to(self.device)
+            with self.subTest(i=i):
+                optim = beer.BayesianModelCoordinateAscentOptimizer(
+                    *model.grouped_parameters, lrate=1.)
+                previous = -float('inf')
+                for _ in range(N_ITER):
+                    optim.zero_grad()
+                    elbo = elbo_fn(model, self.data.to(self.device))
                     elbo.natural_backward()
                     optim.step()
                     elbo = round(float(elbo) / (len(self.data) * self.dim), 3)

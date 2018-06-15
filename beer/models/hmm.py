@@ -96,7 +96,7 @@ class HMM(BayesianModel):
 
         for i, j in enumerate(unigram):
             if nstate_per_unit == 1:
-                trans_mat[i,:] += (1 - gamma) * unigram
+                trans_mat[i, :] += (1 - gamma) * unigram
                 trans_mat[i, i] += gamma
             else:
                 for n in range(nstate_per_unit-1):
@@ -166,18 +166,43 @@ class HMM(BayesianModel):
             path.insert(0, backtrack[i, path[0]])
         return torch.LongTensor(path)
 
+    def float(self):
+        return self.__class__(
+            self.init_states,
+            self.final_states,
+            self.trans_mat.float(),
+            self.modelset.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.init_states,
+            self.final_states,
+            self.trans_mat.double(),
+            self.modelset.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.init_states,
+            self.final_states,
+            self.trans_mat.to(device),
+            self.modelset.to(device)
+        )
 
     def forward(self, s_stats, latent_variables=None):
         pc_exp_llh = self.modelset(s_stats)
         if latent_variables is not None:
             onehot_labels = onehot(latent_variables, len(self.modelset),
-                                   dtype=pc_exp_llh.dtype)
+                                   dtype=pc_exp_llh.dtype,
+                                   device=pc_exp_llh.device)
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
             self._resps = onehot_labels
         elif self.training_type == 'viterbi':
             onehot_labels = onehot(HMM.viterbi(self.init_states, 
                                   self.final_states, self.trans_mat, pc_exp_llh), 
-                                  len(self.modelset), dtype=pc_exp_llh.dtype)
+                                  len(self.modelset), dtype=pc_exp_llh.dtype,
+                                  device=pc_exp_llh.device)
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
             self._resps = onehot_labels
         else:
@@ -215,10 +240,29 @@ class AlignModelSet(BayesianModelSet):
     def sufficient_statistics(self, data):
         return len(data), self.model_set.sufficient_statistics(data)
 
+    def float(self):
+        return self.__class__(
+            self.model_set.float(),
+            self.state_ids
+        )
+
+    def double(self):
+        return self.__class__(
+            self.model_set.double(),
+            self.state_ids
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.model_set.to(device),
+            self.state_ids
+        )
+
     def forward(self, len_s_stats, latent_variables=None):
         length, s_stats = len_s_stats
         pc_exp_llh = self.model_set(s_stats)
-        new_pc_exp_llh = torch.zeros((length, len(self.state_ids)), dtype=pc_exp_llh.dtype)
+        new_pc_exp_llh = torch.zeros((length, len(self.state_ids)),
+                                     dtype=pc_exp_llh.dtype, device=pc_exp_llh.device)
         new_pc_exp_llh[:, self._idxs] = pc_exp_llh[:, self.state_ids[self._idxs]]
         return new_pc_exp_llh
 
@@ -227,7 +271,8 @@ class AlignModelSet(BayesianModelSet):
         if parent_msg is None:
             raise ValueError('"parent_msg" should not be None')
         weights = parent_msg
-        new_weights = torch.zeros((length, len(self.model_set)), dtype=weights.dtype)
+        new_weights = torch.zeros((length, len(self.model_set)),
+                                  dtype=weights.dtype, device=weights.device)
         for key, val in enumerate(weights.t()):
             new_weights[:, self.state_ids[key]] += val
 

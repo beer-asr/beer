@@ -131,6 +131,52 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         self._natural_hparams = copied_value
         self._log_norm_value = torch.tensor(log_norm_value)
 
+    def float(self):
+        '''Create a new :any:`ExpFamilyPrior` with all the parameters set
+        to float precision.
+
+        Returns:
+            :any:`ExpFamilyPrior`
+
+        '''
+        return self.copy_with_new_params(self.natural_hparams.float())
+
+    def double(self):
+        '''Create a new :any:`ExpFamilyPrior` with all the parameters set to
+        double precision.
+
+        Returns:
+            :any:`ExpFamilyPrior`
+
+        '''
+        return self.copy_with_new_params(self.natural_hparams.double())
+
+    def to(self, device):
+        '''Create a new :any:`ExpFamilyPrior` with all the parameters
+        allocated on `device`.
+
+        Returns:
+            :any:`ExpFamilyPrior`
+
+        '''
+        return self.copy_with_new_params(self.natural_hparams.to(device))
+
+    @abc.abstractmethod
+    def copy_with_new_params(self, params):
+        '''Abstract method to be implemented by subclasses of
+        ``beer.ExpFamilyPrior``.
+
+        Copy the prior and set new (natural) parameters.
+
+        Args:
+            params (``torch.Tensor``): New natural parameters.
+
+        Returns:
+            :any:`ExpFamilyPrior`
+
+        '''
+        pass
+
     @abc.abstractmethod
     def split_sufficient_statistics(self, s_stats):
         '''Abstract method to be implemented by subclasses of
@@ -186,6 +232,9 @@ class JointExpFamilyPrior(ExpFamilyPrior):
         n_hparams = torch.cat([prior.natural_hparams for prior in self._priors])
         super().__init__(n_hparams)
 
+    def copy_with_new_params(self, params):
+        raise NotImplementedError
+
     def split_sufficient_statistics(self, s_stats):
         previous_dim = 0
         retval = []
@@ -225,6 +274,11 @@ class DirichletPrior(ExpFamilyPrior):
         '''
         natural_hparams = torch.tensor(concentrations - 1, requires_grad=True)
         super().__init__(natural_hparams)
+
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
 
     def split_sufficient_statistics(self, s_stats):
         '''For the Dirichlet density, this is simply the identity
@@ -302,6 +356,11 @@ class NormalGammaPrior(ExpFamilyPrior):
         ]), requires_grad=True)
         super().__init__(natural_hparams)
 
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
+
     def split_sufficient_statistics(self, s_stats):
         '''Split the sufficient statistics into 4 groups.
 
@@ -370,6 +429,13 @@ class JointNormalGammaPrior(ExpFamilyPrior):
             2 * shape - 1
         ]), requires_grad=True)
         super().__init__(natural_hparams)
+
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        new_instance.ncomp = self.ncomp
+        new_instance.dim = self.dim
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
 
     def split_sufficient_statistics(self, s_stats):
         '''Split the sufficient statistics into 4 groups.
@@ -455,6 +521,12 @@ class NormalWishartPrior(ExpFamilyPrior):
         ]), requires_grad=True)
         super().__init__(natural_hparams)
 
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        new_instance.dim = self.dim
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
+
     def split_sufficient_statistics(self, s_stats):
         '''Split the sufficient statistics into 4 groups.
 
@@ -530,9 +602,17 @@ class JointNormalWishartPrior(ExpFamilyPrior):
             (mmT + inv_scale).view(-1),
             (scales.view(-1, 1) * means).view(-1),
             scales,
-            (torch.ones(1) * (dof - self.dim)).type(means.type())
+            (torch.ones(1, dtype=means.dtype, device=means.device) * \
+                (dof - self.dim))
         ]), requires_grad=True)
         super().__init__(natural_hparams)
+
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        new_instance.ncomp = self.ncomp
+        new_instance.dim = self.dim
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
 
     def split_sufficient_statistics(self, s_stats):
         '''Split the sufficient statistics into 4 groups.
@@ -570,7 +650,8 @@ class JointNormalWishartPrior(ExpFamilyPrior):
         quad_exp = ((hnp2s[:, None, :] * hnp2s[:, :, None]) / \
             hnp3s[:, None, None]).sum(dim=0)
         lognorm += -.5 * (hnp4 + self.dim) * _logdet(hnp1 - quad_exp)
-        seq = torch.arange(1, self.dim + 1, 1).type(natural_hparams.type())
+        seq = torch.arange(1, self.dim + 1, 1, dtype=natural_hparams.dtype,
+                           device=natural_hparams.device)
         lognorm += torch.lgamma(.5 * (hnp4 + self.dim + 1 - seq)).sum()
         return lognorm
 
@@ -607,6 +688,12 @@ class NormalFullCovariancePrior(ExpFamilyPrior):
             prec @ mean,
         ]), requires_grad=True)
         super().__init__(natural_hparams)
+
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        new_instance.dim = self.dim
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
 
     def split_sufficient_statistics(self, s_stats):
         '''Split the sufficient statistics into 2 groups.
@@ -672,6 +759,12 @@ class NormalIsotropicCovariancePrior(ExpFamilyPrior):
         ]), requires_grad=True)
         super().__init__(natural_hparams)
 
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
+
+
     def split_sufficient_statistics(self, s_stats):
         '''Split the sufficient statistics into 2 groups.
 
@@ -732,8 +825,15 @@ class MatrixNormalPrior(ExpFamilyPrior):
         natural_hparams = torch.tensor(torch.cat([
             -.5 * prec.contiguous().view(-1),
             (prec @ mean).view(-1),
-        ]), dtype=mean.dtype, requires_grad=True)
+        ]), dtype=mean.dtype, device=mean.device, requires_grad=True)
         super().__init__(natural_hparams)
+
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        new_instance.dim1 = self.dim1
+        new_instance.dim2 = self.dim2
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
 
     def split_sufficient_statistics(self, s_stats):
         '''Split the sufficient statistics into 2 groups.
@@ -792,6 +892,11 @@ class GammaPrior(ExpFamilyPrior):
         natural_hparams = torch.tensor(torch.cat([shape - 1, -rate]),
                                        requires_grad=True)
         super().__init__(natural_hparams)
+
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
 
     def split_sufficient_statistics(self, s_stats):
         '''Split the sufficient statistics into 2 groups.

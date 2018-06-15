@@ -3,7 +3,7 @@
 import torch
 
 
-def onehot(labels, max_label, dtype):
+def onehot(labels, max_label, dtype, device):
     '''Convert a sequence of indices into a one-hot encoded matrix.
 
     Args:
@@ -11,12 +11,14 @@ def onehot(labels, max_label, dtype):
         max_label (int): Maximum value for the index. This parameter
             defined the dimension of the returned matrix.
         dtype (``torch.dtype``): Data type of the return tensor.
+        device (``torch.devce``): On which device to allocate the
+            tensor.
 
     Returns:
         ``torch.Tensor``: a matrix of N x `max_label` where each column \
             has a single element set to 1.
     '''
-    retval = torch.zeros(len(labels), max_label, dtype=dtype)
+    retval = torch.zeros(len(labels), max_label, dtype=dtype, device=device)
     idxs = torch.range(0, len(labels) - 1).long()
     retval[idxs, labels] = 1
     return retval
