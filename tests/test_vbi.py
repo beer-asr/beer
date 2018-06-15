@@ -2,7 +2,7 @@
 
 import sys
 sys.path.insert(0, './')
-
+import unittest
 import torch
 import beer
 from basetest import BaseTest
@@ -99,6 +99,7 @@ class TestEvidenceLowerbound(BaseTest):
         pldaset = beer.PLDASet.create(mean, prec, noise_s, class_s, means, pseudo_counts)
         self.plda = beer.Mixture.create(weights, pldaset, pseudo_counts)
 
+
     def test_optim1(self):
         elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, model in enumerate(self.models):
@@ -117,6 +118,41 @@ class TestEvidenceLowerbound(BaseTest):
     def test_optim2(self):
         elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, model in enumerate([self.ppca, self.plda]):
+            with self.subTest(i=i):
+                optim = beer.BayesianModelCoordinateAscentOptimizer(
+                    *model.grouped_parameters, lrate=1.)
+                previous = -float('inf')
+                for _ in range(100):
+                    optim.zero_grad()
+                    elbo = elbo_fn(model, self.data)
+                    elbo.natural_backward()
+                    optim.step()
+                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
+                    self.assertGreaterEqual(elbo - previous, -TOLERANCE)
+                    previous = elbo
+
+    @unittest.skip('not implemented')
+    def test_type_switch1_float(self):
+        elbo_fn = beer.EvidenceLowerBound(len(self.data))
+        for i, orig_model in enumerate(self.models):
+            model = orig_model.float()
+            with self.subTest(i=i):
+                optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
+                previous = -float('inf')
+                for _ in range(100):
+                    optim.zero_grad()
+                    elbo = elbo_fn(model, self.data.float())
+                    elbo.natural_backward()
+                    optim.step()
+                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
+                    self.assertGreaterEqual(elbo - previous, -TOLERANCE)
+                    previous = elbo
+
+    @unittest.skip('not implemented')
+    def test_type_switch2_float(self):
+        elbo_fn = beer.EvidenceLowerBound(len(self.data))
+        for i, orig_model in enumerate([self.ppca, self.plda]):
+            model = orig_model.float()
             with self.subTest(i=i):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
                     *model.grouped_parameters, lrate=1.)

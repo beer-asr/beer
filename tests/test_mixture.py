@@ -80,7 +80,8 @@ class TestMixture(BaseTest):
         for i, model in enumerate(self.mixtures):
             with self.subTest(i=i):
                 labels = torch.zeros(self.data.size(0)).long()
-                elabels = beer.onehot(labels, len(model.modelset))
+                elabels = beer.onehot(labels, len(model.modelset),
+                                      dtype=self.data.dtype)
                 mask = torch.log(elabels).numpy()
                 elabels = elabels.numpy()
                 stats = model.sufficient_statistics(self.data)

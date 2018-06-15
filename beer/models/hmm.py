@@ -172,10 +172,10 @@ class HMM(BayesianModel):
         log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat, pc_exp_llh)
 
         if latent_variables is not None:
-            onehot_labels = onehot(latent_variables, len(self.modelset))
-            onehot_labels = onehot_labels.type(pc_exp_llh.type())
-            exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
-            self._resps = onehot_labels
+            resps = onehot(latent_variables, len(self.modelset),
+                           dtype=pc_exp_llh.dtype)
+            exp_llh = (pc_exp_llh * resps).sum(dim=-1)
+            self._resps = resps
         else:
             log_alphas = HMM.baum_welch_forward(self.init_states, self.trans_mat, pc_exp_llh)
             log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat, pc_exp_llh)

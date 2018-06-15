@@ -98,10 +98,10 @@ class Mixture(BayesianModel):
         per_component_exp_llh += log_weights
 
         if latent_variables is not None:
-            onehot_labels = onehot(latent_variables, len(self.modelset))
-            onehot_labels = onehot_labels.type(per_component_exp_llh.type())
-            exp_llh = (per_component_exp_llh * onehot_labels).sum(dim=-1)
-            self.cache['resps'] = onehot_labels
+            resps = onehot(latent_variables, len(self.modelset),
+                           dtype=log_weights.dtype)
+            exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
+            self.cache['resps'] = resps
         else:
             exp_llh = logsumexp(per_component_exp_llh, dim=1).view(-1)
             self.cache['resps'] = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
@@ -134,8 +134,8 @@ class Mixture(BayesianModel):
 
         # Estimate the responsibilities if not given.
         if latent_variables is not None:
-            onehot_labels = onehot(latent_variables, len(self.modelset))
-            resps = onehot_labels.type(mean.type())
+            resps = onehot(latent_variables, len(self.modelset),
+                           dtype=mean.dtype)
         else:
             noise =  torch.randn(nsamples, *mean.size()).type(mean.type())
             samples = (mean + torch.sqrt(var) * noise).view(nframes * nsamples, -1)

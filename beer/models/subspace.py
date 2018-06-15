@@ -13,6 +13,7 @@ from ..expfamilyprior import GammaPrior
 from ..expfamilyprior import NormalIsotropicCovariancePrior
 from ..expfamilyprior import MatrixNormalPrior
 from ..expfamilyprior import NormalFullCovariancePrior
+from ..utils import symmetrize_matrix
 
 
 def kl_div_std_norm(means, cov):
@@ -640,23 +641,26 @@ class PLDASet(BayesianModelSet):
 
         acc_noise_s_stats1 = (resps.t()[:, :, None] * l_quads).sum(dim=0)
         acc_noise_s_stats1 = acc_noise_s_stats1.sum(dim=0)
+        acc_noise_s_stats1 = acc_noise_s_stats1.view(self._subspace1_dim,
+                                                     self._subspace1_dim)
+        acc_noise_s_stats1 = symmetrize_matrix(acc_noise_s_stats1)
         data_class_means = (class_means + m_mean[None, :])
         data_class_means = resps.t()[:, :, None] * (data[None, :, :] - \
             data_class_means[:, None, :])
         acc_noise_s_stats2 = torch.stack([
             l_means[:, i, :].t() @ data_class_means[i]
-            #data_class_means[i].t() @ l_means[:, i, :]
             for i in range(len(self))
         ]).sum(dim=0).view(-1)
 
         acc_class_s_stats1 = \
             (resps @ class_mean_quad.view(len(self), -1)).sum(dim=0)
-        acc_class_s_stats1 = acc_class_s_stats1.view(self._subspace2_dim,  self._subspace2_dim, )
+        acc_class_s_stats1 = acc_class_s_stats1.view(self._subspace2_dim,
+                                                     self._subspace2_dim)
+        acc_class_s_stats1 = symmetrize_matrix(acc_class_s_stats1)
         data_noise_means = (data - noise_means - m_mean)
         acc_means = (resps.t()[:, :, None] * data_noise_means).sum(dim=1)
         acc_class_s_stats2 = acc_means[:, :, None] * class_mean_mean[:, None, :]
         acc_class_s_stats2 = acc_class_s_stats2.sum(dim=0).t().contiguous().view(-1)
-        acc_class_s_stats1 = .5 * (acc_class_s_stats1 + acc_class_s_stats1.t())
         acc_stats = {
             self.precision_param: torch.cat([
                 .5 * torch.tensor(len(s_stats) * self._data_dim).view(1).type(t_type),
@@ -667,7 +671,7 @@ class PLDASet(BayesianModelSet):
                 prec * acc_mean
             ]),
             self.noise_subspace_param:  torch.cat([
-                - .5 * prec * acc_noise_s_stats1,
+                - .5 * prec * acc_noise_s_stats1.view(-1),
                 prec * acc_noise_s_stats2
             ]),
             self.class_subspace_param:  torch.cat([
@@ -677,14 +681,15 @@ class PLDASet(BayesianModelSet):
         }
 
         # Accumulate the statistics for the class means.
-        class_mean_acc_stats1 = class_s_quad.view(-1)
+        class_mean_acc_stats1 = class_s_quad
+        class_mean_acc_stats1 = symmetrize_matrix(class_mean_acc_stats1)
         w_data_noise_means = resps.t()[:, :, None] * data_noise_means
         class_mean_acc_stats2 = \
             (class_s_mean @ w_data_noise_means.sum(dim=1).t()).t()
         for i, mean_param in enumerate(self.class_mean_params):
             class_mean_acc_stats = {
                 mean_param: torch.cat([
-                    -.5 * prec * resps[:, i].sum() * class_mean_acc_stats1,
+                    -.5 * prec * resps[:, i].sum() * class_mean_acc_stats1.view(-1),
                     prec * class_mean_acc_stats2[i]
                 ])
             }
