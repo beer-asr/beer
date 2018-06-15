@@ -92,6 +92,27 @@ class Mixture(BayesianModel):
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
+    def float(self):
+        return self.__class__(
+            self.weights_param.prior.float(),
+            self.weights_param.posterior.float(),
+            self.modelset.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.weights_param.prior.double(),
+            self.weights_param.posterior.double(),
+            self.modelset.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.weights_param.prior.to(device),
+            self.weights_param.posterior.to(device),
+            self.modelset.to(device)
+        )
+
     def forward(self, s_stats, latent_variables=None):
         log_weights = self.weights_param.expected_value().view(1, -1)
         per_component_exp_llh = self.modelset(s_stats)
@@ -99,7 +120,7 @@ class Mixture(BayesianModel):
 
         if latent_variables is not None:
             resps = onehot(latent_variables, len(self.modelset),
-                           dtype=log_weights.dtype)
+                           dtype=log_weights.dtype, device=log_weights.device)
             exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
             self.cache['resps'] = resps
         else:
@@ -135,9 +156,10 @@ class Mixture(BayesianModel):
         # Estimate the responsibilities if not given.
         if latent_variables is not None:
             resps = onehot(latent_variables, len(self.modelset),
-                           dtype=mean.dtype)
+                           dtype=mean.dtype, device=mean.device)
         else:
-            noise =  torch.randn(nsamples, *mean.size()).type(mean.type())
+            noise =  torch.randn(nsamples, *mean.size(), dtype=mean.dtype,
+                                 device=mean.device)
             samples = (mean + torch.sqrt(var) * noise).view(nframes * nsamples, -1)
             s_stats = self.sufficient_statistics(samples)
             resps = torch.exp(self.log_predictions(s_stats))
