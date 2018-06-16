@@ -43,5 +43,15 @@ class TestUtilityFunctions(BaseTest):
         sym_mat2 = .5 * (mat + mat.T)
         self.assertArraysAlmostEqual(sym_mat1, sym_mat2)
 
+    def test_mat_symposdef(self):
+        sposdef_mat1 = beer.make_symposdef(self.matrix).numpy()
+        self.assertGreaterEqual(np.linalg.det(sposdef_mat1), 0)
+
+        sym_mat = beer.symmetrize_matrix(self.matrix)
+        test_mat = sym_mat + self.dim * torch.eye(sym_mat.shape[0])
+        sposdef_mat1 = beer.make_symposdef(test_mat).numpy()
+        self.assertArraysAlmostEqual(sposdef_mat1, test_mat)
+        self.assertGreaterEqual(np.linalg.det(sposdef_mat1), 0)
+
 
 __all__ = ['TestUtilityFunctions']

@@ -13,7 +13,7 @@ from ..expfamilyprior import GammaPrior
 from ..expfamilyprior import NormalIsotropicCovariancePrior
 from ..expfamilyprior import MatrixNormalPrior
 from ..expfamilyprior import NormalFullCovariancePrior
-from ..utils import symmetrize_matrix
+from ..utils import make_symposdef
 
 
 def kl_div_std_norm(means, cov):
@@ -735,7 +735,7 @@ class PLDASet(BayesianModelSet):
         acc_noise_s_stats1 = acc_noise_s_stats1.sum(dim=0)
         acc_noise_s_stats1 = acc_noise_s_stats1.view(self._subspace1_dim,
                                                      self._subspace1_dim)
-        acc_noise_s_stats1 = symmetrize_matrix(acc_noise_s_stats1)
+        acc_noise_s_stats1 = make_symposdef(acc_noise_s_stats1)
         data_class_means = (class_means + m_mean[None, :])
         data_class_means = resps.t()[:, :, None] * (data[None, :, :] - \
             data_class_means[:, None, :])
@@ -748,7 +748,7 @@ class PLDASet(BayesianModelSet):
             (resps @ class_mean_quad.view(len(self), -1)).sum(dim=0)
         acc_class_s_stats1 = acc_class_s_stats1.view(self._subspace2_dim,
                                                      self._subspace2_dim)
-        acc_class_s_stats1 = symmetrize_matrix(acc_class_s_stats1)
+        acc_class_s_stats1 = make_symposdef(acc_class_s_stats1)
         data_noise_means = (data - noise_means - m_mean)
         acc_means = (resps.t()[:, :, None] * data_noise_means).sum(dim=1)
         acc_class_s_stats2 = acc_means[:, :, None] * class_mean_mean[:, None, :]
@@ -776,7 +776,7 @@ class PLDASet(BayesianModelSet):
 
         # Accumulate the statistics for the class means.
         class_mean_acc_stats1 = class_s_quad
-        class_mean_acc_stats1 = symmetrize_matrix(class_mean_acc_stats1)
+        class_mean_acc_stats1 = make_symposdef(class_mean_acc_stats1)
         w_data_noise_means = resps.t()[:, :, None] * data_noise_means
         class_mean_acc_stats2 = \
             (class_s_mean @ w_data_noise_means.sum(dim=1).t()).t()
