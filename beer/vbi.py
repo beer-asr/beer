@@ -4,6 +4,34 @@
 
 import torch
 
+
+def add_acc_stats(acc_stats1, acc_stats2):
+    '''Add two ditionary of accumulated statistics. Both dictionaries
+    may have different set of keys. The elements in the dictionary
+    should implement the sum operation.
+
+    Args:
+        acc_stats1 (dict): First set of accumulated statistics.
+        acc_stats2 (dict): Second set of accumulated statistics.
+
+    Returns:
+        dict: `acc_stats1` + `acc_stats2`
+
+    '''
+    keys1, keys2 = set(acc_stats1.keys()), set(acc_stats2.keys())
+    new_stats = {}
+    for key in keys1.intersection(keys2):
+        new_stats[key] = acc_stats1[key] + acc_stats2[key]
+
+    for key in keys1.difference(keys2):
+        new_stats[key] = acc_stats1[key]
+
+    for key in keys2.difference(keys1):
+        new_stats[key] = acc_stats2[key]
+
+    return new_stats
+
+
 class EvidenceLowerBoundInstance:
     '''Evidence Lower Bound of a data set given a model.
 
@@ -12,14 +40,14 @@ class EvidenceLowerBoundInstance:
 
     '''
 
-    def __init__(self, expected_llh, local_kl_div, global_kl_div, parameters,
-                 acc_stats, scale):
+    def __init__(self, expected_llh, local_kl_div, global_kl_div,
+                model_parameters, acc_stats, scale):
         self._exp_llh = expected_llh
         self._global_kl_div = global_kl_div
         self._local_kl_div = local_kl_div
         self._elbo = scale * (self._exp_llh.sum() - \
             self._local_kl_div.sum()) - self._global_kl_div
-        self._parameters = parameters
+        self._model_parameters = model_parameters
         self._acc_stats = acc_stats
         self._scale = scale
 
@@ -57,7 +85,7 @@ class EvidenceLowerBoundInstance:
         '''Compute the natural gradient of the loss w.r.t. to all the
         :any:`BayesianParameter`.
         '''
-        for parameter in self._parameters:
+        for parameter in self._model_parameters:
             try:
                 acc_stats = self._acc_stats[parameter]
                 parameter.natural_grad += parameter.prior.natural_hparams +  \
@@ -117,7 +145,7 @@ class EvidenceLowerBound:
             expected_llh=model(s_stats, latent_variables),
             local_kl_div=model.local_kl_div_posterior_prior(),
             global_kl_div=model.kl_div_posterior_prior(),
-            parameters=model.parameters,
+            model_parameters=model.parameters,
             acc_stats=model.accumulate(s_stats),
             scale=self.datasize / float(len(data))
         )
