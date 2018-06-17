@@ -422,7 +422,7 @@ class PLDASet(BayesianModelSet):
 
     @classmethod
     def create(cls, mean, precision, noise_subspace, class_subspace,
-               class_means, pseudo_counts=1.):
+               class_means, pseudo_counts=1., noise_std=0.):
         '''Create a Probabilistic Principal Ccomponent model.
 
         Args:
@@ -440,6 +440,8 @@ class PLDASet(BayesianModelSet):
                 class as a matrix.
             pseudo_counts (``torch.Tensor``): Strength of the prior.
                 Should be greater than 0.
+            noise_std (float): Standard deviation of the noise to
+                initialize the posterior distribution.
 
         Returns:
             :any:`PPCA`
@@ -463,20 +465,27 @@ class PLDASet(BayesianModelSet):
                         device=mean.device)
         cov /= pseudo_counts
         prior_noise_subspace = MatrixNormalPrior(noise_subspace, cov)
-        posterior_noise_subspace = MatrixNormalPrior(noise_subspace, cov)
+        rand_init = noise_subspace + noise_std * torch.randn(
+            *noise_subspace.size(), dtype=mean.dtype, device=mean.device)
+        posterior_noise_subspace = MatrixNormalPrior(rand_init, cov)
 
         # Class subspace.
         cov = torch.eye(class_subspace.size(0), dtype=mean.dtype,
                         device=mean.device)
         cov /= pseudo_counts
         prior_class_subspace = MatrixNormalPrior(class_subspace, cov)
-        posterior_class_subspace = MatrixNormalPrior(class_subspace, cov)
+        rand_init = class_subspace + noise_std * torch.randn(
+            *class_subspace.size(), dtype=mean.dtype, device=mean.device)
+        posterior_class_subspace = MatrixNormalPrior(rand_init, cov)
 
         # cov = same as class subspace.
         class_mean_priors, class_mean_posteriors = [], []
         for mean_i in class_means:
             class_mean_priors.append(NormalFullCovariancePrior(mean_i, cov))
-            class_mean_posteriors.append(NormalFullCovariancePrior(mean_i, cov))
+            class_mean_posteriors.append(NormalFullCovariancePrior(
+                mean_i + noise_std * torch.randn(mean_i.shape[0],
+                                                 dtype=mean.dtype,
+                                                 device=mean.device), cov))
 
         return cls(prior_mean, posterior_mean, prior_prec, posterior_prec,
                    prior_noise_subspace, posterior_noise_subspace,
