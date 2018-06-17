@@ -72,8 +72,8 @@ class VAE(BayesianModel):
         samples = mean + torch.sqrt(var) * torch.randn(self.nsamples,
                                                        data.size(0),
                                                        mean.size(1),
-                                                       dtype=s_stats.dtype,
-                                                       device=s_stats.device)
+                                                       dtype=mean.dtype,
+                                                       device=mean.device)
         self.cache['kl_divergence'] = enc_state.kl_div(exp_np_params)
         llh = self.decoder(samples).log_likelihood(data)
         return llh

@@ -48,6 +48,7 @@ class TestUtilityFunctions(BaseTest):
         self.assertGreaterEqual(np.linalg.det(sposdef_mat1), 0)
 
         sym_mat = beer.symmetrize_matrix(self.matrix)
+
         test_mat = sym_mat + torch.diag(torch.diag(sym_mat) ** 2) + \
             self.dim * torch.eye(sym_mat.shape[0]).type(self.type)
         sposdef_mat1 = beer.make_symposdef(test_mat).numpy()
