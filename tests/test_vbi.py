@@ -14,6 +14,7 @@ from basetest import BaseTest
 TOLERANCE = 1e-6
 
 # Number of iteration to run while testing the VBI algorithm.
+N_EPOCHS = 2
 N_ITER = 30
 
 
@@ -124,6 +125,23 @@ class TestEvidenceLowerbound(BaseTest):
 
         new_stats = beer.vbi.add_acc_stats({}, {})
         self.assertEqual(len(new_stats), 0)
+
+    def test_sum1(self):
+        elbo_fn = beer.EvidenceLowerBound(len(self.data))
+        for i, model in enumerate(self.models):
+            with self.subTest(i=i):
+                optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
+                previous = -float('inf')
+                for _ in range(N_EPOCHS):
+                    optim.zero_grad()
+                    elbo = elbo_fn.zero()
+                    for _ in range(N_ITER):
+                        elbo += elbo_fn(model, self.data)
+                    elbo.natural_backward()
+                    optim.step()
+                    elbo_val = round(float(elbo) / (len(self.data) * self.dim), 3)
+                    self.assertGreaterEqual(elbo_val - previous, -TOLERANCE)
+                    previous = elbo_val
 
     def test_optim1(self):
         elbo_fn = beer.EvidenceLowerBound(len(self.data))

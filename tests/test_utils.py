@@ -21,7 +21,7 @@ class TestUtilityFunctions(BaseTest):
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
-        self.matrix = torch.randn(self.dim, self.dim)
+        self.matrix = torch.randn(self.dim, self.dim).type(self.type)
 
     def test_logsumexp(self):
         val1 = beer.logsumexp(self.data, dim=0).numpy()
@@ -48,7 +48,7 @@ class TestUtilityFunctions(BaseTest):
         self.assertGreaterEqual(np.linalg.det(sposdef_mat1), 0)
 
         sym_mat = beer.symmetrize_matrix(self.matrix)
-        test_mat = sym_mat + self.dim * torch.eye(sym_mat.shape[0])
+        test_mat = sym_mat + 2 * self.dim * torch.eye(sym_mat.shape[0]).type(self.type)
         sposdef_mat1 = beer.make_symposdef(test_mat).numpy()
         self.assertArraysAlmostEqual(sposdef_mat1, test_mat)
         self.assertGreaterEqual(np.linalg.det(sposdef_mat1), 0)
