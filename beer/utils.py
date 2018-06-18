@@ -44,6 +44,7 @@ def logsumexp(tensor, dim=0):
     del new_size[dim]
     return retval.view(*new_size)
 
+
 def symmetrize_matrix(mat):
     '''Enforce a matrix to be symmetric.
 
@@ -57,4 +58,25 @@ def symmetrize_matrix(mat):
     return .5 * (mat + mat.t())
 
 
-__all__ = ['onehot', 'logsumexp', 'symmetrize_matrix']
+def make_symposdef(mat, eval_threshold=1e-3):
+    '''Enforce a matrix to be symmetric and positive definite.
+
+    Args:
+        mat (``torch.Tensor[dim, dim]``): Input matrix.
+        eval_threshold (float): Minimum value of the eigen values of
+            the matrix.
+
+    Returns:
+        ``torch.Tensor[dim, dim]``
+
+    '''
+    sym_mat = symmetrize_matrix(mat)
+    evals, evecs = torch.symeig(sym_mat, eigenvectors=True)
+
+    threshold = torch.tensor(eval_threshold, dtype=sym_mat.dtype,
+                             device=sym_mat.device)
+    new_evals = torch.where(evals < threshold, threshold, evals)
+    return (evecs @ torch.diag(new_evals) @ evecs.t()).view(*mat.shape)
+
+
+__all__ = ['onehot', 'logsumexp', 'symmetrize_matrix', 'make_symposdef']

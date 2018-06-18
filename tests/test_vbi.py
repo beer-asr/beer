@@ -14,7 +14,9 @@ from basetest import BaseTest
 TOLERANCE = 1e-6
 
 # Number of iteration to run while testing the VBI algorithm.
+N_EPOCHS = 2
 N_ITER = 30
+
 
 class TestEvidenceLowerbound(BaseTest):
 
@@ -103,6 +105,43 @@ class TestEvidenceLowerbound(BaseTest):
         pldaset = beer.PLDASet.create(mean, prec, noise_s, class_s, means, pseudo_counts)
         self.plda = beer.Mixture.create(weights, pldaset, pseudo_counts)
 
+        self.acc_stats1 = {
+            'shared_key': torch.randn(self.dim).type(self.type),
+            'key1': torch.randn(self.dim).type(self.type),
+        }
+        self.acc_stats2 = {
+            'shared_key': torch.randn(self.dim).type(self.type),
+            'key2': torch.randn(self.dim).type(self.type),
+        }
+
+    def test_add_acc_stats(self):
+        new_stats = beer.vbi.add_acc_stats(self.acc_stats1, self.acc_stats2)
+        self.assertArraysAlmostEqual(new_stats['shared_key'].numpy(),
+            self.acc_stats1['shared_key'].numpy() + self.acc_stats2['shared_key'].numpy())
+        self.assertArraysAlmostEqual(new_stats['key1'].numpy(),
+                                     self.acc_stats1['key1'].numpy())
+        self.assertArraysAlmostEqual(new_stats['key2'].numpy(),
+                                     self.acc_stats2['key2'].numpy())
+
+        new_stats = beer.vbi.add_acc_stats({}, {})
+        self.assertEqual(len(new_stats), 0)
+
+    def test_sum1(self):
+        elbo_fn = beer.EvidenceLowerBound(len(self.data))
+        for i, model in enumerate(self.models):
+            with self.subTest(i=i):
+                optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
+                previous = -float('inf')
+                for _ in range(N_EPOCHS):
+                    optim.zero_grad()
+                    elbo = elbo_fn.zero()
+                    for _ in range(N_ITER):
+                        elbo += elbo_fn(model, self.data)
+                    elbo.natural_backward()
+                    optim.step()
+                    elbo_val = round(float(elbo) / (len(self.data) * self.dim), 3)
+                    self.assertGreaterEqual(elbo_val - previous, -TOLERANCE)
+                    previous = elbo_val
 
     def test_optim1(self):
         elbo_fn = beer.EvidenceLowerBound(len(self.data))

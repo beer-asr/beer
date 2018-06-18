@@ -4,6 +4,51 @@
 
 import torch
 
+
+def add_acc_stats(acc_stats1, acc_stats2):
+    '''Add two ditionary of accumulated statistics. Both dictionaries
+    may have different set of keys. The elements in the dictionary
+    should implement the sum operation.
+
+    Args:
+        acc_stats1 (dict): First set of accumulated statistics.
+        acc_stats2 (dict): Second set of accumulated statistics.
+
+    Returns:
+        dict: `acc_stats1` + `acc_stats2`
+
+    '''
+    keys1, keys2 = set(acc_stats1.keys()), set(acc_stats2.keys())
+    new_stats = {}
+    for key in keys1.intersection(keys2):
+        new_stats[key] = acc_stats1[key] + acc_stats2[key]
+
+    for key in keys1.difference(keys2):
+        new_stats[key] = acc_stats1[key]
+
+    for key in keys2.difference(keys1):
+        new_stats[key] = acc_stats2[key]
+
+    return new_stats
+
+
+def scale_acc_stats(acc_stats, scale):
+    '''Scale a set of sufficient statistics.
+
+    Args:
+        acc_stats (dict): Accumulated sufficient statistics.
+        scale (float): Scaling factor.
+
+    Returns:
+        dict: Scaled accumulated sufficient statistics.
+
+    '''
+    new_stats = {}
+    for key, val in acc_stats.items():
+        new_stats[key] = scale * val
+    return new_stats
+
+
 class EvidenceLowerBoundInstance:
     '''Evidence Lower Bound of a data set given a model.
 
@@ -12,38 +57,33 @@ class EvidenceLowerBoundInstance:
 
     '''
 
-    def __init__(self, expected_llh, local_kl_div, global_kl_div, parameters,
-                 acc_stats, scale):
-        self._exp_llh = expected_llh
-        self._global_kl_div = global_kl_div
-        self._local_kl_div = local_kl_div
-        self._elbo = scale * (self._exp_llh.sum() - \
-            self._local_kl_div.sum()) - self._global_kl_div
-        self._parameters = parameters
+    def __init__(self, elbo_value, acc_stats, model_parameters, minibatchsize,
+                 datasize):
+        self._elbo_value = elbo_value
         self._acc_stats = acc_stats
-        self._scale = scale
+        self._model_parameters = set(model_parameters)
+        self._minibatchsize = minibatchsize
+        self._datasize = datasize
 
     def __str__(self):
-        return str(self._elbo)
+        return str(self._elbo_value)
 
     def __float__(self):
-        return float(self._elbo)
+        return float(self._elbo_value)
 
-    @property
-    def kl_div(self):
-        'KL divergence term of the ELBO'
-        return self._global_kl_div + torch.sum(
-            torch.tensor(self._local_kl_div))
+    def __add__(self, other):
+        if not isinstance(other, EvidenceLowerBoundInstance):
+            raise ValueError('EvidenceLowerBoundInstance')
+        if self._datasize != other._datasize:
+            raise ValueError('Cannot add ELBOs evaluated on different data set')
 
-    @property
-    def expected_llh(self):
-        'Expected log-likelihood of the ELBO'
-        return self._exp_llh.sum()
-
-    def per_frame(self):
-        'ELBO per-frame as a ``torch.Tensor``'
-        return self._exp_llh - self._local_kl_div - \
-            self._global_kl_div
+        return EvidenceLowerBoundInstance(
+            self._elbo_value + other._elbo_value,
+            add_acc_stats(self._acc_stats, other._acc_stats),
+            self._model_parameters.union(other._model_parameters),
+            self._minibatchsize + other._minibatchsize,
+            self._datasize
+        )
 
     def backward(self):
         '''Compute the gradient of the loss w.r.t. to standard
@@ -51,20 +91,20 @@ class EvidenceLowerBoundInstance:
         '''
         # Pytorch minimizes the loss ! We change the sign of the ELBO
         # just before to compute the gradient.
-        (-self._elbo).backward()
+        (-self._elbo_value).backward()
 
     def natural_backward(self):
         '''Compute the natural gradient of the loss w.r.t. to all the
         :any:`BayesianParameter`.
         '''
-        for parameter in self._parameters:
-            try:
-                acc_stats = self._acc_stats[parameter]
-                parameter.natural_grad += parameter.prior.natural_hparams +  \
-                    self._scale * acc_stats - \
-                    parameter.posterior.natural_hparams
-            except KeyError:
-                pass
+        scale = self._datasize / self._minibatchsize
+        for parameter in self._model_parameters:
+            acc_stats = self._acc_stats[parameter]
+            natural_grad = parameter.prior.natural_hparams + \
+                scale * acc_stats - parameter.posterior.natural_hparams
+
+            # NOTE: the gradient is always accumulated.
+            parameter.natural_grad += natural_grad
 
 
 class EvidenceLowerBound:
@@ -111,16 +151,31 @@ class EvidenceLowerBound:
     def __init__(self, datasize):
         self.datasize = datasize
 
-    def __call__(self, model, data, latent_variables=None):
-        s_stats = model.sufficient_statistics(data)
-        return EvidenceLowerBoundInstance(
-            expected_llh=model(s_stats, latent_variables),
-            local_kl_div=model.local_kl_div_posterior_prior(),
-            global_kl_div=model.kl_div_posterior_prior(),
-            parameters=model.parameters,
-            acc_stats=model.accumulate(s_stats),
-            scale=self.datasize / float(len(data))
-        )
+    def __call__(self, model, minibatch, latent_variables=None):
+        # Estimate the scaling constant of the stochastic ELBO.
+        scale = self.datasize / float(len(minibatch))
+
+        # Compute the ELBO.
+        s_stats = model.sufficient_statistics(minibatch)
+        exp_llh = model(s_stats, latent_variables)
+        local_kl_div = model.local_kl_div_posterior_prior()
+        kl_div = model.kl_div_posterior_prior()
+        elbo_value = scale * (exp_llh.sum() - local_kl_div.sum()) - kl_div
+
+        # Accumulate the statistics and scale them accordingly.
+        acc_stats = model.accumulate(s_stats)
+
+        return EvidenceLowerBoundInstance(elbo_value, acc_stats,
+                                          model.parameters, len(minibatch),
+                                          self.datasize)
+
+    def zero(self):
+        '''Zero object that can be used to initalized an accumulation.
+
+        Returns:
+            :any:`EvidenceLowerBoundInstance`
+        '''
+        return EvidenceLowerBoundInstance(0., {}, [], 0, self.datasize)
 
 
 class BayesianModelOptimizer:

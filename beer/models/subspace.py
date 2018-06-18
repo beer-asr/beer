@@ -13,7 +13,7 @@ from ..expfamilyprior import GammaPrior
 from ..expfamilyprior import NormalIsotropicCovariancePrior
 from ..expfamilyprior import MatrixNormalPrior
 from ..expfamilyprior import NormalFullCovariancePrior
-from ..utils import symmetrize_matrix
+from ..utils import make_symposdef
 
 
 def kl_div_std_norm(means, cov):
@@ -422,7 +422,7 @@ class PLDASet(BayesianModelSet):
 
     @classmethod
     def create(cls, mean, precision, noise_subspace, class_subspace,
-               class_means, pseudo_counts=1.):
+               class_means, pseudo_counts=1., noise_std=0.):
         '''Create a Probabilistic Principal Ccomponent model.
 
         Args:
@@ -440,6 +440,8 @@ class PLDASet(BayesianModelSet):
                 class as a matrix.
             pseudo_counts (``torch.Tensor``): Strength of the prior.
                 Should be greater than 0.
+            noise_std (float): Standard deviation of the noise to
+                initialize the posterior distribution.
 
         Returns:
             :any:`PPCA`
@@ -463,20 +465,27 @@ class PLDASet(BayesianModelSet):
                         device=mean.device)
         cov /= pseudo_counts
         prior_noise_subspace = MatrixNormalPrior(noise_subspace, cov)
-        posterior_noise_subspace = MatrixNormalPrior(noise_subspace, cov)
+        rand_init = noise_subspace + noise_std * torch.randn(
+            *noise_subspace.size(), dtype=mean.dtype, device=mean.device)
+        posterior_noise_subspace = MatrixNormalPrior(rand_init, cov)
 
         # Class subspace.
         cov = torch.eye(class_subspace.size(0), dtype=mean.dtype,
                         device=mean.device)
         cov /= pseudo_counts
         prior_class_subspace = MatrixNormalPrior(class_subspace, cov)
-        posterior_class_subspace = MatrixNormalPrior(class_subspace, cov)
+        rand_init = class_subspace + noise_std * torch.randn(
+            *class_subspace.size(), dtype=mean.dtype, device=mean.device)
+        posterior_class_subspace = MatrixNormalPrior(rand_init, cov)
 
         # cov = same as class subspace.
         class_mean_priors, class_mean_posteriors = [], []
         for mean_i in class_means:
             class_mean_priors.append(NormalFullCovariancePrior(mean_i, cov))
-            class_mean_posteriors.append(NormalFullCovariancePrior(mean_i, cov))
+            class_mean_posteriors.append(NormalFullCovariancePrior(
+                mean_i + noise_std * torch.randn(mean_i.shape[0],
+                                                 dtype=mean.dtype,
+                                                 device=mean.device), cov))
 
         return cls(prior_mean, posterior_mean, prior_prec, posterior_prec,
                    prior_noise_subspace, posterior_noise_subspace,
@@ -735,7 +744,7 @@ class PLDASet(BayesianModelSet):
         acc_noise_s_stats1 = acc_noise_s_stats1.sum(dim=0)
         acc_noise_s_stats1 = acc_noise_s_stats1.view(self._subspace1_dim,
                                                      self._subspace1_dim)
-        acc_noise_s_stats1 = symmetrize_matrix(acc_noise_s_stats1)
+        acc_noise_s_stats1 = make_symposdef(acc_noise_s_stats1)
         data_class_means = (class_means + m_mean[None, :])
         data_class_means = resps.t()[:, :, None] * (data[None, :, :] - \
             data_class_means[:, None, :])
@@ -748,7 +757,7 @@ class PLDASet(BayesianModelSet):
             (resps @ class_mean_quad.view(len(self), -1)).sum(dim=0)
         acc_class_s_stats1 = acc_class_s_stats1.view(self._subspace2_dim,
                                                      self._subspace2_dim)
-        acc_class_s_stats1 = symmetrize_matrix(acc_class_s_stats1)
+        acc_class_s_stats1 = make_symposdef(acc_class_s_stats1)
         data_noise_means = (data - noise_means - m_mean)
         acc_means = (resps.t()[:, :, None] * data_noise_means).sum(dim=1)
         acc_class_s_stats2 = acc_means[:, :, None] * class_mean_mean[:, None, :]
@@ -776,7 +785,7 @@ class PLDASet(BayesianModelSet):
 
         # Accumulate the statistics for the class means.
         class_mean_acc_stats1 = class_s_quad
-        class_mean_acc_stats1 = symmetrize_matrix(class_mean_acc_stats1)
+        class_mean_acc_stats1 = make_symposdef(class_mean_acc_stats1)
         w_data_noise_means = resps.t()[:, :, None] * data_noise_means
         class_mean_acc_stats2 = \
             (class_s_mean @ w_data_noise_means.sum(dim=1).t()).t()
