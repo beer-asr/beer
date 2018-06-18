@@ -118,10 +118,11 @@ def main():
         logging.info("Epoch: %d", epoch)
         hmm_epoch = hmm_mdl_dir + '/' + str(epoch) + '.mdl'
         for batch_keys in batches:
-            elbo_value = 0.
+            #elbo_value = 0.
+            optimizer.zero_grad()
+            elbo = 0.
             batch_nutt = len(batch_keys)
             for utt in batch_keys:
-                optimizer.zero_grad()
                 logging.info("Training with utterance %s", utt)
                 ft = feature_transform(feats[utt], mean_norm=mean_norm,
                      var_norm=var_norm, mean=global_mean, std=global_std,
@@ -133,10 +134,10 @@ def main():
                 ali_sets = beer.AlignModelSet(emissions, lab)
                 hmm_ali = beer.HMM.create(init_state, final_state,
                           trans_mat_ali, ali_sets, training_type)
-                elbo = elbo_fn(hmm_ali, torch.from_numpy(ft).float())
-                elbo.natural_backward()
-                elbo_value += float(elbo) 
-            logging.info("Elbo value is %f", elbo_value / (tot_counts *
+                elbo += elbo_fn(hmm_ali, torch.from_numpy(ft).float())
+                #elbo_value += float(elbo) 
+            elbo.natural_backward()
+            logging.info("Elbo value is %f", float(elbo) / (tot_counts *
                 batch_nutt))
             optimizer.step()
         with open(hmm_epoch, 'wb') as m:
