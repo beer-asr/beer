@@ -75,4 +75,27 @@ def make_symposdef(mat, eval_threshold=1e-3):
     return (evecs @ torch.diag(new_evals) @ evecs.t()).view(*mat.shape)
 
 
-__all__ = ['onehot', 'logsumexp', 'symmetrize_matrix', 'make_symposdef']
+def sample_from_normals(means, variances, nsamples):
+    '''Sample for a set of Normal distribution with diagonal covariance
+    using the re-parameterization trick. The gradient of the sampled values
+    (and their subsequent transformations) can be computed in the same
+    way as any ``torch.Tensor``.
+
+    Args:
+        means (``torch.Tensor[N,D]``): A set of N means of D dimensions.
+        variances (``torch.Tensor[N,D]``): Diagonal of the covariance matrix
+            for each distribution.
+        nsamples (int): Number of samples per distribution.
+
+    Returns:
+        (``torch.Tensor[nsamples,N,D]``): sampled values.
+
+    '''
+    dim1, dim2 = means.shape
+    return means + torch.sqrt(variances) * torch.randn(nsamples, dim1, dim2,
+                                                       dtype=means.dtype,
+                                                       device=means.device)
+
+
+__all__ = ['onehot', 'logsumexp', 'symmetrize_matrix', 'make_symposdef',
+           'sample_from_normals']

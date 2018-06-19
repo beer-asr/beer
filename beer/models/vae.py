@@ -6,6 +6,29 @@ prior over the latent space.
 
 import torch
 from .bayesmodel import BayesianModel
+from .normal import NormalDiagonalCovariance
+from ..utils import sample_from_normals
+
+
+def _normal_diag_natural_params(mean, var):
+    '''Transform the standard parameters of a Normal (diag. cov.) into
+    their canonical forms.
+
+    Note:
+        The (negative) log normalizer is appended to it.
+
+    '''
+    return torch.cat([
+        -1. / (2 * var),
+        mean / var,
+        -(mean ** 2) / (2 * var),
+        -.5 * torch.log(var)
+    ], dim=-1)
+
+def _log_likelihood(data, means, variances):
+        distance_term = 0.5 * (data - means).pow(2) / variances
+        precision_term = 0.5 * variances.log()
+        return (-distance_term - precision_term).sum(dim=-1)
 
 
 class VAE(BayesianModel):
@@ -63,20 +86,32 @@ class VAE(BayesianModel):
         # confusion with the sufficient statistics of the latent model.
         data = s_stats
 
-        enc_state = self.encoder(data)
-        mean, var = enc_state.mean, enc_state.var
+        # Compute the posterior of the latent variables.
+        means, variances = self.encoder(data)
+
+        # Compute the prior over the latent variables.
         exp_np_params, s_stats = self.latent_model.expected_natural_params(
-            mean.detach(), var.detach(), latent_variables=latent_variables,
-            nsamples=self.nsamples)
+            means.detach(), variances.detach(),
+            latent_variables=latent_variables, nsamples=self.nsamples)
         self.cache['latent_stats'] = s_stats
-        samples = mean + torch.sqrt(var) * torch.randn(self.nsamples,
-                                                       data.size(0),
-                                                       mean.size(1),
-                                                       dtype=mean.dtype,
-                                                       device=mean.device)
-        self.cache['kl_divergence'] = enc_state.kl_div(exp_np_params)
-        llh = self.decoder(samples).log_likelihood(data)
-        return llh
+
+        # (local) KL divergence posterior / prior.
+        exp_s_stats = \
+            NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
+                means, variances)
+        nparams = _normal_diag_natural_params(means, variances)
+        self.cache['kl_divergence'] = \
+            ((nparams - exp_np_params) * exp_s_stats).sum(dim=-1)
+
+        # Expected value of the log-likelihood per frame using the
+        # re-parameterization trick.
+        samples = sample_from_normals(means, variances, self.nsamples)
+        dec_means, dec_variances = \
+            self.decoder(samples.view(self.nsamples * len(data), -1))
+        dec_means, dec_variances = \
+            dec_means.view(self.nsamples, len(data), -1), \
+            dec_variances.view(self.nsamples, len(data), -1)
+        return _log_likelihood(data, dec_means, dec_variances).mean(dim=0)
 
     def local_kl_div_posterior_prior(self, parent_msg=None):
         return self.cache['kl_divergence'] + \
@@ -86,5 +121,6 @@ class VAE(BayesianModel):
         latent_stats = self.cache['latent_stats']
         self.clear_cache()
         return self.latent_model.accumulate(latent_stats, parent_msg)
+
 
 __all__ = ['VAE']
