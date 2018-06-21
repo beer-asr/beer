@@ -166,12 +166,22 @@ class HMM(BayesianModel):
             path.insert(0, backtrack[i, path[0]])
         return torch.LongTensor(path)
 
+    def decode(self, data):
+        stats = self.sufficient_statistics(data)
+        pc_llhs = self.modelset(stats)
+        best_path = HMM.viterbi(self.init_states,
+                                self.final_states,
+                                self.trans_mat, pc_llhs)
+        #phones = convert_state_to_phone(phone_dict, list(best_path.numpy()), nstate_per_phone)
+        return best_path
+
     def float(self):
         return self.__class__(
             self.init_states,
             self.final_states,
             self.trans_mat.float(),
-            self.modelset.float()
+            self.modelset.float(),
+            self.training_type
         )
 
     def double(self):
@@ -179,7 +189,8 @@ class HMM(BayesianModel):
             self.init_states,
             self.final_states,
             self.trans_mat.double(),
-            self.modelset.double()
+            self.modelset.double(),
+            self.training_type
         )
 
     def to(self, device):
@@ -187,7 +198,8 @@ class HMM(BayesianModel):
             self.init_states,
             self.final_states,
             self.trans_mat.to(device),
-            self.modelset.to(device)
+            self.modelset.to(device),
+            self.training_type
         )
 
     def forward(self, s_stats, latent_variables=None):

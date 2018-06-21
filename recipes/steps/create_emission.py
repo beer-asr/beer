@@ -20,10 +20,6 @@ def main():
     parser.add_argument('model_dir', type=str)
     parser.add_argument('--emission_type', default='norm_diag',
         choices=emission_types)
-    parser.add_argument('--mean_normalize', default='True',
-        choices=['True', 'False'])
-    parser.add_argument('--var_normalize', default='True',
-        choices=['True', 'False'])
     parser.add_argument('--noise_std', type=float, default=0., 
         help='Noise std for creating modelset')
     args = parser.parse_args()
@@ -41,14 +37,8 @@ def main():
     dict_models = dict((k, v) for (k, v) in zip(emission_types, models))
     model = dict_models[modeltype]
 
-    mean = torch.from_numpy(stats['mean']).float()
-    std = torch.from_numpy(stats['std']).float()
-
-    if args.mean_normalize == 'True':
-        mean = torch.zeros_like(mean)
-    if args.var_normalize == 'True':
-        std = torch.ones_like(var)
-
+    mean = torch.from_numpy(stats['global_mean']).float()
+    std = torch.from_numpy(stats['global_std']).float()
     modelset = model.create(mean, std, nstates, noise_std=noise_std)
 
     with open(mdl, 'wb') as m:

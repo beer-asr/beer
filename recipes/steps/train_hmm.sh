@@ -1,33 +1,35 @@
 #!/bin/bash
 
 
-if [ $# -ne 1 ]; then
-    echo "$0: setup.sh"
+if [ $# -ne 2 ]; then
+    echo "$0: setup.sh feature.conf"
     exit 1
 fi
 setup=$1
+feat_conf=$2
+stage=2
 . $setup
-
+. $feat_conf
 
 [ ! -d $hmm_model_dir ] && mkdir -p $hmm_model_dir && exit 1;
 
-echo "Create emission models"
-python3 steps/create_emission.py $nstates $feat_stats $hmm_model_dir \
-    --emission_type $emission_type \
-    --mean_normalize $mean_norm \
-    --var_normalize $var_norm \
-    --noise_std $noise_std || exit 1
+cp $setup $hmm_model_dir
+cp $feat_conf $datadir
+cp $feat_conf $hmm_model_dir
 
+if [ $stage -le 0 ]; then
+    echo "Accumulating data stastics"
+    python3 steps/accumulate_data_stats.py $feats $feat_stats
+fi
+
+if [ $stage -le 1 ]; then
+    echo "Create emission models"
+    python3 steps/create_emission.py $nstates $feat_stats $hmm_model_dir \
+        --emission_type $emission_type \
+        --noise_std $noise_std || exit 1
+fi
 
 echo "Train hmm models"
-
-#python3 steps/train_hmm.py $feats $labels $emissions \
-python3 -m cProfile -s cumtime steps/train_hmm.py $feats $labels $emissions \
-    $feat_stats $hmm_model_dir \
-    --training_type $training_type \
-    --mean_normalize $mean_norm \
-    --var_normalize $var_norm \
-    --context $context \
-    --lrate $lrate \
-    --batch_size $batch_size \
-    --epochs $epochs
+#qsub -l "gpu=1,hostname=c*,mem_free=2G,ram_free=2G" \
+#    -sync y -cwd -j y -o q.log -v setup=$setup\
+    steps/train_hmm_cmd.sh $setup
