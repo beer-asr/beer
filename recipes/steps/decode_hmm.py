@@ -8,6 +8,11 @@ sys.path.insert(0, '../../beer')
 import beer
 import argparse
 import funcs
+import logging
+
+
+log_format = "%(asctime)s :%(lineno)d %(levelname)s:%(message)s"
+logging.basicConfig(level=logging.INFO, format=log_format)
 
 def filter_text(old_text, dict_map=None, remove_sys = None):
     '''Convert text into new phoneme set mapping, i.e, from 48 phonemes
@@ -19,7 +24,6 @@ def filter_text(old_text, dict_map=None, remove_sys = None):
     Return:
         new_text(list): list of filtered characters(str)
     '''
-
     if dict_map is not None:
         if remove_sys is not None:
             new_text = [dict_map[i] for i in old_text if i != remove_sys]
@@ -93,9 +97,10 @@ def main():
                           training_type='viterbi')
     dict_trans = funcs.read_transcription(trans)
     dict_hyps = {}
-    
+
     with open(decode_results, 'w') as f:
         for k in feats.keys():
+            logging.info('Decoding utt %s', k)
             if score:
                 dict_trans[k] = filter_text(dict_trans[k], dict_phone_39_map,
                                 remove_sys)
@@ -108,6 +113,7 @@ def main():
             f.write(k + ' ' + ' '.join(hyp_phones) + '\n')
 
     if score:
+        logging.info('Scoring') 
         print('Error rate is ' + '{0:.4f}'.format(funcs.score(dict_trans, dict_hyps)))
 
 if __name__ == '__main__':
