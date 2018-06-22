@@ -51,7 +51,7 @@ def main():
         emissions = pickle.load(pickle_file)
     emissions.to(device)
 
-    tot_counts = stats['nframes']
+    tot_counts = int(stats['nframes'])
 
     log_format = "%(asctime)s :%(lineno)d %(levelname)s:%(message)s"
     logging.basicConfig(level=logging.INFO, format=log_format)
@@ -76,7 +76,7 @@ def main():
             batch_nutt = len(batch_keys)
             for utt in batch_keys:
                 logging.info("Training with utterance %s", utt)
-                ft = torch.from_numpy(feats[utt]).float()
+                ft = torch.from_numpy(feats[utt]).float().to(device)
                 lab = labels[utt]
                 init_state = torch.tensor([0]).to(device)
                 final_state = torch.tensor([len(lab) - 1]).to(device)

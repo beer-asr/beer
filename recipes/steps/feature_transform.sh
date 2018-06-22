@@ -16,10 +16,12 @@ if [ ! -f $data_dir/feats.npz ];then
     exit 1
 else
     mkdir -p $data_dir/feat_transform
-    python3 steps/feature_transform.py $data_dir \
+    python3 steps/feature_transform.py $data_dir $data_dir/feat_transform/ \
             $mean_norm $var_norm $add_delta \
             --context $context \
             --norm_type $norm_type
+    zip -j $data_dir/feats_transformed.npz $data_dir/feat_transform/*.npy
+    rm -r $data_dir/feat_transform
 fi
 
 

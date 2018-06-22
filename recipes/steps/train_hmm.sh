@@ -7,7 +7,7 @@ if [ $# -ne 2 ]; then
 fi
 setup=$1
 feat_conf=$2
-stage=2
+stage=-1
 . $setup
 . $feat_conf
 

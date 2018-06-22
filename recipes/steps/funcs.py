@@ -49,38 +49,29 @@ def convert_state_to_phone(dict_state_to_phone, states, nstates_per_phone):
         phones: list of phonemes(str)
     '''
     phones = []
-    ending = [i + nstates_per_phone - 1 for i in phone_dict.keys() if i % nstates_per_phone == 0]
+    ending = [i + nstates_per_phone - 1 for i in
+    dict_state_to_phone.keys() if i % nstates_per_phone == 0]
     for i in range(len(states) - 1):
         if (states[i] != states[i+1]) and (states[i]) in ending:
-            phones.append(phone_dict[states[i]])
-    phones.append(phone_dict[states[-1]])
+            phones.append(dict_state_to_phone[states[i]])
+    phones.append(dict_state_to_phone[states[-1]])
     return phones
 
-def score(dict_ref, hyp_npz, details=True, dict_48_to_39_phonem=None,
-          remove_sys = 'sil'):
+def score(dict_ref, dict_hyp, details=False):
     '''Compute error rate given reference and hypothesis using DTW
-    Args: dict_ref: uttid(str) -> list(int)
-          hyp_npz(npzfile): uttid -> np.array([],dtype=int)
+    Args: dict_ref: uttid(str) -> list of phonemes(str)
+          dict_hyp: uttid(str) -> list of phonemes(str)
           details: Print each utterance error details
-          dict_48_to_39_phonem(str): If not none, error is based on 39 phonemes
     Returns:
          Total error rate.
     '''
     # Per utterance error detail(ins, del, sub) not implemented
     tot_len = 0
     tot_err = 0
-    dict_hyp = hyp_npz
-    #dict_hyp = np.load(hyp_npz)
     #tot_det = np.zeros(3)
     for k in dict_ref.keys():
-        if dict_48_to_39_phonem is None:
-            ref = [i for i in dict_ref[k] if i != remove_sys]
-            hyp = [i for i in list(dict_hyp[k]) if i != remove_sys]
-        else:
-            ref = [dict_48_to_39_phonem[i] for i in dict_ref[k] if i !=
-                   remove_sys]
-            hyp = [dict_48_to_39_phonem[i] for i in list(dict_hyp[k]) 
-                   if i != remove_sys]
+        ref = dict_ref[k]
+        hyp = dict_hyp[k]
         det = np.zeros(3)
         mtrix = np.zeros((len(hyp) + 1, len(ref) + 1))
         for i in range(len(ref) + 1):

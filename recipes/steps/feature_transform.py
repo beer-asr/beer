@@ -56,6 +56,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser = argparse.ArgumentParser()
     parser.add_argument('original_feats_dir', type=str)
+    parser.add_argument('feat_trans_dir', type=str)
     parser.add_argument('--mean-norm', action='store_true',
         help='Mean normalization')
     parser.add_argument('--var-norm', action='store_true',
@@ -69,12 +70,12 @@ def main():
     args = parser.parse_args()
 
     ori_feats = args.original_feats_dir + '/feats.npz'
+    new_dir = args.feat_trans_dir
     mean_norm = args.mean_norm
     var_norm = args.var_norm
     norm_type = args.norm_type
     add_delta = args.add_delta
     context = args.context
-    tmpdir = args.original_feats_dir + '/feat_transform/'
     
     global_mean, global_std, _, dict_utt_details = accumulate(ori_feats)
     ori_feats = np.load(ori_feats)
@@ -84,13 +85,13 @@ def main():
                  mean=dict_utt_details[utt][0],
                  std=dict_utt_details[utt][1],
                  mean_norm=mean_norm, var_norm=var_norm, add_delta=add_delta)
-            np.save(tmpdir + utt + '.npy', ft)
+            np.save(new_dir + utt + '.npy', ft)
     else:
         for utt in ori_feats.keys():
             ft = feature_transform(ori_feats[utt], context,
                  mean=global_mean, std=global_std,
                  mean_norm=mean_norm, var_norm=var_norm, add_delta=add_delta)
-            np.save(tmpdir + utt + '.npy', ft)
+            np.save(new_dir + utt + '.npy', ft)
 
 if __name__ == '__main__':
     main()

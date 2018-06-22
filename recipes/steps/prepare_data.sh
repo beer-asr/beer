@@ -31,9 +31,6 @@ for d in $traindir $testdir; do
         $d/phones.text \
         $nstate_per_phone
     python3 steps/accumulate_data_stats.py $d/feats.npz $d/feats_stats.npz
-    cd $d/tmp
-    zip states.int.npz *.npy
-    mv states.int.npz ../
-    cd $rootdir
+    zip -j $d/states.int.npz $d/tmp/*.npy
     rm -r $d/tmp
 done
