@@ -202,4 +202,137 @@ class TestBayesianParameterSet(BaseTest):
                     )
 
 
-__all__ = ['TestBayesianParameter', 'TestBayesianParameterSet']
+def create_models(dim, t_type):
+
+    models = []
+    models += [
+        beer.NormalDiagonalCovariance.create(
+            torch.zeros(dim).type(t_type),
+            torch.ones(dim).type(t_type)
+        ),
+        beer.NormalFullCovariance.create(
+            torch.zeros(dim).type(t_type),
+            torch.eye(dim).type(t_type)
+        ),
+    ]
+
+    normalset = beer.NormalDiagonalCovarianceSet.create(
+        torch.zeros(dim).type(t_type),
+        torch.ones(dim).type(t_type),
+        10,
+        noise_std=0.1
+    )
+    weights = torch.ones(10).type(t_type) * .1
+    models.append(beer.Mixture.create(weights, normalset))
+
+    normalset = beer.NormalFullCovarianceSet.create(
+        torch.zeros(dim).type(t_type),
+        torch.eye(dim).type(t_type),
+        10,
+        noise_std=0.1
+    )
+    weights = torch.ones(10).type(t_type) * .1
+    models.append(beer.Mixture.create(weights, normalset))
+
+    normalset = beer.NormalSetSharedDiagonalCovariance.create(
+        torch.zeros(dim).type(t_type),
+        torch.ones(dim).type(t_type),
+        10,
+        noise_std=0.1
+    )
+    weights = torch.ones(10).type(t_type) * .1
+    models.append(beer.Mixture.create(weights, normalset))
+
+    normalset = beer.NormalSetSharedFullCovariance.create(
+        torch.zeros(dim).type(t_type),
+        torch.eye(dim).type(t_type),
+        10,
+        noise_std=0.1
+    )
+    weights = torch.ones(10).type(t_type) * .1
+    models.append(beer.Mixture.create(weights, normalset))
+
+    normalset = beer.NormalSetSharedFullCovariance.create(
+        torch.zeros(dim).type(t_type),
+        torch.eye(dim).type(t_type),
+        2,
+        noise_std=0.1
+    )
+    models.append(beer.HMM.create([0, 1], [0, 1],
+                                        torch.FloatTensor([[1, 0],
+                                        [.5, .5]]).type(t_type),
+                                        normalset))
+
+    mean = torch.zeros(dim).type(t_type)
+    prec = 2
+    subspace = torch.randn(dim - 1, dim).type(t_type)
+    models.append(beer.PPCA.create(mean, prec, subspace))
+
+    ncomps = 10
+    obs_dim = dim
+    noise_s_dim = dim - 1
+    class_s_dim = ncomps - 1
+    mean = torch.zeros(dim).type(t_type)
+    prec = 1.
+    noise_s = torch.randn(noise_s_dim, obs_dim).type(t_type)
+    class_s = torch.randn(class_s_dim, obs_dim).type(t_type)
+    means = 2 * torch.randn(ncomps, class_s_dim).type(t_type)
+    weights = torch.ones(ncomps).type(t_type) / ncomps
+    pseudo_counts = 1.
+
+    pldaset = beer.PLDASet.create(mean, prec, noise_s, class_s, means, pseudo_counts)
+    models.append(beer.Mixture.create(weights, pldaset, pseudo_counts))
+
+    encoder = torch.nn.Sequential(torch.nn.Linear(2, 2)).type(t_type)
+    decoder = torch.nn.Sequential(torch.nn.Linear(2, 2)).type(t_type)
+    models.append(beer.VAE(encoder, decoder, models[0], nsamples=1))
+
+    encoder = torch.nn.Sequential(torch.nn.Linear(2, 2)).type(t_type)
+    decoder = torch.nn.Sequential(torch.nn.Linear(2, 2)).type(t_type)
+    models.append(beer.VAEGlobalMeanVar.create(torch.zeros(2).type(t_type),
+        torch.ones(2).type(t_type), encoder, decoder, models[0], nsamples=1))
+
+
+    return models
+
+
+class TestBayesianModel(BaseTest):
+
+    def setUp(self):
+        self.dim = int(10 + torch.randint(100, (1, 1)).item())
+        self.dim = 2
+        self.models1 = create_models(self.dim, self.type)
+        self.models2 = create_models(self.dim, self.type)
+        self.weights = (1 + torch.randn(2)**2).type(self.type)
+        self.weights /= self.weights.sum()
+
+    def test_average_models(self):
+        for i, model1, model2 in zip(range(len(self.models1)), self.models1,
+                            self.models2):
+            with self.subTest(i=i):
+                new_model = beer.average_models([model1, model2], self.weights)
+                for param1, param2, new_param in zip(model1.parameters,
+                                                     model2.parameters,
+                                                     new_model.parameters):
+                    p1 = param1.prior.natural_hparams.numpy()
+                    nparam = new_param.prior.natural_hparams.numpy()
+                    self.assertArraysAlmostEqual(p1, nparam)
+
+                    p1 = param1.posterior.natural_hparams.numpy()
+                    p2 = param2.posterior.natural_hparams.numpy()
+                    np = new_param.posterior.natural_hparams.numpy()
+                    w1, w2 = self.weights.numpy()
+                    self.assertArraysAlmostEqual(w1 * p1 + w2 * p2, np)
+
+                for param1, param2, new_param in zip(model1.non_bayesian_parameters(),
+                                                     model2.non_bayesian_parameters(),
+                                                     new_model.non_bayesian_parameters()):
+                    w1, w2 = self.weights.numpy()
+                    p1 = param1.data.numpy()
+                    p2 = param2.data.numpy()
+                    avg_p = w1 * p1 + w2 * p2
+                    nparam = new_param.data.numpy()
+                    self.assertArraysAlmostEqual(avg_p, nparam)
+
+__all__ = ['TestBayesianParameter', 'TestBayesianParameterSet',
+           'TestBayesianModel']

@@ -22,9 +22,9 @@ class TestJointExpFamilyPrior(BaseTest):
 
     def setUp(self):
         dim = int(1 + torch.randint(100, (1, 1)).item())
-        self.concentrations = (torch.randn(dim) ** 2).type(self.type)
+        self.concentrations = (1 + torch.randn(dim) ** 2).type(self.type)
         self.prior1 = beer.DirichletPrior(self.concentrations)
-        self.concentrations = (torch.randn(dim) ** 2).type(self.type)
+        self.concentrations = (1 + torch.randn(dim) ** 2).type(self.type)
         self.prior2 = beer.DirichletPrior(self.concentrations)
         self.prior = beer.JointExpFamilyPrior([self.prior1, self.prior2])
 

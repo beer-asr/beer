@@ -4,6 +4,7 @@ prior over the latent space.
 
 '''
 
+import copy
 import math
 import torch
 from .bayesmodel import BayesianModel
@@ -28,11 +29,11 @@ def _normal_diag_natural_params(mean, var):
 
 
 def _log_likelihood(data, means, variances):
-        distance_term = 0.5 * (data - means).pow(2) / variances
-        precision_term = 0.5 * variances.log()
-        llh =  (-distance_term - precision_term).sum(dim=-1)
-        llh -= .5 * means.shape[-1] * math.log(2 * math.pi)
-        return llh
+    distance_term = 0.5 * (data - means).pow(2) / variances
+    precision_term = 0.5 * variances.log()
+    llh =  (-distance_term - precision_term).sum(dim=-1)
+    llh -= .5 * means.shape[-1] * math.log(2 * math.pi)
+    return llh
 
 
 class VAE(BayesianModel):
@@ -87,6 +88,21 @@ class VAE(BayesianModel):
             self.latent_model.to(device),
             self.nsamples
         )
+
+    def non_bayesian_parameters(self):
+        retval = [param.data for param in self.encoder.parameters()]
+        retval += [param.data for param in self.decoder.parameters()]
+        return retval
+
+    def set_non_bayesian_parameters(self, new_params):
+        self.encoder = copy.deepcopy(self.encoder)
+        self.decoder = copy.deepcopy(self.decoder)
+        n_params_enc = len(list(self.encoder.parameters()))
+        params_enc, params_dec = new_params[:n_params_enc], new_params[n_params_enc:]
+        for param, new_p_data in zip(self.encoder.parameters(), params_enc):
+            param.data = new_p_data
+        for param, new_p_data in zip(self.decoder.parameters(), params_dec):
+            param.data = new_p_data
 
     def forward(self, s_stats, **kwargs):
         # For the case of the VAE, the sufficient statistics is just
@@ -204,8 +220,8 @@ class VAEGlobalMeanVar(BayesianModel):
     def double(self):
         return self.__class__(
             self.normal.double(),
-            self.encoder.double(),
-            self.decoder.double(),
+            copy.deepcopy(self.encoder.double()),
+            copy.deepcopy(self.decoder.double()),
             self.latent_model.double(),
             self.nsamples
         )
@@ -213,11 +229,24 @@ class VAEGlobalMeanVar(BayesianModel):
     def to(self, device):
         return self.__class__(
             self.normal.to(device),
-            self.encoder.to(device),
-            self.decoder.to(device),
+            copy.deepcopy(self.encoder.to(device)),
+            copy.deepcopy(self.decoder.to(device)),
             self.latent_model.to(device),
             self.nsamples
         )
+
+    def non_bayesian_parameters(self):
+        return list(self.encoder.parameters()) + list(self.encoder.parameters())
+
+    def set_non_bayesian_parameters(self, new_params):
+        self.encoder = copy.deepcopy(self.encoder)
+        self.decoder = copy.deepcopy(self.decoder)
+        n_params_enc = len(list(self.encoder.parameters()))
+        params_enc, params_dec = new_params[:n_params_enc], new_params[n_params_enc:]
+        for param, new_p_data in zip(self.encoder.parameters(), params_enc):
+            param.data = new_p_data
+        for param, new_p_data in zip(self.decoder.parameters(), params_dec):
+            param.data = new_p_data
 
     def forward(self, s_stats, **kwargs):
         # For the case of the VAE, the sufficient statistics is just
@@ -265,7 +294,6 @@ class VAEGlobalMeanVar(BayesianModel):
             **self.latent_model.accumulate(latent_stats),
             **self.normal.accumulate(centered_s_stats)
         }
-
 
 
 __all__ = ['VAE', 'VAEGlobalMeanVar']
