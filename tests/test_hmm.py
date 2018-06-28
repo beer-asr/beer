@@ -319,7 +319,7 @@ class TestHMM(BaseTest):
                 pc_exp_llh = pc_exp_llh.numpy()
                 pc_exp_llh += mask
                 exp_llh1 = logsumexp(pc_exp_llh, axis=1)
-                exp_llh2 = model(stats, label_idxs).numpy()
+                exp_llh2 = model(stats, state_path=label_idxs).numpy()
                 self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
 __all__ = ['TestHMM', 'TestForwardBackwardViterbi',

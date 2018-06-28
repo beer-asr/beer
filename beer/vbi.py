@@ -107,26 +107,36 @@ class EvidenceLowerBoundInstance:
             parameter.natural_grad += natural_grad
 
 
-class EvidenceLowerBound:
-    '''Evidence Lower Bound function.
+def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
+                         **kwargs):
+    '''Evidence Lower Bound objective function of Variational Bayes
+    Inference.
+
+    If no `model` and no `data` argument are provided but the
+    `datasize` argument is given, the function return an "empty"
+    ``EvidenceLowerBoundInstance`` object which can be used to
+    initialize the accumulatation of several
+    ``EvidenceLowerBoundInstance`.
 
     Args:
         model (:any:`BayesianModel`): The Bayesian model with which to
             compute the ELBO.
-        data (``torch.Tensor``): The data set on which to evaluate the
+        minibatch_data (``torch.Tensor``): Data of the minibatch on
+            which to evaluate the ELBO.
+        datasize (int): Number of data points of the total training
+            data. If set to 0 or negative values, the size of the
+            provided `minibatch_data` will be used instead.
+        kwargs (object): Model specific extra parameters to evalute the
             ELBO.
-        latent_variables (object): Provide latent_variables to the model
-            when computing the ELBO.
 
     Returns:
         ``EvidenceLowerBoundInstance``
-
 
     Example:
         >>> # Assume X is our data set and "model" is the model to be
         >>> # trained.
         >>> elbo_fn = beer.EvidenceLowerBound(len(X))
-        >>> elbo = elbo_fn(model, X)
+        >>> elbo = beer.evidence_lower_bound(model, X)
         ...
         >>> # Compute gradient of the Baysian parameters.
         >>> elbo.natural_backward()
@@ -147,35 +157,31 @@ class EvidenceLowerBound:
         gradient accordingly.
 
     '''
+    if model is None and  minibatch_data is None and datasize > 0:
+        return EvidenceLowerBoundInstance(0., {}, [], 0, datasize)
+    elif model is None or minibatch_data is None:
+        raise ValueError('if datasize is not provided, need at least "model" '
+                         'and "minibatch_data"')
 
-    def __init__(self, datasize):
-        self.datasize = datasize
+    mb_datasize = len(minibatch_data)
+    if datasize <= 0:
+        datasize = mb_datasize
 
-    def __call__(self, model, minibatch, latent_variables=None):
-        # Estimate the scaling constant of the stochastic ELBO.
-        scale = self.datasize / float(len(minibatch))
+    # Estimate the scaling constant of the stochastic ELBO.
+    scale = datasize / float(mb_datasize)
 
-        # Compute the ELBO.
-        s_stats = model.sufficient_statistics(minibatch)
-        exp_llh = model(s_stats, latent_variables)
-        local_kl_div = model.local_kl_div_posterior_prior()
-        kl_div = model.kl_div_posterior_prior()
-        elbo_value = scale * (exp_llh.sum() - local_kl_div.sum()) - kl_div
+    # Compute the ELBO.
+    stats = model.sufficient_statistics(minibatch_data)
+    exp_llh = model(stats, **kwargs)
+    local_kl_div = model.local_kl_div_posterior_prior()
+    kl_div = model.kl_div_posterior_prior()
+    elbo_value = scale * (exp_llh.sum() - local_kl_div.sum()) - kl_div
 
-        # Accumulate the statistics and scale them accordingly.
-        acc_stats = model.accumulate(s_stats)
+    # Accumulate the statistics and scale them accordingly.
+    acc_stats = model.accumulate(stats)
 
-        return EvidenceLowerBoundInstance(elbo_value, acc_stats,
-                                          model.parameters, len(minibatch),
-                                          self.datasize)
-
-    def zero(self):
-        '''Zero object that can be used to initalized an accumulation.
-
-        Returns:
-            :any:`EvidenceLowerBoundInstance`
-        '''
-        return EvidenceLowerBoundInstance(0., {}, [], 0, self.datasize)
+    return EvidenceLowerBoundInstance(elbo_value, acc_stats, model.parameters,
+                                      mb_datasize, datasize)
 
 
 class BayesianModelOptimizer:
@@ -288,5 +294,5 @@ class BayesianModelCoordinateAscentOptimizer(BayesianModelOptimizer):
         self._update_count += 1
 
 
-__all__ = ['EvidenceLowerBound', 'BayesianModelOptimizer',
+__all__ = ['evidence_lower_bound', 'BayesianModelOptimizer',
            'BayesianModelCoordinateAscentOptimizer']

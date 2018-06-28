@@ -189,13 +189,13 @@ class HMM(BayesianModel):
             self.modelset.to(device)
         )
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats, state_path=None):
         pc_exp_llh = self.modelset(s_stats)
         log_alphas = HMM.baum_welch_forward(self.init_states, self.trans_mat, pc_exp_llh)
         log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat, pc_exp_llh)
 
-        if latent_variables is not None:
-            resps = onehot(latent_variables, len(self.modelset),
+        if state_path is not None:
+            resps = onehot(state_path, len(self.modelset),
                            dtype=pc_exp_llh.dtype, device=pc_exp_llh.device)
             exp_llh = (pc_exp_llh * resps).sum(dim=-1)
             self._resps = resps
@@ -252,7 +252,7 @@ class AlignModelSet(BayesianModelSet):
             self.state_ids
         )
 
-    def forward(self, len_s_stats, latent_variables=None):
+    def forward(self, len_s_stats):
         length, s_stats = len_s_stats
         pc_exp_llh = self.model_set(s_stats)
         new_pc_exp_llh = torch.zeros((length, len(self.state_ids)),
