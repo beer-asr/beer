@@ -7,7 +7,7 @@ import torch
 from ..expfamilyprior import ExpFamilyPrior
 
 
-def average_models(models, weights):
+def average_models(models, weights=None):
     '''Weighted average the parameters of the set of models of the same
     type.
 
@@ -24,6 +24,12 @@ def average_models(models, weights):
 
     # We use the first model of the list as return value.
     ret_model = list_models[0].copy()
+
+    dtype = list_models[0].parameters[0].prior.natural_hparams.dtype
+    device = list_models[0].parameters[0].prior.natural_hparams.device
+    if weights is None:
+        weights = torch.ones(len(models), dtype=dtype, device=device)
+        weights /= len(models)
 
     # Average the Bayesian parameters.
     nparams = len(list_models[0].parameters)
