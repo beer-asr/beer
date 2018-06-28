@@ -211,8 +211,8 @@ class VAEGlobalMeanVar(BayesianModel):
     def float(self):
         return self.__class__(
             self.normal.float(),
-            self.encoder.float(),
-            self.decoder.float(),
+            copy.deepcopy(self.encoder.float()),
+            copy.deepcopy(self.decoder.float()),
             self.latent_model.float(),
             self.nsamples
         )
@@ -236,7 +236,9 @@ class VAEGlobalMeanVar(BayesianModel):
         )
 
     def non_bayesian_parameters(self):
-        return list(self.encoder.parameters()) + list(self.encoder.parameters())
+        retval = [param.data for param in self.encoder.parameters()]
+        retval += [param.data for param in self.decoder.parameters()]
+        return retval
 
     def set_non_bayesian_parameters(self, new_params):
         self.encoder = copy.deepcopy(self.encoder)
