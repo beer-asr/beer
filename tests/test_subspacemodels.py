@@ -114,34 +114,6 @@ class TestPPCA(BaseTest):
 
         self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
-    def test_forward_latent_variables(self):
-        stats = self.model.sufficient_statistics(self.data)
-        exp_llh1 = self.model(stats, self.latent).numpy()
-
-        l_means = self.latent.numpy()
-        l_quad = l_means[:, :, None] * l_means[:, None, :]
-        l_quad = l_quad.reshape(len(self.data), -1)
-        log_prec, prec = self.model.precision_param.expected_value(concatenated=False)
-        log_prec, prec = log_prec.numpy(), prec.numpy()
-        s_quad, s_mean = self.model.subspace_param.expected_value(concatenated=False)
-        s_mean, s_quad = s_mean.numpy(), s_quad.numpy()
-        m_quad, m_mean = self.model.mean_param.expected_value(concatenated=False)
-        m_mean, m_quad = m_mean.numpy(), m_quad.numpy()
-        stats = stats.numpy()
-
-        data_mean = stats[:, 1:] - m_mean.reshape(1, -1)
-
-        exp_llh2 = np.zeros(len(stats))
-        exp_llh2 += -.5 * self.dim * np.log(2 * np.pi)
-        exp_llh2 += .5 * self.dim * log_prec
-        exp_llh2 += -.5 * prec * stats[:, 0]
-        exp_llh2 += prec * stats[:, 1:] @ m_mean
-        exp_llh2 += prec * np.sum((l_means @ s_mean) * data_mean, axis=1)
-        exp_llh2 += -.5 * prec * l_quad.reshape(len(stats), -1) @ s_quad.reshape(-1)
-        exp_llh2 += -.5 * prec * m_quad
-
-        self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
-
     def test_expected_natural_params(self):
         nparams1, _ = self.model.expected_natural_params(self.means, self.vars)
         nparams1 = nparams1.numpy()

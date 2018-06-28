@@ -202,10 +202,10 @@ class HMM(BayesianModel):
             self.training_type
         )
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats, state_path=None):
         pc_exp_llh = self.modelset(s_stats)
-        if latent_variables is not None:
-            onehot_labels = onehot(latent_variables, len(self.modelset),
+        if state_path is not None:
+            onehot_labels = onehot(state_path, len(self.modelset),
                                    dtype=pc_exp_llh.dtype,
                                    device=pc_exp_llh.device)
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
@@ -270,7 +270,7 @@ class AlignModelSet(BayesianModelSet):
             self.state_ids
         )
 
-    def forward(self, len_s_stats, latent_variables=None):
+    def forward(self, len_s_stats):
         length, s_stats = len_s_stats
         pc_exp_llh = self.model_set(s_stats)
         new_pc_exp_llh = torch.zeros((length, len(self.state_ids)),

@@ -48,7 +48,6 @@ class BaseTest(unittest.TestCase):
         if self.gpu:
             torch.cuda.manual_seed(seed)
 
-    # pylint: disable=C0103
     def assertArraysAlmostEqual(self, arr1, arr2):
         try:
             fail = False

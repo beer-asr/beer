@@ -125,7 +125,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         if value.grad is not None:
             value.grad.zero_()
         copied_value = torch.tensor(value.detach(), requires_grad=True)
-        log_norm_value = self.log_norm(copied_value)
+        log_norm_value = self.log_norm(copied_value).clone()
         ta.backward(log_norm_value)
         self._expected_sufficient_statistics = torch.tensor(copied_value.grad)
         self._natural_hparams = copied_value
