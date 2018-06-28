@@ -127,16 +127,15 @@ class TestEvidenceLowerbound(BaseTest):
         self.assertEqual(len(new_stats), 0)
 
     def test_sum1(self):
-        elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, model in enumerate(self.models):
             with self.subTest(i=i):
                 optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_EPOCHS):
                     optim.zero_grad()
-                    elbo = elbo_fn.zero()
+                    elbo = beer.evidence_lower_bound(datasize=len(self.data))
                     for _ in range(N_ITER):
-                        elbo += elbo_fn(model, self.data)
+                        elbo += beer.evidence_lower_bound(model, self.data)
                     elbo.natural_backward()
                     optim.step()
                     elbo_val = round(float(elbo) / (len(self.data) * self.dim), 3)
@@ -144,14 +143,13 @@ class TestEvidenceLowerbound(BaseTest):
                     previous = elbo_val
 
     def test_optim1(self):
-        elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, model in enumerate(self.models):
             with self.subTest(i=i):
                 optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     optim.zero_grad()
-                    elbo = elbo_fn(model, self.data)
+                    elbo = beer.evidence_lower_bound(model, self.data)
                     elbo.natural_backward()
                     optim.step()
                     elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
@@ -159,7 +157,6 @@ class TestEvidenceLowerbound(BaseTest):
                     previous = elbo
 
     def test_optim2(self):
-        elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, model in enumerate([self.ppca, self.plda]):
             with self.subTest(i=i):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
@@ -167,7 +164,7 @@ class TestEvidenceLowerbound(BaseTest):
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     optim.zero_grad()
-                    elbo = elbo_fn(model, self.data)
+                    elbo = beer.evidence_lower_bound(model, self.data)
                     elbo.natural_backward()
                     optim.step()
                     elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
@@ -175,7 +172,6 @@ class TestEvidenceLowerbound(BaseTest):
                     previous = elbo
 
     def test_type_switch1_float(self):
-        elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, orig_model in enumerate(self.models):
             model = orig_model.float()
             with self.subTest(i=i):
@@ -183,7 +179,7 @@ class TestEvidenceLowerbound(BaseTest):
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     optim.zero_grad()
-                    elbo = elbo_fn(model, self.data.float())
+                    elbo = beer.evidence_lower_bound(model, self.data.float())
                     elbo.natural_backward()
                     optim.step()
                     elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
@@ -191,7 +187,6 @@ class TestEvidenceLowerbound(BaseTest):
                     previous = elbo
 
     def test_type_switch2_float(self):
-        elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, orig_model in enumerate([self.ppca, self.plda]):
             model = orig_model.float()
             with self.subTest(i=i):
@@ -200,7 +195,7 @@ class TestEvidenceLowerbound(BaseTest):
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     optim.zero_grad()
-                    elbo = elbo_fn(model, self.data.float())
+                    elbo = beer.evidence_lower_bound(model, self.data.float())
                     elbo.natural_backward()
                     optim.step()
                     elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
@@ -208,7 +203,6 @@ class TestEvidenceLowerbound(BaseTest):
                     previous = elbo
 
     def test_type_switch1_double(self):
-        elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, orig_model in enumerate(self.models):
             model = orig_model.double()
             with self.subTest(i=i):
@@ -216,7 +210,7 @@ class TestEvidenceLowerbound(BaseTest):
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     optim.zero_grad()
-                    elbo = elbo_fn(model, self.data.double())
+                    elbo = beer.evidence_lower_bound(model, self.data.double())
                     elbo.natural_backward()
                     optim.step()
                     elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
@@ -224,7 +218,6 @@ class TestEvidenceLowerbound(BaseTest):
                     previous = elbo
 
     def test_type_switch2_double(self):
-        elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, orig_model in enumerate([self.ppca, self.plda]):
             model = orig_model.double()
             with self.subTest(i=i):
@@ -233,7 +226,7 @@ class TestEvidenceLowerbound(BaseTest):
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     optim.zero_grad()
-                    elbo = elbo_fn(model, self.data.double())
+                    elbo = beer.evidence_lower_bound(model, self.data.double())
                     elbo.natural_backward()
                     optim.step()
                     elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
@@ -241,7 +234,6 @@ class TestEvidenceLowerbound(BaseTest):
                     previous = elbo
 
     def test_change_device1(self):
-        elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, orig_model in enumerate(self.models):
             model = orig_model.to(self.device)
             with self.subTest(i=i):
@@ -249,7 +241,8 @@ class TestEvidenceLowerbound(BaseTest):
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     optim.zero_grad()
-                    elbo = elbo_fn(model, self.data.to(self.device))
+                    elbo = \
+                        beer.evidence_lower_bound(model, self.data.to(self.device))
                     elbo.natural_backward()
                     optim.step()
                     elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
@@ -257,7 +250,6 @@ class TestEvidenceLowerbound(BaseTest):
                     previous = elbo
 
     def test_change_device2(self):
-        elbo_fn = beer.EvidenceLowerBound(len(self.data))
         for i, orig_model in enumerate([self.ppca, self.plda]):
             model = orig_model.to(self.device)
             with self.subTest(i=i):
@@ -266,7 +258,8 @@ class TestEvidenceLowerbound(BaseTest):
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     optim.zero_grad()
-                    elbo = elbo_fn(model, self.data.to(self.device))
+                    elbo = \
+                        beer.evidence_lower_bound(model, self.data.to(self.device))
                     elbo.natural_backward()
                     optim.step()
                     elbo = round(float(elbo) / (len(self.data) * self.dim), 3)

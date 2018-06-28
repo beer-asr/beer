@@ -195,8 +195,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
             self._parameters += value.parameters
         super().__setattr__(name, value)
 
-    def __call__(self, data, labels=None):
-        return self.forward(data, labels)
+    def __call__(self, data, **kwargs):
+        return self.forward(data, **kwargs)
 
     @property
     def parameters(self):
@@ -311,24 +311,20 @@ class BayesianModel(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats, **kwargs):
         '''Abstract method to be implemented by subclasses of
         :any:`BayesianModel`.
 
-        Compute the Evidence Lower-BOund (ELBO) of the data given the
+        Compute the expected log-likelihood of the data given the
         model.
 
         Args:
             s_stats (``torch.Tensor[n_frames, dim]``): Sufficient
                 statistics of the model.
-            latent_variables (object): Latent variable that can be
-                provided to the model (optional). Note that type of
-                the latent variables depends on the model. If a model
-                does not use any latent variable, it will ignore this
-                parameter.
+            kwargs (dict): Model specific parameters
 
         Returns:
-            ``torch.Tensor[n_frames]``: ELBO.
+            ``torch.Tensor[n_frames]``: expected log-likelihood.
 
         '''
         pass

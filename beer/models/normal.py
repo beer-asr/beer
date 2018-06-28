@@ -127,7 +127,7 @@ class NormalDiagonalCovariance(BayesianModel):
             self.mean_prec_param.posterior.to(device)
         )
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats):
         feadim = .25 * s_stats.size(1)
         exp_llh = s_stats @ self.mean_prec_param.expected_value()
         exp_llh -= .5 * feadim * math.log(2 * math.pi)
@@ -145,8 +145,7 @@ class NormalDiagonalCovariance(BayesianModel):
         return torch.cat([(mean ** 2) + var, mean, torch.ones_like(mean),
                           torch.ones_like(mean)], dim=-1)
 
-    def expected_natural_params(self, mean, var, latent_variables=None,
-                                nsamples=1):
+    def expected_natural_params(self, mean, var, nsamples=1):
         '''Interface for the VAE model. Returns the expected value of the
         natural params of the latent model given the per-frame means
         and variances.
@@ -156,7 +155,6 @@ class NormalDiagonalCovariance(BayesianModel):
                 distribution.
             var (``torch.Tensor``): Per-frame variance of the posterior
                 distribution.
-            latent_variables (Tensor): Frame labelling (if any).
             nsamples (int): Number of samples to estimate the
                 natural parameters.
 
@@ -262,7 +260,7 @@ class NormalFullCovariance(BayesianModel):
             self.mean_prec_param.posterior.to(device)
         )
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - s_stats.size(1))))
         exp_llh = s_stats @ self.mean_prec_param.expected_value()
         exp_llh -= .5 * feadim * math.log(2 * math.pi)
@@ -366,7 +364,7 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
                      for comp in self._components]
         return self.__class__(new_prior, new_posts)
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats):
         feadim = .25 * s_stats.size(1)
         retval = s_stats @ self.expected_natural_params_as_matrix().t()
         retval -= .5 * feadim * math.log(2 * math.pi)
@@ -492,7 +490,7 @@ class NormalFullCovarianceSet(BayesianModelSet):
                      for comp in self._components]
         return self.__class__(new_prior, new_posts)
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - s_stats.size(1))))
         retval = s_stats @ self.expected_natural_params_as_matrix().t()
         retval -= .5 * feadim * math.log(2 * math.pi)
@@ -609,7 +607,7 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
             self.means_prec_param.posterior.to(device)
         )
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats):
         s_stats1, s_stats2 = s_stats
         feadim = s_stats1.size(1) // 2
         params = self._expected_nparams()
@@ -756,7 +754,7 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
             self.means_prec_param.posterior.to(device)
         )
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats):
         s_stats1, s_stats2 = s_stats
         feadim = int(math.sqrt(s_stats1.size(1)))
         params = self._expected_nparams()

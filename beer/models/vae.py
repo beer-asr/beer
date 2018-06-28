@@ -88,7 +88,7 @@ class VAE(BayesianModel):
             self.nsamples
         )
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats, **kwargs):
         # For the case of the VAE, the sufficient statistics is just
         # the data itself. We just rename s_stats to avoid
         # confusion with the sufficient statistics of the latent model.
@@ -99,8 +99,8 @@ class VAE(BayesianModel):
 
         # Compute the prior over the latent variables.
         exp_np_params, s_stats = self.latent_model.expected_natural_params(
-            means.detach(), variances.detach(),
-            latent_variables=latent_variables, nsamples=self.nsamples)
+            means.detach(), variances.detach(), nsamples=self.nsamples,
+            **kwargs)
         self.cache['latent_stats'] = s_stats
 
         # (local) KL divergence posterior / prior.
@@ -219,7 +219,7 @@ class VAEGlobalMeanVar(BayesianModel):
             self.nsamples
         )
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats, **kwargs):
         # For the case of the VAE, the sufficient statistics is just
         # the data itself. We just rename s_stats to avoid
         # confusion with the sufficient statistics of the latent model.
@@ -230,8 +230,8 @@ class VAEGlobalMeanVar(BayesianModel):
 
         # Compute the prior over the latent variables.
         exp_np_params, s_stats = self.latent_model.expected_natural_params(
-            means.detach(), variances.detach(),
-            latent_variables=latent_variables, nsamples=self.nsamples)
+            means.detach(), variances.detach(), nsamples=self.nsamples,
+            **kwargs)
         self.cache['latent_stats'] = s_stats
 
         # (local) KL divergence posterior / prior.

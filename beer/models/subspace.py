@@ -214,18 +214,11 @@ class PPCA(BayesianModel):
         )
 
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats):
         feadim = s_stats.size(1) - 1
-
-        if latent_variables is not None:
-            l_means = latent_variables
-            l_quad = l_means[:, :, None] * l_means[:, None, :]
-            l_kl_div = torch.zeros(len(s_stats), dtype=s_stats.dtype,
-                                   device=s_stats.device)
-        else:
-            l_means, l_cov = self.latent_posterior(s_stats)
-            l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
-            l_kl_div = kl_div_std_norm(l_means, l_cov)
+        l_means, l_cov = self.latent_posterior(s_stats)
+        l_quad = l_cov + l_means[:, :, None] * l_means[:, None, :]
+        l_kl_div = kl_div_std_norm(l_means, l_cov)
         l_quad = l_quad.view(len(s_stats), -1)
 
         log_prec, prec, _, s_mean, _, m_mean = self._get_expectation()
@@ -700,12 +693,11 @@ class PLDASet(BayesianModelSet):
             [param.posterior.to(device) for param in self.class_mean_params]
         )
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats):
         # Load the necessary value from the cache.
         prec = self.cache['prec']
         log_prec = self.cache['log_prec']
         deltas = self.cache['deltas']
-
         exp_llhs = -.5 * (prec * deltas - self._data_dim * log_prec + \
             self._data_dim * math.log(2 * math.pi))
 

@@ -113,13 +113,13 @@ class Mixture(BayesianModel):
             self.modelset.to(device)
         )
 
-    def forward(self, s_stats, latent_variables=None):
+    def forward(self, s_stats, labels=None):
         log_weights = self.weights_param.expected_value().view(1, -1)
         per_component_exp_llh = self.modelset(s_stats)
         per_component_exp_llh += log_weights
 
-        if latent_variables is not None:
-            resps = onehot(latent_variables, len(self.modelset),
+        if labels is not None:
+            resps = onehot(labels, len(self.modelset),
                            dtype=log_weights.dtype, device=log_weights.device)
             exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
             self.cache['resps'] = resps
@@ -148,15 +148,15 @@ class Mixture(BayesianModel):
     def sufficient_statistics_from_mean_var(self, mean, var):
         return self.modelset.sufficient_statistics_from_mean_var(mean, var)
 
-    def expected_natural_params(self, mean, var, latent_variables=None,
+    def expected_natural_params(self, mean, var, labels=None,
                                 nsamples=1):
         nframes = len(mean)
         ncomps = len(self.modelset)
 
         # Estimate the responsibilities if not given.
-        if latent_variables is not None:
-            resps = onehot(latent_variables, len(self.modelset),
-                           dtype=mean.dtype, device=mean.device)
+        if labels is not None:
+            resps = onehot(labels, len(self.modelset), dtype=mean.dtype,
+                           device=mean.device)
         else:
             noise =  torch.randn(nsamples, *mean.size(), dtype=mean.dtype,
                                  device=mean.device)

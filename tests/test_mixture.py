@@ -91,7 +91,7 @@ class TestMixture(BaseTest):
                 pc_exp_llh = pc_exp_llh.numpy()
                 pc_exp_llh += mask
                 exp_llh1 = logsumexp(pc_exp_llh, axis=1)
-                exp_llh2 = model(stats, labels).numpy()
+                exp_llh2 = model(stats, labels=labels).numpy()
                 self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
 
