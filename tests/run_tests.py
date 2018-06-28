@@ -64,12 +64,13 @@ def run():
             test_bayesmodel,
             test_expfamilyprior,
             test_features,
+            test_hmm,
             test_mixture,
             test_normal,
             test_subspacemodels,
             test_utils,
             test_vbi,
-            test_hmm
+
         ]
 
     suite = unittest.TestSuite()

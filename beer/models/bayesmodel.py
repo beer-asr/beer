@@ -7,6 +7,49 @@ import torch
 from ..expfamilyprior import ExpFamilyPrior
 
 
+def average_models(models, weights):
+    '''Weighted average the parameters of the set of models of the same
+    type.
+
+    Args:
+        models (list): Sequence of model
+        weights (``torch.Tensor``): weights for each model.
+
+    Returns:
+        :any:`BayesModel`
+
+    '''
+    # Load all the models
+    list_models = [model for model in models]
+
+    # We use the first model of the list as return value.
+    ret_model = list_models[0].copy()
+
+    # Average the Bayesian parameters.
+    nparams = len(list_models[0].parameters)
+    for i in range(nparams):
+        new_param = ret_model.parameters[i]
+        new_nhparams = weights[0] * new_param.posterior.natural_hparams
+        for j, model in enumerate(list_models[1:], start=1):
+            new_nhparams += \
+                weights[j] * model.parameters[i].posterior.natural_hparams
+        new_param.posterior.natural_hparams = new_nhparams
+        ret_model.parameters[i] = new_param
+
+    # Average the non Bayesian parameters.
+    nb_params = ret_model.non_bayesian_parameters()
+    n_nb_params = len(nb_params)
+    new_nb_params = []
+    for i in range(n_nb_params):
+        new_nb_param = torch.zeros_like(nb_params[i])
+        for j, model in enumerate(list_models):
+            nb_params = model.non_bayesian_parameters()
+            new_nb_param += weights[j] * nb_params[i]
+        new_nb_params.append(new_nb_param.clone())
+    ret_model.set_non_bayesian_parameters(new_nb_params)
+    return ret_model
+
+
 class BayesianParameter:
     '''Parameter which has a *prior* and a *posterior* distribution.
 
@@ -34,6 +77,14 @@ class BayesianParameter:
 
     def __hash__(self):
         return hash(repr(self))
+
+    def copy(self):
+        '''Return a new copy of the parameter.'''
+        dtype = self.prior.natural_hparams.dtype
+        if dtype == torch.float32:
+            return self.float()
+        else:
+            return self.double()
 
     def expected_value(self, concatenated=True):
         '''Expected value of the sufficient statistics of the parameter
@@ -64,8 +115,8 @@ class BayesianParameter:
             :any:`BayesianParameter`
 
         '''
-        new_prior = prior.float()
-        new_posterior = posterior.float()
+        new_prior = self.prior.float()
+        new_posterior = self.posterior.float()
         new_ngrad = self.natural_grad.float()
         new_param = BayesianParameter(new_prior, new_posterior)
         new_param.natural_grad = new_ngrad
@@ -78,8 +129,8 @@ class BayesianParameter:
             :any:`BayesianParameter`
 
         '''
-        new_prior = prior.double()
-        new_posterior = posterior.double()
+        new_prior =self.prior.double()
+        new_posterior = self.posterior.double()
         new_ngrad = self.natural_grad.double()
         new_param = BayesianParameter(new_prior, new_posterior)
         new_param.natural_grad = new_ngrad
@@ -96,8 +147,8 @@ class BayesianParameter:
             :any:`BayesianParameter`
 
         '''
-        new_prior = prior.to(device)
-        new_posterior = posterior.double(device)
+        new_prior = self.prior.to(device)
+        new_posterior = self.posterior.to(device)
         new_ngrad = self.natural_grad.to(device)
         new_param = BayesianParameter(new_prior, new_posterior)
         new_param.natural_grad = new_ngrad
@@ -114,13 +165,13 @@ class BayesianParameterSet:
     '''
 
     def __init__(self, parameters):
-        self._parameters = parameters
+        self.__parameters = parameters
 
     def __len__(self):
-        return len(self._parameters)
+        return len(self.__parameters)
 
     def __getitem__(self, key):
-        return self._parameters[key]
+        return self.__parameters[key]
 
     def float(self):
         '''Convert value of the parameter to float precision.
@@ -130,7 +181,7 @@ class BayesianParameterSet:
 
         '''
         return BayesianParameterSet([
-            param.float() for param in self._parameters
+            param.float() for param in self.__parameters
         ])
 
     def double(self):
@@ -141,7 +192,7 @@ class BayesianParameterSet:
 
         '''
         return BayesianParameterSet([
-            param.double() for param in self._parameters
+            param.double() for param in self.__parameters
         ])
 
     def to(self, device):
@@ -156,7 +207,7 @@ class BayesianParameterSet:
 
         '''
         return BayesianParameterSet([
-            param.to(device) for param in self._parameters
+            param.to(device) for param in self.__parameters
         ])
 
 
@@ -182,17 +233,17 @@ class BayesianModel(metaclass=abc.ABCMeta):
     '''
 
     def __init__(self):
-        self._parameters = []
-        self._cache = {}
+        self.__parameters = []
+        self.__cache = {}
 
     def __setattr__(self, name, value):
         if isinstance(value, BayesianParameter):
-            self._parameters.append(value)
+            self.__parameters.append(value)
         elif isinstance(value, BayesianParameterSet):
             for parameter in value:
-                self._parameters.append(parameter)
+                self.__parameters.append(parameter)
         elif isinstance(value, BayesianModel):
-            self._parameters += value.parameters
+            self.__parameters += value.parameters
         super().__setattr__(name, value)
 
     def __call__(self, data, **kwargs):
@@ -201,7 +252,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
     @property
     def parameters(self):
         '''All the :any:`BayesianParameters` of the model.'''
-        return self._parameters
+        return self.__parameters
 
     @property
     def grouped_parameters(self):
@@ -214,7 +265,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
             behavior have to override this method.
 
         '''
-        return [self._parameters]
+        return [self.__parameters]
 
     @property
     def cache(self):
@@ -222,11 +273,30 @@ class BayesianModel(metaclass=abc.ABCMeta):
         computing the ELBO.
 
         '''
-        return self._cache
+        return self.__cache
 
     def clear_cache(self):
         '''Clear the cache.'''
-        self._cache = {}
+        self.__cache = {}
+
+    def non_bayesian_parameters(self):
+        '''List of all non-Bayesian parameters (i.e. parameter that
+        don't have prior, posterior distribution) of the model.
+
+        Returns:
+            list of ``torch.Tensor``
+
+        '''
+        return []
+
+    def set_non_bayesian_parameters(self, new_params):
+        '''Set new values for the non Bayesian parameters.
+
+        Args:
+            new_params (list): List of ``torch.Tensor``.
+
+        '''
+        pass
 
     def local_kl_div_posterior_prior(self, parent_msg=None):
         '''KL divergence between the posterior/prior distribution over the
@@ -238,7 +308,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
         Returns:
             ``torch.Tensor`` or 0.
         '''
-        val = self._parameters[0].expected_value()
+        val = self.__parameters[0].expected_value()
         return torch.tensor(0., dtype=val.dtype, device=val.device)
 
     def kl_div_posterior_prior(self):
@@ -254,6 +324,14 @@ class BayesianModel(metaclass=abc.ABCMeta):
             retval += ExpFamilyPrior.kl_div(parameter.posterior,
                                             parameter.prior).view(1)
         return retval
+
+    def copy(self):
+        '''Return a new copy of the model.'''
+        dtype = self.__parameters[0].prior.natural_hparams.dtype
+        if dtype == torch.float32:
+            return self.float()
+        else:
+            return self.double()
 
     @abc.abstractmethod
     def float(self):
@@ -397,4 +475,4 @@ class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
 
 
 __all__ = ['BayesianModel', 'BayesianModelSet', 'BayesianParameter',
-           'BayesianParameterSet']
+           'BayesianParameterSet', 'average_models']
