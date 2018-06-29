@@ -16,7 +16,71 @@ import beer
 from basetest import BaseTest
 
 
-# pylint: disable=R0902
+class TestNormalIsotropicCovariance(BaseTest):
+
+    def setUp(self):
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.npoints = int(1 + torch.randint(100, (1, 1)).item())
+        self.mean = torch.randn(self.dim).type(self.type)
+        self.variance = 1 + torch.randn(1).type(self.type) ** 2
+        self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
+        self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.means = torch.randn(self.npoints, self.dim).type(self.type)
+        self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
+        self.model = beer.NormalIsotropicCovariance.create(self.mean,
+                                                           self.variance,
+                                                           self.pseudo_counts)
+
+    def test_create(self):
+        mean1, mean2 = self.mean.numpy(), self.model.mean.numpy()
+        self.assertArraysAlmostEqual(mean1, mean2)
+        cov1 = np.eye(self.dim) * (self.variance.numpy())
+        cov2 = self.model.cov.numpy()
+        self.assertArraysAlmostEqual(cov1, cov2)
+
+    def test_sufficient_statistics(self):
+        data = self.data.numpy()
+        stats1 = np.c_[
+            (data ** 2).sum(axis=1),
+            data,
+            np.ones((len(data), 2))
+        ]
+        stats2 = beer.NormalIsotropicCovariance.sufficient_statistics(self.data)
+        self.assertArraysAlmostEqual(stats1, stats2.numpy())
+
+    def test_sufficient_statistics_from_mean_var(self):
+        stats1 = beer.NormalIsotropicCovariance.sufficient_statistics_from_mean_var(
+            self.means, self.vars)
+        mean, var = self.means.numpy(), self.vars.numpy()
+        stats2 = np.c_[
+            (mean ** 2 + var).sum(axis=1),
+            mean,
+            np.ones((len(mean), 2))
+        ]
+        self.assertArraysAlmostEqual(stats1.numpy(), stats2)
+
+    def test_exp_llh(self):
+        stats = self.model.sufficient_statistics(self.data)
+        nparams = self.model.parameters[0].expected_value()
+        exp_llh1 = stats @ nparams
+        exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)
+        exp_llh2 = self.model(stats)
+        self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
+
+    def test_expected_natural_params(self):
+        nparams1, _ = self.model.expected_natural_params(self.means, self.vars)
+        nparams1 = nparams1.numpy()
+        np1, np2, np3, np4 = \
+            self.model.mean_prec_param.expected_value(concatenated=False)
+        nparams2 = torch.cat([
+            np1 * torch.ones(self.dim).type(self.type),
+            np2,
+            np3 * torch.ones(self.dim).type(self.type) / self.dim,
+            np4 * torch.ones(self.dim).type(self.type) / self.dim
+        ]).numpy()
+        self.assertArraysAlmostEqual(nparams1[0], nparams2)
+
+
 class TestNormalDiagonalCovariance(BaseTest):
 
     def setUp(self):
@@ -109,7 +173,68 @@ class TestNormalFullCovariance(BaseTest):
         self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
 
 
-# pylint: disable=R0902
+class TestNormalsotropicCovarianceSet(BaseTest):
+
+    def setUp(self):
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.npoints = int(1 + torch.randint(100, (1, 1)).item())
+        self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.means = torch.randn(self.npoints, self.dim).type(self.type)
+        self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
+        self.mean = torch.randn(self.dim).type(self.type)
+        self.variance = 1 + torch.randn(1).type(self.type) ** 2
+        self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
+        self.ncomp = int(1 + torch.randint(100, (1, 1)).item())
+        self.model = beer.NormalIsotropicCovarianceSet.create(
+            self.mean, self.variance, self.ncomp, self.pseudo_counts,
+            noise_std=0.
+        )
+
+    def test_create(self):
+        self.assertEqual(len(self.model), self.ncomp)
+        for i in range(self.ncomp):
+            mean1, mean2 = self.mean.numpy(), self.model[i].mean.numpy()
+            self.assertArraysAlmostEqual(mean1, mean2)
+            cov1 = self.variance.numpy() * np.ones(self.dim)
+            cov2 = torch.diag(self.model[i].cov).numpy()
+            self.assertArraysAlmostEqual(cov1, cov2)
+
+    def test_sufficient_statistics(self):
+        stats1 = beer.NormalIsotropicCovariance.sufficient_statistics(self.data)
+        stats2 = beer.NormalIsotropicCovarianceSet.sufficient_statistics(self.data)
+        self.assertArraysAlmostEqual(stats1.numpy(), stats2.numpy())
+
+    def test_sufficient_statistics_from_mean_var(self):
+        stats1 = beer.NormalIsotropicCovariance.sufficient_statistics_from_mean_var(
+            self.means, self.vars)
+        stats2 = beer.NormalIsotropicCovariance.sufficient_statistics_from_mean_var(
+            self.means, self.vars)
+        self.assertArraysAlmostEqual(stats1.numpy(), stats2.numpy())
+
+    def test_expected_natural_params_as_matrix(self):
+        matrix1 = self.model.expected_natural_params_as_matrix()
+        matrix2 = torch.cat([param.expected_value()[None]
+                             for param in self.model.parameters])
+        self.assertArraysAlmostEqual(matrix1.numpy(), matrix2.numpy())
+
+    def test_forward(self):
+        matrix = torch.cat([param.expected_value()[None]
+                            for param in self.model.parameters], dim=0)
+        T = self.model.sufficient_statistics(self.data)
+        exp_llh1 = T @ matrix.t()
+        exp_llh1 -= .5 * self.data.size(1) * math.log(2 * math.pi)
+        exp_llh2 = self.model(T)
+        self.assertArraysAlmostEqual(exp_llh1.numpy(), exp_llh2.numpy())
+
+    def test_accumulate(self):
+        weights = torch.ones(len(self.data), self.ncomp).type(self.data.type())
+        T = self.model.sufficient_statistics(self.data)
+        acc_stats1 = list(weights.t() @ T)
+        acc_stats2 = [value for key, value in self.model.accumulate(T, weights).items()]
+        for s1, s2 in zip(acc_stats1, acc_stats2):
+            self.assertArraysAlmostEqual(s1.numpy(), s2.numpy())
+
+
 class TestNormalDiagonalCovarianceSet(BaseTest):
 
     def setUp(self):
@@ -229,7 +354,6 @@ class TestNormalFullCovarianceSet(BaseTest):
             self.assertArraysAlmostEqual(s1.numpy(), s2.numpy())
 
 
-# pylint: disable=R0902
 class TestNormalSetSharedDiagonalCovariance(BaseTest):
 
     def setUp(self):
@@ -395,12 +519,13 @@ class TestNormalSetSharedFullCovariance(BaseTest):
         self.assertArraysAlmostEqual(acc_stats1.numpy(), acc_stats2.numpy())
 
 
-__all__ = ['TestNormalDiagonalCovariance', 'TestNormalFullCovariance',
-           'TestNormalDiagonalCovarianceSet', 'TestNormalFullCovarianceSet',
-           'TestNormalSetSharedDiagonalCovariance',
-           'TestNormalSetSharedFullCovariance']
-
-#__all__ = ['TestNormalDiagonalCovariance', 'TestNormalFullCovariance',
-#           'TestNormalDiagonalCovarianceSet', 'TestNormalFullCovarianceSet',
-#           'TestNormalSetSharedDiagonalCovariance',
-#           'TestNormalSetSharedFullCovariance']
+__all__ = [
+    'TestNormalDiagonalCovariance',
+    'TestNormalFullCovariance',
+    'TestNormalDiagonalCovarianceSet',
+    'TestNormalFullCovarianceSet',
+    'TestNormalSetSharedDiagonalCovariance',
+    'TestNormalSetSharedFullCovariance',
+    'TestNormalIsotropicCovariance',
+    'TestNormalsotropicCovarianceSet'
+]

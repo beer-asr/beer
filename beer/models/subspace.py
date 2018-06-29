@@ -92,7 +92,7 @@ class PPCA(BayesianModel):
         self._subspace_dim, self._data_dim = self.subspace.size()
 
     @classmethod
-    def create(cls, mean, precision, subspace, pseudo_counts=1.):
+    def create(cls, mean, precision, subspace, pseudo_counts=1., noise_std=0.):
         '''Create a Probabilistic Principal Ccomponent model.
 
         Args:
@@ -103,6 +103,8 @@ class PPCA(BayesianModel):
                 the dimension of the subspace and the data respectively.
             pseudo_counts (``torch.Tensor``): Strength of the prior.
                 Should be greater than 0.
+            noise_std (float): Standard deviation of the noise to
+                initialize the posterior distribution.
 
         Returns:
             :any:`PPCA`
@@ -118,10 +120,14 @@ class PPCA(BayesianModel):
         prior_mean = NormalIsotropicCovariancePrior(mean, variance)
         posterior_mean = NormalIsotropicCovariancePrior(mean, variance)
 
+        # Noise subspace.
         cov = torch.eye(subspace.size(0), dtype=mean.dtype,
-                        device=mean.device) / pseudo_counts
+                        device=mean.device)
+        cov /= pseudo_counts
         prior_subspace = MatrixNormalPrior(subspace, cov)
-        posterior_subspace = MatrixNormalPrior(subspace, cov)
+        rand_init = subspace + noise_std * torch.randn(
+            *subspace.size(), dtype=mean.dtype, device=mean.device)
+        posterior_subspace = MatrixNormalPrior(rand_init, cov)
 
         return cls(prior_mean, posterior_mean, prior_prec, posterior_prec,
                    prior_subspace, posterior_subspace)
