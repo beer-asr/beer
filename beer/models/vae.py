@@ -9,6 +9,7 @@ import math
 import torch
 from .bayesmodel import BayesianModel
 from .normal import NormalDiagonalCovariance
+from .normal import NormalIsotropicCovariance
 from ..utils import sample_from_normals
 
 
@@ -144,10 +145,9 @@ class VAE(BayesianModel):
         return self.latent_model.accumulate(latent_stats, parent_msg)
 
 
-class VAEGlobalMeanVar(VAE):
-    '''Variational Auto-Encoder (VAE) with a global mean and variance
-    parameters. Strictly speaking this model is the non-linear version
-    of the Probabilistics Principle Component Analysis.
+class VAEGlobalMeanDiagonalCovariance(VAE):
+    '''Variational Auto-Encoder (VAE) with a global mean and (diagonal)
+    covariance matrix parameters.
 
     '''
 
@@ -240,4 +240,103 @@ class VAEGlobalMeanVar(VAE):
         }
 
 
-__all__ = ['VAE', 'VAEGlobalMeanVar']
+class VAEGlobalMeanIsotropicCovariance(VAE):
+    '''Variational Auto-Encoder (VAE) with a global mean and
+    (isostropic) covariance matrix parameters.
+
+    '''
+
+    def __init__(self, normal, encoder, decoder, latent_model):
+        '''Initialize the VAE.
+
+        Args:
+            normal (:any:`beer.NormalIsotropicCovariance`): Main
+                component of the model.
+            encoder (``MLPModel``): Encoder of the VAE.
+            decoder (``MLPModel``): Decoder of the VAE.
+            latent_model(``BayesianModel``): Bayesian Model
+                for the prior over the latent space.
+
+        '''
+        super().__init__(encoder, decoder, latent_model)
+        self.normal = normal
+
+    @classmethod
+    def create(cls, mean, variance, encoder, decoder, latent_model, pseudo_counts=1.):
+        '''Create a :any:`VAEGlobalMeanIsotropicCovariance`.
+
+        Args:
+            mean (``torch.Tensor[d]``): Mean of the normal.
+            variance (``torch.Tensor[1]``): Variance of the normal.
+            encoder (``MLPModel``): Encoder of the VAE.
+            decoder (``MLPModel``): Decoder of the VAE.
+            latent_model(``BayesianModel``): Bayesian Model
+                for the prior over the latent space.
+            nsamples (int): Number of samples to approximate the
+                expectation of the log-likelihood.
+            pseudo_counts (``torch.Tensor``): Strength of the prior.
+                Should be greater than 0.
+
+        Returns:
+            :any:`VAEGlobalMeanIsotropicCovariance`
+
+        '''
+        normal = NormalIsotropicCovariance.create(mean, variance, pseudo_counts)
+        return cls(normal, encoder, decoder, latent_model)
+
+    def _expected_llh(self, data, means, variances, nsamples):
+        samples = sample_from_normals(means, variances, nsamples)
+        samples = samples.view(nsamples * len(data), -1)
+        dec_means = self.decoder(samples).view(nsamples, len(data), -1)
+        centered_data = (data[None] - dec_means).view(nsamples * len(data), -1)
+        s_stats = self.normal.sufficient_statistics(centered_data)
+        s_stats = s_stats.view(nsamples, len(data), -1).mean(dim=0)
+        self.cache['centered_s_stats'] = s_stats
+        return self.normal(s_stats)
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
+
+    # Most of the BayesianModel interface is implemented in the parent
+    # class VAE.
+
+    def float(self):
+        return self.__class__(
+            self.normal.float(),
+            self.encoder.float(),
+            self.decoder.float(),
+            self.latent_model.float(),
+        )
+
+    def double(self):
+        return self.__class__(
+            self.normal.double(),
+            self.encoder.double(),
+            self.decoder.double(),
+            self.latent_model.double(),
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.normal.to(device),
+            self.encoder.to(device),
+            self.decoder.to(device),
+            self.latent_model.to(device),
+        )
+
+    def accumulate(self, _, parent_msg=None):
+        latent_stats = self.cache['latent_stats']
+        centered_s_stats = self.cache['centered_s_stats']
+        self.clear_cache()
+        return {
+            **self.latent_model.accumulate(latent_stats),
+            **self.normal.accumulate(centered_s_stats)
+        }
+
+
+__all__ = [
+    'VAE',
+    'VAEGlobalMeanDiagonalCovariance',
+    'VAEGlobalMeanIsotropicCovariance',
+]

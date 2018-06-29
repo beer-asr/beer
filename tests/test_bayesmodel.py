@@ -289,7 +289,8 @@ def create_models(dim, t_type):
 
     encoder = torch.nn.Sequential(torch.nn.Linear(2, 2)).type(t_type)
     decoder = torch.nn.Sequential(torch.nn.Linear(2, 2)).type(t_type)
-    models.append(beer.VAEGlobalMeanVar.create(torch.zeros(2).type(t_type),
+    models.append(beer.VAEGlobalMeanDiagonalCovariance.create(
+        torch.zeros(2).type(t_type),
         torch.ones(2).type(t_type), encoder, decoder, models[0]))
 
 
