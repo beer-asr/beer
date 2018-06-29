@@ -431,10 +431,10 @@ class IsotropicNormalGammaPrior(ExpFamilyPrior):
 
         '''
         natural_hparams = torch.tensor(torch.cat([
-            scale * (mean ** 2).sum() + 2 * rate,
+            (scale * (mean ** 2).sum() + 2 * rate).view(1),
             scale * mean,
-            scale,
-            (2 * (shape - 1) / len(mean)) + 1
+            scale.view(1),
+            ((2 * (shape - 1) / len(mean)) + 1).view(1)
         ]), requires_grad=True)
         super().__init__(natural_hparams)
 
