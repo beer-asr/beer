@@ -1,6 +1,7 @@
 
 from .bayesmodel import *
 from .normal import *
+from .normalset import *
 from .mixture import *
 from .hmm import *
 from .subspace import *
