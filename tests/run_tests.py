@@ -15,6 +15,7 @@ sys.path.insert(0, './tests')
 import argparse
 import unittest
 from basetest import BaseTest
+import test_create_model
 import test_bayesmodel
 import test_expfamilyprior
 import test_features
@@ -26,9 +27,10 @@ import test_utils
 import test_vbi
 
 testcases = {
-    'test_bayesmodel': test_bayesmodel,
-    'test_expfamilyprior': test_expfamilyprior,
     'test_features': test_features,
+    'test_expfamilyprior': test_expfamilyprior,
+    'test_bayesmodel': test_bayesmodel,
+    'test_create_model': test_create_model,
     'test_mixture': test_mixture,
     'test_normal': test_normal,
     'test_subspacemodels': test_subspacemodels,
