@@ -1,2 +1,4 @@
 type: Normal
 covariance: isotropic
+prior_strength: 1.
+noise_std: 0.

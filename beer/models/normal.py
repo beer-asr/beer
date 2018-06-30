@@ -37,25 +37,7 @@ from ..expfamilyprior import JointNormalWishartPrior
 
 
 class NormalIsotropicCovariance(BayesianModel):
-    '''Bayesian Normal density with isotropic covariance matrix.
-
-    Attributes:
-        mean (``torch.Tensor``): Expected mean.
-        cov (``torch.Tensor``): Expected (isotropic) covariance matrix.
-
-    Example:
-        >>> # Create a Normal with zero mean and identity covariamce
-        >>> # matrix.
-        >>> mean = torch.zeros(2)
-        >>> variance = torch.tensor(1)
-        >>> normal = beer.NormalDiagonalCovariance.create(mean, variance)
-        >>> normal.mean
-        tensor([ 0.,  0.])
-        >>> model.cov
-        tensor([[ 1.,  0.],
-                [ 0.,  1.]])
-
-    '''
+    '''Bayesian Normal density with isotropic covariance matrix.'''
 
     def __init__(self, prior, posterior):
         '''
@@ -67,28 +49,6 @@ class NormalIsotropicCovariance(BayesianModel):
         '''
         super().__init__()
         self.mean_prec_param = BayesianParameter(prior, posterior)
-
-    @classmethod
-    def create(cls, mean, variance, pseudo_counts=1.):
-        '''Create a :any:`NormalDiagonalCovariance`.
-
-        Args:
-            mean (``torch.Tensor``): Mean of the Normal to create.
-            variance (``torch.Tensor``): Global variance parameter.
-            pseudo_counts (``torch.Tensor``): Strength of the prior.
-                Should be greater than 0.
-
-        Returns:
-            :any:`NormalIsotropicCovariance`
-        '''
-        dtype, device = mean.dtype, mean.device
-        scale = torch.tensor(pseudo_counts, dtype=dtype, device=device)
-        shape = torch.tensor(pseudo_counts, dtype=dtype, device=device)
-        rate =  torch.tensor(pseudo_counts * variance, dtype=dtype,
-                             device=device)
-        prior = IsotropicNormalGammaPrior(mean, scale, shape, rate)
-        posterior = IsotropicNormalGammaPrior(mean, scale, shape, rate)
-        return cls(prior, posterior)
 
     @property
     def mean(self):
@@ -196,18 +156,6 @@ class NormalDiagonalCovariance(BayesianModel):
         mean (``torch.Tensor``): Expected mean.
         cov (``torch.Tensor``): Expected (diagonal) covariance matrix.
 
-    Example:
-        >>> # Create a Normal with zero mean and identity covariamce
-        >>> # matrix.
-        >>> mean = torch.zeros(2)
-        >>> diav_cov = torch.ones(2)
-        >>> normal = beer.NormalDiagonalCovariance.create(mean, diag_cov)
-        >>> normal.mean
-        tensor([ 0.,  0.])
-        >>> model.cov
-        tensor([[ 1.,  0.],
-                [ 0.,  1.]])
-
     '''
 
     def __init__(self, prior, posterior):
@@ -220,27 +168,6 @@ class NormalDiagonalCovariance(BayesianModel):
         '''
         super().__init__()
         self.mean_prec_param = BayesianParameter(prior, posterior)
-
-    @classmethod
-    def create(cls, mean, diag_cov, pseudo_counts=1.):
-        '''Create a :any:`NormalDiagonalCovariance`.
-
-        Args:
-            mean (``torch.Tensor``): Mean of the Normal to create.
-            diag_cov (``torch.Tensor``): Diagonal of the covariance
-                matrix of the Normal to create.
-            pseudo_counts (``torch.Tensor``): Strength of the prior.
-                Should be greater than 0.
-
-        Returns:
-            :any:`NormalDiagonalCovariance`
-        '''
-        scale = torch.ones_like(mean) * pseudo_counts
-        shape = torch.ones_like(mean) * pseudo_counts
-        rate = pseudo_counts * diag_cov
-        prior = NormalGammaPrior(mean, scale, shape, rate)
-        posterior = NormalGammaPrior(mean, scale, shape, rate)
-        return cls(prior, posterior)
 
     @property
     def mean(self):
@@ -458,37 +385,6 @@ class NormalIsotropicCovarianceSet(BayesianModelSet):
                               comp.parameters[0].posterior)
             for comp in self._components
         ])
-
-    @classmethod
-    def create(cls, mean, variance, ncomp, pseudo_counts=1., noise_std=0.):
-        '''Create a :any:`NormalDiagonalCovarianceSet`.
-
-        Args:
-            mean (``torch.Tensor``): Mean of the Normal to create.
-            variance (``torch.Tensor``): Global variance.
-            ncomp (int): Number of component in the set.
-            pseudo_counts (``torch.Tensor``): Strength of the prior.
-                Should be greater than 0.
-            noise_std (float): Standard deviation of the noise when
-                initializing the mean of the posterior distribution.
-
-        Returns:
-            :any:`NormalDiagonalCovarianceSet`
-        '''
-        dtype, device = mean.dtype, mean.device
-        scale = torch.tensor(pseudo_counts, dtype=dtype, device=device)
-        shape = torch.tensor(pseudo_counts, dtype=dtype, device=device)
-        rate =  torch.tensor(pseudo_counts * variance, dtype=dtype,
-                             device=device)
-        prior = IsotropicNormalGammaPrior(mean, scale, shape, rate)
-        posteriors = [
-            IsotropicNormalGammaPrior(
-                mean + noise_std * torch.randn(len(mean), dtype=mean.dtype,
-                                               device=mean.device),
-                scale, shape, rate
-            ) for _ in range(ncomp)
-        ]
-        return cls(prior, posteriors)
 
     def expected_natural_params_as_matrix(self):
         return torch.cat([param.expected_value()[None]
@@ -1075,6 +971,40 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
     def expected_natural_params_from_resps(self, resps):
         matrix = self.expected_natural_params_as_matrix()
         return resps @ matrix
+
+
+def create(model_conf, mean, variance):
+    dtype, device = mean.dtype, mean.device
+    covariance_type = model_conf['covariance']
+    noise_std = model_conf['noise_std']
+    prior_strength = model_conf['prior_strength']
+    rand_mean = mean +  noise_std * torch.randn(len(mean), dtype=dtype,
+                                                device=device)
+    if covariance_type == 'isotropic':
+        scale = torch.tensor(prior_strength, dtype=dtype, device=device)
+        shape = torch.tensor(prior_strength, dtype=dtype, device=device)
+        rate =  torch.tensor(prior_strength * variance.sum(), dtype=dtype,
+                             device=device)
+        prior = IsotropicNormalGammaPrior(mean, scale, shape, rate)
+        posterior = IsotropicNormalGammaPrior(rand_mean, scale, shape, rate)
+        return NormalIsotropicCovariance(prior, posterior)
+    elif covariance_type == 'diagonal':
+        scale = torch.ones_like(mean) * prior_strength
+        shape = torch.ones_like(mean) * prior_strength
+        rate = prior_strength * variance
+        prior = NormalGammaPrior(mean, scale, shape, rate)
+        posterior = NormalGammaPrior(rand_mean, scale, shape, rate)
+        return NormalDiagonalCovariance(prior, posterior)
+    elif covariance_type == 'full':
+        cov = torch.diag(variance)
+        scale = prior_strength
+        dof = prior_strength + len(mean) - 1
+        scale_matrix = torch.inverse(cov *  dof)
+        prior = NormalWishartPrior(mean, scale, scale_matrix, dof)
+        posterior = NormalWishartPrior(rand_mean, scale, scale_matrix, dof)
+        return NormalFullCovariance(prior, posterior)
+    else:
+        raise ValueError('Unknown covariance type: {}'.format(covariance_type))
 
 
 __all__ = [
