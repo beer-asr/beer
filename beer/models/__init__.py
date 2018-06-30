@@ -12,7 +12,7 @@ import yaml
 
 _model_types = {
     'Normal': normal.create,
-    'NormalSet': None,
+    'NormalSet': normalset.create,
     'Mixture': None,
     'HMM': None,
     'PPCA': None,
