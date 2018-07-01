@@ -411,7 +411,7 @@ class JointIsotropicNormalGammaPrior(ExpFamilyPrior):
             ((scales * (means**2).sum(dim=1)).sum() + 2 * rate).view(-1),
             (scales[:, None] * means).view(-1),
             scales.view(-1),
-            (2 * (shape - 1) / self.dim) + self.ncomp
+            ((2 * (shape - 1) / self.dim) + self.ncomp).view(1)
         ]), requires_grad=True)
         super().__init__(natural_hparams)
 
