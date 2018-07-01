@@ -7,8 +7,6 @@ from .hmm import *
 from .subspace import *
 from .vae import *
 
-import yaml
-
 
 _model_types = {
     'Normal': normal.create,
@@ -25,7 +23,8 @@ def create_model(conf, mean, variance):
     '''Create one or several models from a YAML configuration string.
 
     Args:
-        conf (string): YAML formatted string defining the model.
+        conf (dict): Dictionary containing the configuration of the
+            model.
         mean (``torch.Tensor``): Mean of the data to initialize the
             model.
         variance (``torch.Tensor``): Variance of the data to initialize
@@ -35,8 +34,7 @@ def create_model(conf, mean, variance):
         :any:`BayesianModel` or a list of :any:`BayesianModel`
 
     '''
-    model_conf = yaml.load(conf)
-    requested_type = model_conf['type']
+    requested_type = conf['type']
     if requested_type not in _model_types:
         raise ValueError('Unknown model type: {}'.format(requested_type))
-    return _model_types[requested_type](model_conf, mean, variance)
+    return _model_types[requested_type](conf, mean, variance)
