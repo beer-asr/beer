@@ -392,6 +392,90 @@ class NormalGammaPrior(ExpFamilyPrior):
         return torch.sum(lognorm)
 
 
+class IsotropicNormalGammaPrior(ExpFamilyPrior):
+    '''The (isotropic) Normal-Gamma density defined as:
+
+    .. math::
+       p(\\mu, \\lambda | m, \\kappa, a, b) = \\mathcal{N} \\big(\mu | m,
+        (\\kappa \; \\text{diag}(\\lambda))^{-1} \\big)
+        \\mathcal{G} \\big( \\lambda | a, b \\big)
+
+    where:
+
+      * :math:`\\mu`, :math:`\\lambda` are the mean and the diagonal
+        of the precision matrix of a multivariate normal density.
+      * :math:`m` is the hyper-parameter mean of the Normal density.
+      * :math:`\\kappa` is the hyper-parameter scale of the Normal
+        density.
+      * :math:`a` is the hyper-paramater shape of the Gamma density.
+      * :math:`b` is the hyper-parameter rate of the Gamma density.
+
+    Note:
+        Strictly speaking, the Normal-Gamma density is a
+        distribution over a 1 dimensional mean and precision parameter.
+        In our case, :math:`\\mu` and :math:`\\lambda` are a
+        D-dimensional vector and the diagonal of a :math:`D \\times D`
+        precision matrix respectively. The ``beer.NormalGammaPrior``
+        can be seen as the concatenation of :math:`D` indenpendent
+        "standard" Normal-Gamma densities.
+
+    '''
+
+    def __init__(self, mean, scale, shape, rate):
+        '''
+        Args:
+            mean (``torch.Tensor[d]``): Mean of the Normal.
+            scale (``torch.Tensor[1]``): Scale of the Normal.
+            shape (``torch.Tensor[1]``): Shape parameter of the Gamma.
+            rate (``torch.Tensor[1]``): Rate parameter of the Gamma.
+
+        '''
+        natural_hparams = torch.tensor(torch.cat([
+            (scale * (mean ** 2).sum() + 2 * rate).view(1),
+            scale * mean,
+            scale.view(1),
+            ((2 * (shape - 1) / len(mean)) + 1).view(1)
+        ]), requires_grad=True)
+        super().__init__(natural_hparams)
+
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
+
+    def split_sufficient_statistics(self, s_stats):
+        '''Split the sufficient statistics into 4 groups.
+
+        Args:
+            s_stats (``torch.Tensor``): Sufficients statistics to
+                split
+
+        Returns:
+            ``torch.Tensor``: ``s_stats`` unchanged.
+
+        '''
+        return s_stats[0], s_stats[1: -2], s_stats[-2], s_stats[-1]
+
+    def log_norm(self, natural_hparams):
+        '''Log-normalizing function
+
+        Args:
+            natural_hparams (``torch.Tensor``): Natural hyper-parameters
+                of the distribution.
+
+        Returns:
+            ``torch.Tensor`` of size 1: Log-normalization value.
+
+        '''
+        np1, np2, np3, np4 = self.split_sufficient_statistics(natural_hparams)
+        dim = len(np2)
+        shape = .5 * (dim * np4 + 2 - dim)
+        lognorm = torch.lgamma(shape)
+        lognorm += -.5 * dim * torch.log(np3)
+        lognorm += -shape * torch.log(.5 * (np1 - ((np2 ** 2) / np3).sum()))
+        return lognorm
+
+
 class JointNormalGammaPrior(ExpFamilyPrior):
     '''Joint NormalGamma is the distribution over a set of
     :math:`D` dimensional mean vectors :math:`M = (\\mu_1, ...,
@@ -930,5 +1014,5 @@ __all__ = [
     'ExpFamilyPrior', 'JointExpFamilyPrior', 'DirichletPrior', 'NormalGammaPrior',
     'JointNormalGammaPrior', 'NormalWishartPrior', 'JointNormalWishartPrior',
     'NormalFullCovariancePrior', 'NormalIsotropicCovariancePrior', 'GammaPrior',
-    'MatrixNormalPrior'
+    'MatrixNormalPrior', 'IsotropicNormalGammaPrior'
 ]

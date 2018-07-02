@@ -109,7 +109,7 @@ def normalgamma_grad_log_norm(natural_params):
     grad3 = - 1 / (2 * np3) - ((np2 ** 2) * (np4 + 1)) \
         / (2 * np3 * (np3 * np1 - (np2 ** 2)))
     grad4 = .5 * psi(.5 * (np4 + 1)) \
-        - .5 *np.log(.5 * (np1 - ((np2 ** 2) / np3)))
+        - .5 * np.log(.5 * (np1 - ((np2 ** 2) / np3)))
     return np.hstack([grad1, grad2, grad3, grad4])
 
 
@@ -150,6 +150,79 @@ class TestNormalGammaPrior(BaseTest):
         log_norm1 = self.model.log_norm(self.model.natural_hparams).numpy()
         natural_hparams = self.model.natural_hparams.numpy()
         log_norm2 = normalgamma_log_norm(natural_hparams)
+        self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
+
+
+########################################################################
+# Isotropic Normal-Gamma prior.
+########################################################################
+
+def isotropic_normalgamma_log_norm(natural_params):
+    np1 = natural_params[0]
+    np2 = natural_params[1:-2]
+    np3 = natural_params[-2]
+    np4 = natural_params[-1]
+    dim = len(np2)
+    shape = .5 * (dim * np4 + 2 - dim)
+    lognorm = gammaln(shape)
+    lognorm += -.5 * dim * np.log(np3)
+    lognorm += -shape * np.log(.5 * (np1 - ((np2 ** 2).sum() / np3)))
+    return lognorm.sum()
+
+
+def isotropic_normalgamma_grad_log_norm(natural_params):
+    np1 = natural_params[0]
+    np2 = natural_params[1:-2]
+    np3 = natural_params[-2]
+    np4 = natural_params[-1]
+    dim = len(np2)
+    grad1 = -(dim * np4 + 2 - dim) / (2 * (np1 - ((np2 ** 2).sum() / np3)))
+    grad2 = (np2 * (dim * np4 + 2 - dim)) / (np3 * np1 - (np2 ** 2).sum())
+    grad3 = - dim / (2 * np3) - ((np2 ** 2).sum()) * (dim * np4 + 2 - dim) \
+        / (2 * np3 * (np3 * np1 - (np2 ** 2).sum()))
+    grad4 = .5 * dim * psi(.5 * (dim * np4 + 2 - dim)) \
+        - .5 * dim * np.log(.5 * (np1 - ((np2 ** 2).sum() / np3)))
+    return np.hstack([grad1, grad2, grad3, grad4])
+
+
+class TestIsotropicNormalGammaPrior(BaseTest):
+
+    def setUp(self):
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim = 1
+        self.mean = torch.randn(self.dim).type(self.type)
+        self.scale = (1 + torch.randn(1) ** 2).type(self.type)
+        self.shape = (1 + torch.randn(1) ** 2).type(self.type)
+        self.rate = (1 + torch.randn(1) ** 2).type(self.type)
+        self.model = beer.IsotropicNormalGammaPrior(self.mean, self.scale,
+                                           self.shape, self.rate)
+
+    def test_init(self):
+        mean, scale, shape, rate = self.mean.numpy(), self.scale.numpy(), \
+            self.shape.numpy(), self.rate.numpy()
+        natural_hparams = np.hstack([
+            scale * (mean ** 2).sum() + 2 * rate,
+            scale * mean,
+            scale,
+            2 * shape - 1
+        ])
+        self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
+                                     natural_hparams)
+
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
+
+    def test_exp_sufficient_statistics(self):
+        model_s_stats = self.model.expected_sufficient_statistics.numpy()
+        natural_hparams = self.model.natural_hparams.numpy()
+        s_stats = isotropic_normalgamma_grad_log_norm(natural_hparams)
+        self.assertArraysAlmostEqual(model_s_stats, s_stats)
+
+    def test_log_norm(self):
+        log_norm1 = self.model.log_norm(self.model.natural_hparams).numpy()
+        natural_hparams = self.model.natural_hparams.numpy()
+        log_norm2 = isotropic_normalgamma_log_norm(natural_hparams)
         self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
 
 
@@ -591,5 +664,6 @@ __all__ = [
     'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior',
     'TestNormalWishartPrior', 'TestJointNormalWishartPrior',
     'TestNormalFullCovariancePrior', 'TestNormalIsotropicCovariancePrior',
-    'TestMatrixNormalPrior', 'TestGammaPrior', 'TestJointExpFamilyPrior'
+    'TestMatrixNormalPrior', 'TestGammaPrior', 'TestJointExpFamilyPrior',
+    'TestIsotropicNormalGammaPrior'
 ]
