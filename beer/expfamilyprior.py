@@ -387,10 +387,12 @@ class IsotropicNormalGammaPrior(ExpFamilyPrior):
         '''
         np1, np2, np3, np4 = self.split_sufficient_statistics(natural_hparams)
         dim = len(np2)
-        shape = .5 * (dim * np4 + 2 - dim)
+        shape = .5 * dim * (np4 - 1) + 1
+        rate = .5 * (np1 - ((np2 ** 2).sum() / np3))
+        scale = np3
         lognorm = torch.lgamma(shape)
-        lognorm += -.5 * dim * torch.log(np3)
-        lognorm += -shape * torch.log(.5 * (np1 - ((np2 ** 2) / np3).sum()))
+        lognorm += -.5 * dim * torch.log(scale)
+        lognorm += -shape * torch.log(rate)
         return lognorm
 
 
@@ -401,7 +403,7 @@ class JointIsotropicNormalGammaPrior(ExpFamilyPrior):
         '''
         Args:
             means (``torch.Tensor[k,d]``): Mean of the Normals.
-            scales (``torch.Tensor[k,d]``): Scale of the Normals.
+            scales (``torch.Tensor[k]``): Scale of the Normals.
             shape (``torch.Tensor[1]``): Shape parameter of the Gamma.
             rate (``torch.Tensor[1]``): Rate parameter of the Gamma.
 

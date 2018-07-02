@@ -66,7 +66,7 @@ class NormalIsotropicCovarianceSet(BayesianModelSet):
         return self.__class__(new_prior, new_posts)
 
     def forward(self, s_stats):
-        feadim = .25 * s_stats.size(1)
+        feadim = s_stats.size(1) - 3
         retval = s_stats @ self.expected_natural_params_as_matrix().t()
         retval -= .5 * feadim * math.log(2 * math.pi)
         return retval
@@ -231,6 +231,97 @@ class NormalFullCovarianceSet(BayesianModelSet):
         return resps @ matrix
 
 
+class NormalSetSharedIsotropicCovariance(BayesianModelSet):
+    '''Set of Normal density models with a shared isotropic covariance
+    matrix.
+    '''
+
+    def __init__(self, prior, posterior):
+        super().__init__()
+        self._ncomp = prior.ncomp
+        self.means_prec_param = BayesianParameter(prior, posterior)
+
+    def _expected_nparams(self):
+        np1, np2, np3, np4 = \
+            self.means_prec_param.expected_value(concatenated=False)
+        return torch.cat([np1.view(-1), np4.view(-1)]), \
+            torch.cat([np2, np3.view(-1, 1)], dim=1).view(len(self), -1)
+
+    def expected_natural_params_as_matrix(self):
+        np1, np2, np3, np4 = \
+            self.means_prec_param.expected_value(concatenated=False)
+        ones = torch.ones_like(np2)
+        return torch.cat([ones * np1, np2, ones * np3[:, None] ,
+                          ones * np4], dim=1)
+
+    def sufficient_statistics(self, data):
+        dtype, device = data.dtype, data.device
+        padding = torch.ones(len(data), 1, dtype=dtype, device=device)
+        s_stats1 = torch.cat([(data**2).sum(dim=1).view(-1, 1), padding], dim=1)
+        s_stats2 = torch.cat([data, padding], dim=1)
+        return s_stats1, s_stats2
+
+    def float(self):
+        return self.__class__(
+            self.means_prec_param.prior.float(),
+            self.means_prec_param.posterior.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.means_prec_param.prior.double(),
+            self.means_prec_param.posterior.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.means_prec_param.prior.to(device),
+            self.means_prec_param.posterior.to(device)
+        )
+
+    def forward(self, s_stats):
+        s_stats1, s_stats2 = s_stats
+        feadim = s_stats2.shape[1] - 1
+        params = self._expected_nparams()
+        retval = (s_stats1 @ params[0])[:, None] + s_stats2 @ params[1].t()
+        retval -= .5 * feadim * math.log(2 * math.pi)
+        return retval
+
+    def accumulate(self, s_stats, parent_msg=None):
+        if parent_msg is None:
+            raise ValueError('"parent_msg" should not be None')
+        s_stats1, s_stats2, weights = *s_stats, parent_msg
+        dtype, device = s_stats2.dtype, s_stats2.device
+        acc_stats = torch.cat([
+            s_stats1[:, 0].sum(dim=0).view(1),
+            (weights.t() @ s_stats2[:, :-1]).view(-1),
+            weights.sum(dim=0),
+            torch.tensor(len(s_stats1), dtype=dtype, device=device).view(1)
+        ])
+        return {self.means_prec_param: acc_stats}
+
+    def __getitem__(self, key):
+        np1, np2, _, _ = \
+            self.means_prec_param.expected_value(concatenated=False)
+
+        cov = (1 / (-2 * np1)) * torch.eye(np2.shape[1], dtype=np1.dtype,
+                                           device=np1.device)
+        mean = cov @ np2[key]
+        return NormalSetElement(mean=mean, cov=cov)
+
+    def __len__(self):
+        return self.means_prec_param.posterior.ncomp
+
+    def expected_natural_params_from_resps(self, resps):
+        matrix = self.expected_natural_params_as_matrix()
+        return resps @ matrix
+
+    @staticmethod
+    def sufficient_statistics_from_mean_var(mean, var):
+        s_stats1 = torch.cat([mean ** 2 + var, torch.ones_like(mean)], dim=1)
+        s_stats2 = torch.cat([mean, torch.ones_like(mean)], dim=1)
+        return s_stats1, s_stats2
+
 class NormalSetSharedDiagonalCovariance(BayesianModelSet):
     '''Set of Normal density models with a shared full covariance
     matrix.
@@ -240,21 +331,6 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
         super().__init__()
         self._ncomp = prior.ncomp
         self.means_prec_param = BayesianParameter(prior, posterior)
-
-    @classmethod
-    def create(cls, mean, diag_cov, ncomp, pseudo_counts=1., noise_std=0.):
-        dim = len(mean)
-        scales = torch.ones(ncomp, dim, dtype=mean.dtype,
-                            device=mean.device) * pseudo_counts
-        shape = torch.ones_like(diag_cov) * pseudo_counts
-        rate = diag_cov * pseudo_counts
-        p_means = mean + torch.zeros_like(scales, dtype=mean.dtype,
-                                          device=mean.device,)
-        means = mean +  noise_std * torch.randn(ncomp, dim, dtype=mean.dtype,
-                                                device=mean.device)
-        prior = JointNormalGammaPrior(p_means, scales, shape, rate)
-        posterior = JointNormalGammaPrior(means, scales, shape, rate)
-        return cls(prior, posterior)
 
     def _expected_nparams(self):
         np1, np2, np3, np4 = \
@@ -423,7 +499,7 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
         return resps @ matrix
 
 
-def create(model_conf, mean, variance):
+def create(model_conf, mean, variance, create_model_handle):
     dim = len(mean)
     dtype, device = mean.dtype, mean.device
     n_element = model_conf['size']
@@ -444,7 +520,7 @@ def create(model_conf, mean, variance):
                                                     device=device)
             prior = JointIsotropicNormalGammaPrior(p_means, scales, shape, rate)
             posterior = JointIsotropicNormalGammaPrior(means, scales, shape, rate)
-            return NormalSetSharedDiagonalCovariance(prior, posterior)
+            return NormalSetSharedIsotropicCovariance(prior, posterior)
         else:
             scale = torch.tensor(prior_strength, dtype=dtype, device=device)
             shape = torch.tensor(prior_strength, dtype=dtype, device=device)
@@ -456,7 +532,7 @@ def create(model_conf, mean, variance):
             posteriors = [IsotropicNormalGammaPrior(rand_means[i], scale, shape,
                                                     rate)
                           for i in range(n_element)]
-            return NormalDiagonalCovarianceSet(prior, posteriors)
+            return NormalIsotropicCovarianceSet(prior, posteriors)
     elif covariance_type == 'diagonal':
         if shared_cov:
             scales = torch.ones(n_element, dim, dtype=dtype, device=device)
@@ -491,8 +567,8 @@ def create(model_conf, mean, variance):
             means = mean + noise_std * torch.randn(n_element, dim, dtype=dtype,
                                                    device=device)
             prior = JointNormalWishartPrior(p_means, scales, scale_matrix, dof)
-            posterior = JointNormalWishartPrior(means, scales, scale_matrix, dof)
-            return NormalSetSharedFullCovariance(prior, posterior)
+            posteriors = JointNormalWishartPrior(means, scales, scale_matrix, dof)
+            return NormalSetSharedFullCovariance(prior, posteriors)
         else:
             scale = prior_strength
             dof = prior_strength + len(mean) - 1

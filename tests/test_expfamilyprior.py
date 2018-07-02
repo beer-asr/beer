@@ -288,9 +288,6 @@ class TestNormalGammaPrior(BaseTest):
         self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
 
 
-
-
-
 ########################################################################
 # Joint Normal-Gamma prior.
 ########################################################################

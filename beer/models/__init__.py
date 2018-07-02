@@ -4,17 +4,18 @@ from .normal import *
 from .normalset import *
 from .mixture import *
 from .hmm import *
-from .subspace import *
+from .ppca import *
+from .pldaset import *
 from .vae import *
 
 
 _model_types = {
     'Normal': normal.create,
     'NormalSet': normalset.create,
-    'Mixture': None,
+    'Mixture': mixture.create,
     'HMM': None,
-    'PPCA': None,
-    'PLDA': None,
+    'PPCA': ppca.create,
+    'PLDASet': pldaset.create,
     'VAE': None,
 }
 
@@ -37,4 +38,4 @@ def create_model(conf, mean, variance):
     requested_type = conf['type']
     if requested_type not in _model_types:
         raise ValueError('Unknown model type: {}'.format(requested_type))
-    return _model_types[requested_type](conf, mean, variance)
+    return _model_types[requested_type](conf, mean, variance, create_model)

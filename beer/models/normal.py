@@ -201,7 +201,7 @@ class NormalFullCovariance(Normal):
         return {self.mean_prec_param: s_stats.sum(dim=0)}
 
 
-def create(model_conf, mean, variance):
+def create(model_conf, mean, variance, create_model_handle):
     dtype, device = mean.dtype, mean.device
     covariance_type = model_conf['covariance']
     noise_std = model_conf['noise_std']
