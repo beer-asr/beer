@@ -11,11 +11,6 @@ import beer
 from basetest import BaseTest
 
 
-model_confs = [
-
-]
-
-
 class TestCreateModel(BaseTest):
 
     def setUp(self):

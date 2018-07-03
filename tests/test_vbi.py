@@ -2,7 +2,10 @@
 
 import sys
 sys.path.insert(0, './')
+import glob
+import os
 import unittest
+import yaml
 import torch
 import beer
 from basetest import BaseTest
@@ -25,85 +28,21 @@ class TestEvidenceLowerbound(BaseTest):
         self.dim = int(10 + torch.randint(100, (1, 1)).item())
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.mean = torch.randn(self.dim).type(self.type)
+        self.variance = (1 + torch.randn(self.dim) ** 2).type(self.type)
+
+        self.conf_files = []
+        for path in glob.glob('./tests/models/*yml'):
+            if not os.path.basename(path).startswith('normalset'):
+                self.conf_files.append(path)
+        assert len(self.conf_files) > 0
 
         self.models = []
-        self.models += [
-            beer.NormalDiagonalCovariance.create(
-                torch.zeros(self.dim).type(self.type),
-                torch.ones(self.dim).type(self.type)
-            ),
-            beer.NormalFullCovariance.create(
-                torch.zeros(self.dim).type(self.type),
-                torch.eye(self.dim).type(self.type)
-            ),
-        ]
-
-        normalset = beer.NormalDiagonalCovarianceSet.create(
-            torch.zeros(self.dim).type(self.type),
-            torch.ones(self.dim).type(self.type),
-            10,
-            noise_std=0.1
-        )
-        weights = torch.ones(10).type(self.type) * .1
-        self.models.append(beer.Mixture.create(weights, normalset))
-
-        normalset = beer.NormalFullCovarianceSet.create(
-            torch.zeros(self.dim).type(self.type),
-            torch.eye(self.dim).type(self.type),
-            10,
-            noise_std=0.1
-        )
-        weights = torch.ones(10).type(self.type) * .1
-        self.models.append(beer.Mixture.create(weights, normalset))
-
-        normalset = beer.NormalSetSharedDiagonalCovariance.create(
-            torch.zeros(self.dim).type(self.type),
-            torch.ones(self.dim).type(self.type),
-            10,
-            noise_std=0.1
-        )
-        weights = torch.ones(10).type(self.type) * .1
-        self.models.append(beer.Mixture.create(weights, normalset))
-
-        normalset = beer.NormalSetSharedFullCovariance.create(
-            torch.zeros(self.dim).type(self.type),
-            torch.eye(self.dim).type(self.type),
-            10,
-            noise_std=0.1
-        )
-        weights = torch.ones(10).type(self.type) * .1
-        self.models.append(beer.Mixture.create(weights, normalset))
-
-        normalset = beer.NormalSetSharedFullCovariance.create(
-            torch.zeros(self.dim).type(self.type),
-            torch.eye(self.dim).type(self.type),
-            2,
-            noise_std=0.1
-        )
-        self.models.append(beer.HMM.create([0, 1], [0, 1],
-                                           torch.FloatTensor([[1, 0],
-                                            [.5, .5]]).type(self.type),
-                                            normalset))
-
-        self.mean = torch.zeros(self.dim).type(self.type)
-        self.prec = 2
-        self.subspace = torch.randn(self.dim - 1, self.dim).type(self.type)
-        self.ppca = beer.PPCA.create(self.mean, self.prec, self.subspace)
-
-        ncomps = int(2 + torch.randint(10, (1, 1)).item())
-        obs_dim = self.dim
-        noise_s_dim = self.dim - 1
-        class_s_dim = ncomps - 1
-        mean = torch.zeros(self.dim).type(self.type)
-        prec = 1.
-        noise_s = torch.randn(noise_s_dim, obs_dim).type(self.type)
-        class_s = torch.randn(class_s_dim, obs_dim).type(self.type)
-        means = 2 * torch.randn(ncomps, class_s_dim).type(self.type)
-        weights = torch.ones(ncomps).type(self.type) / ncomps
-        pseudo_counts = 1.
-
-        pldaset = beer.PLDASet.create(mean, prec, noise_s, class_s, means, pseudo_counts)
-        self.plda = beer.Mixture.create(weights, pldaset, pseudo_counts)
+        for conf_file in self.conf_files:
+            with open(conf_file, 'r') as fid:
+                conf = yaml.load(fid)
+            model = beer.create_model(conf, self.mean, self.variance)
+            self.models.append(model)
 
         self.acc_stats1 = {
             'shared_key': torch.randn(self.dim).type(self.type),
@@ -126,12 +65,14 @@ class TestEvidenceLowerbound(BaseTest):
         new_stats = beer.vbi.add_acc_stats({}, {})
         self.assertEqual(len(new_stats), 0)
 
-    def test_sum1(self):
+    def test_sum(self):
         for i, model in enumerate(self.models):
-            with self.subTest(i=i):
-                optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
+            with self.subTest(model=model):
+                optim = beer.BayesianModelCoordinateAscentOptimizer(
+                        *model.grouped_parameters, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_EPOCHS):
+                    self.seed(1)
                     optim.zero_grad()
                     elbo = beer.evidence_lower_bound(datasize=len(self.data))
                     for _ in range(N_ITER):
@@ -142,12 +83,14 @@ class TestEvidenceLowerbound(BaseTest):
                     self.assertGreaterEqual(elbo_val - previous, -TOLERANCE)
                     previous = elbo_val
 
-    def test_optim1(self):
+    def test_optim(self):
         for i, model in enumerate(self.models):
-            with self.subTest(i=i):
-                optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
+            with self.subTest(model=model):
+                optim = beer.BayesianModelCoordinateAscentOptimizer(
+                        *model.grouped_parameters, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
+                    self.seed(1)
                     optim.zero_grad()
                     elbo = beer.evidence_lower_bound(model, self.data)
                     elbo.natural_backward()
@@ -156,28 +99,15 @@ class TestEvidenceLowerbound(BaseTest):
                     self.assertGreaterEqual(elbo - previous, -TOLERANCE)
                     previous = elbo
 
-    def test_optim2(self):
-        for i, model in enumerate([self.ppca, self.plda]):
-            with self.subTest(i=i):
-                optim = beer.BayesianModelCoordinateAscentOptimizer(
-                    *model.grouped_parameters, lrate=1.)
-                previous = -float('inf')
-                for _ in range(N_ITER):
-                    optim.zero_grad()
-                    elbo = beer.evidence_lower_bound(model, self.data)
-                    elbo.natural_backward()
-                    optim.step()
-                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
-                    self.assertGreaterEqual(elbo - previous, -TOLERANCE)
-                    previous = elbo
-
-    def test_type_switch1_float(self):
+    def test_type_switch_float(self):
         for i, orig_model in enumerate(self.models):
             model = orig_model.float()
-            with self.subTest(i=i):
-                optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
+            with self.subTest(model=model):
+                optim = beer.BayesianModelCoordinateAscentOptimizer(
+                        *model.grouped_parameters, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
+                    self.seed(1)
                     optim.zero_grad()
                     elbo = beer.evidence_lower_bound(model, self.data.float())
                     elbo.natural_backward()
@@ -186,45 +116,15 @@ class TestEvidenceLowerbound(BaseTest):
                     self.assertGreaterEqual(elbo - previous, -TOLERANCE)
                     previous = elbo
 
-    def test_type_switch2_float(self):
-        for i, orig_model in enumerate([self.ppca, self.plda]):
-            model = orig_model.float()
-            with self.subTest(i=i):
-                optim = beer.BayesianModelCoordinateAscentOptimizer(
-                    *model.grouped_parameters, lrate=1.)
-                previous = -float('inf')
-                for _ in range(N_ITER):
-                    optim.zero_grad()
-                    elbo = beer.evidence_lower_bound(model, self.data.float())
-                    elbo.natural_backward()
-                    optim.step()
-                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
-                    self.assertGreaterEqual(elbo - previous, -TOLERANCE)
-                    previous = elbo
-
-    def test_type_switch1_double(self):
+    def test_type_switch_double(self):
         for i, orig_model in enumerate(self.models):
             model = orig_model.double()
-            with self.subTest(i=i):
-                optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
-                previous = -float('inf')
-                for _ in range(N_ITER):
-                    optim.zero_grad()
-                    elbo = beer.evidence_lower_bound(model, self.data.double())
-                    elbo.natural_backward()
-                    optim.step()
-                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
-                    self.assertGreaterEqual(elbo - previous, -TOLERANCE)
-                    previous = elbo
-
-    def test_type_switch2_double(self):
-        for i, orig_model in enumerate([self.ppca, self.plda]):
-            model = orig_model.double()
-            with self.subTest(i=i):
+            with self.subTest(model=model):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                    *model.grouped_parameters, lrate=1.)
+                        *model.grouped_parameters, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
+                    self.seed(1)
                     optim.zero_grad()
                     elbo = beer.evidence_lower_bound(model, self.data.double())
                     elbo.natural_backward()
@@ -233,13 +133,15 @@ class TestEvidenceLowerbound(BaseTest):
                     self.assertGreaterEqual(elbo - previous, -TOLERANCE)
                     previous = elbo
 
-    def test_change_device1(self):
+    def test_change_device(self):
         for i, orig_model in enumerate(self.models):
             model = orig_model.to(self.device)
-            with self.subTest(i=i):
-                optim = beer.BayesianModelOptimizer(model.parameters, lrate=1.)
+            with self.subTest(model=model):
+                optim = beer.BayesianModelCoordinateAscentOptimizer(
+                        *model.grouped_parameters, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
+                    self.seed(1)
                     optim.zero_grad()
                     elbo = \
                         beer.evidence_lower_bound(model, self.data.to(self.device))
@@ -249,21 +151,5 @@ class TestEvidenceLowerbound(BaseTest):
                     self.assertGreaterEqual(elbo - previous, -TOLERANCE)
                     previous = elbo
 
-    def test_change_device2(self):
-        for i, orig_model in enumerate([self.ppca, self.plda]):
-            model = orig_model.to(self.device)
-            with self.subTest(i=i):
-                optim = beer.BayesianModelCoordinateAscentOptimizer(
-                    *model.grouped_parameters, lrate=1.)
-                previous = -float('inf')
-                for _ in range(N_ITER):
-                    optim.zero_grad()
-                    elbo = \
-                        beer.evidence_lower_bound(model, self.data.to(self.device))
-                    elbo.natural_backward()
-                    optim.step()
-                    elbo = round(float(elbo) / (len(self.data) * self.dim), 3)
-                    self.assertGreaterEqual(elbo - previous, -TOLERANCE)
-                    previous = elbo
 
 __all__ = ['TestEvidenceLowerbound']

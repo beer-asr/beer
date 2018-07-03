@@ -211,7 +211,7 @@ def create(model_conf, mean, variance, create_model_handle):
     if covariance_type == 'isotropic':
         scale = torch.tensor(prior_strength, dtype=dtype, device=device)
         shape = torch.tensor(prior_strength, dtype=dtype, device=device)
-        rate =  torch.tensor(prior_strength * variance.sum() / len(mean),
+        rate =  torch.tensor(prior_strength * variance.sum(),
                              dtype=dtype, device=device)
         prior = IsotropicNormalGammaPrior(mean, scale, shape, rate)
         posterior = IsotropicNormalGammaPrior(rand_mean, scale, shape, rate)

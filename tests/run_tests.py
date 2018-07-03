@@ -66,7 +66,7 @@ def run():
             test_bayesmodel,
             test_expfamilyprior,
             test_features,
-            test_hmm,
+            #test_hmm,
             test_mixture,
             test_normal,
             test_subspacemodels,

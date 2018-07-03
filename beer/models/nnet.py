@@ -75,7 +75,7 @@ class NormalUnityCovarianceLayer(torch.nn.Module):
         return mean
 
 
-def _create_block(block_conf):
+def _create_block(block_conf, tensor_type):
     block_type = block_conf['type']
     if block_type == 'FeedForwardEncoder':
         dim_in = block_conf['dim_in']
@@ -91,21 +91,23 @@ def _create_block(block_conf):
             normal_layer = NormalDiagonalCovarianceLayer(dim_hlayer, dim_out)
         else:
             raise ValueError('Unsupported covariance: {}'.format(cov_type))
-        return NeuralNetwork([nnet, normal_layer])
+        retval = NeuralNetwork([nnet, normal_layer]).type(tensor_type)
+        return retval
     elif block_type == 'FeedForwardDecoder':
         dim_in = block_conf['dim_in']
         dim_out = block_conf['dim_out']
         dim_hlayer = block_conf['dim_hlayer']
         n_layer = block_conf['n_layer']
         non_linearity = block_conf['non_linearity']
-        nnet = FeedForward(dim_in, dim_out, dim_hlayer, n_layer, non_linearity)
-        normal_layer = NormalUnityCovarianceLayer(dim_in, dim_out)
-        return NeuralNetwork([nnet, normal_layer])
+        nnet = FeedForward(dim_in, dim_hlayer, dim_hlayer, n_layer, non_linearity)
+        normal_layer = NormalUnityCovarianceLayer(dim_hlayer, dim_out)
+        retval = NeuralNetwork([nnet, normal_layer]).type(tensor_type)
+        return retval
     else:
-            raise ValueError('Unsupported architecture: {}'.format(block_type))
+        raise ValueError('Unsupported architecture: {}'.format(block_type))
 
 
 def create(model_conf, mean, variance, create_model_handle):
-    return _create_block(model_conf)
+    return _create_block(model_conf, mean.dtype)
 
 __all__ = ['FeedForward']

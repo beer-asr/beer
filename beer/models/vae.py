@@ -241,6 +241,14 @@ class VAEGlobalMeanCovariance(VAE):
 def create(model_conf, mean, variance, create_model_handle):
     dtype, device = mean.dtype, mean.device
     latent_dim = model_conf['encoder']['dim_out']
+    feadim = len(mean)
+    model_conf['encoder']['dim_in'] = len(mean)
+    if not 'dim_in' in model_conf['encoder']:
+        model_conf['encoder']['dim_in'] = feadim
+    if not 'dim_out' in model_conf['decoder']:
+        model_conf['decoder']['dim_out'] = feadim
+    if not 'dim_in' in model_conf['decoder']:
+        model_conf['decoder']['dim_in'] = latent_dim
     normal = create_model_handle(model_conf['normal_model'],
                                  mean, variance, create_model_handle)
     encoder = create_model_handle(model_conf['encoder'], mean, variance, create_model_handle)
