@@ -7,6 +7,7 @@ from .hmm import *
 from .ppca import *
 from .pldaset import *
 from .vae import *
+from .nnet import *
 
 
 _model_types = {
@@ -16,11 +17,13 @@ _model_types = {
     'HMM': None,
     'PPCA': ppca.create,
     'PLDASet': pldaset.create,
-    'VAE': None,
+    'NonLinearSubspaceModel': vae.create,
+    'FeedForwardEncoder': nnet.create,
+    'FeedForwardDecoder': nnet.create
 }
 
 
-def create_model(conf, mean, variance):
+def create_model(conf, mean, variance, create_model_handle=None):
     '''Create one or several models from a YAML configuration string.
 
     Args:

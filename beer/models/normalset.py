@@ -318,9 +318,13 @@ class NormalSetSharedIsotropicCovariance(BayesianModelSet):
 
     @staticmethod
     def sufficient_statistics_from_mean_var(mean, var):
-        s_stats1 = torch.cat([mean ** 2 + var, torch.ones_like(mean)], dim=1)
-        s_stats2 = torch.cat([mean, torch.ones_like(mean)], dim=1)
+        dtype, device = mean.dtype, mean.device
+        padding = torch.ones(len(mean), 1, dtype=dtype, device=device)
+        s_stats1 = torch.cat([(mean ** 2 + var).sum(dim=1).view(-1, 1), padding],
+                             dim=1)
+        s_stats2 = torch.cat([mean, padding], dim=1)
         return s_stats1, s_stats2
+
 
 class NormalSetSharedDiagonalCovariance(BayesianModelSet):
     '''Set of Normal density models with a shared full covariance

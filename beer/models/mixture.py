@@ -54,8 +54,8 @@ class Mixture(BayesianModel):
 
     @property
     def grouped_parameters(self):
-        groups = self.modelset.grouped_parameters
-        groups[0].insert(0, self.weights_param)
+        groups = [group for group in self.modelset.grouped_parameters]
+        groups[0] = [*groups[0], self.weights_param]
         return groups
 
     def sufficient_statistics(self, data):
