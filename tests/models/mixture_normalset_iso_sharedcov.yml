@@ -1,0 +1,9 @@
+type: Mixture
+prior_strength: 1.
+components:
+  type: NormalSet
+  size: 10
+  covariance: isotropic
+  shared_covariance: true
+  prior_strength: 1.
+  noise_std: 0.

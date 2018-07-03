@@ -7,6 +7,8 @@ import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './tests')
 
+import glob
+import yaml
 import math
 import unittest
 import numpy as np
@@ -24,7 +26,7 @@ class TestKLDivStdNormal(BaseTest):
         self.cov = torch.eye(self.dim).type(self.type) + rand_vec @ rand_vec.t()
 
     def test_kl_div(self):
-        kld1 = beer.models.subspace.kl_div_std_norm(self.means, self.cov)
+        kld1 = beer.models.ppca.kl_div_std_norm(self.means, self.cov)
         means, cov = self.means.numpy(), self.cov.numpy()
         sign, logdet = np.linalg.slogdet(cov)
         kld2 = .5 * (-sign * logdet + np.trace(cov) - self.dim)
@@ -48,18 +50,17 @@ class TestPPCA(BaseTest):
 
         # Create the PPCA model
         self.mean = torch.randn(self.dim).type(self.type)
-        self.prec = (1 + torch.randn(1) ** 2).type(self.type)
-        rand_mat = torch.randn(self.dim_subspace, self.dim)
-        q_mat, _  = torch.qr(rand_mat.t())
-        self.subspace = q_mat.t().type(self.type)
-        self.pseudo_counts = 1e-1 + 100 * torch.rand(1).item()
-        self.model = beer.PPCA.create(self.mean, self.prec, self.subspace,
-                                      self.pseudo_counts)
+        self.variance = 1 + torch.randn(self.dim).type(self.type) ** 2
+        with open('./tests/models/ppca.yml') as fid:
+            conf = yaml.load(fid)
+        self.model = beer.create_model(conf, self.mean, self.variance)
+
+        self.dim_subspace = self.model.subspace.shape[0]
 
     def test_create(self):
-        self.assertAlmostEqual(float(self.model.precision), float(self.prec), places=self.tolplaces)
+        self.assertAlmostEqual(float(self.model.precision),
+                               1/float(self.variance.sum()), places=self.tolplaces)
         self.assertArraysAlmostEqual(self.model.mean.numpy(), self.mean)
-        self.assertArraysAlmostEqual(self.model.subspace.numpy(), self.subspace)
 
     def test_sufficient_statistics(self):
         data = self.data.numpy()
@@ -159,35 +160,23 @@ class TestPLDASet(BaseTest):
 
         # Create the PLDA model
         self.mean = torch.randn(self.dim).type(self.type)
-        self.prec = (1 + torch.randn(1) ** 2).type(self.type)
-        rand_mat = torch.randn(self.dim_subspace1, self.dim)
-        q_mat, _  = torch.qr(rand_mat.t())
-        self.subspace1 = q_mat.t().type(self.type)
-        rand_mat = torch.randn(self.dim_subspace2, self.dim)
-        q_mat, _  = torch.qr(rand_mat.t())
-        self.subspace2 = q_mat.t().type(self.type)
-        self.class_means = torch.randn(self.nclasses, self.dim_subspace2).type(self.type)
-        self.pseudo_counts = 1e-1 + 100 * torch.rand(1).item()
-        self.model = beer.PLDASet.create(self.mean, self.prec, self.subspace1,
-                                         self.subspace2, self.class_means,
-                                         self.pseudo_counts)
+        self.variance = 1 + torch.randn(self.dim).type(self.type) ** 2
+        with open('./tests/models/plda.yml') as fid:
+            conf = yaml.load(fid)
+        self.model = beer.create_model(conf, self.mean, self.variance).modelset
+
+        self.dim_subspace1 = self.model.noise_subspace.shape[0]
+        self.dim_subspace2 = self.model.class_subspace.shape[0]
 
     def test_create(self):
-        self.assertAlmostEqual(float(self.model.precision), float(self.prec), places=self.tolplaces)
+        self.assertAlmostEqual(float(self.model.precision),
+                                     1. / float(self.variance.sum()),
+                                     places=self.tolplaces)
         self.assertArraysAlmostEqual(self.model.mean.numpy(), self.mean)
-        self.assertArraysAlmostEqual(self.model.noise_subspace.numpy(),
-                                     self.subspace1.numpy())
-        self.assertArraysAlmostEqual(self.model.class_subspace.numpy(),
-                                     self.subspace2.numpy())
-        self.assertArraysAlmostEqual(self.model.class_means.numpy(),
-                                     self.class_means.numpy())
 
     ####################################################################
     # BayesianModelSet interface.
     ####################################################################
-
-    def test_len(self):
-        self.assertEqual(len(self.model), len(self.class_means))
 
     def test_getitem(self):
         for i in range(len(self.model)):
@@ -198,7 +187,8 @@ class TestPLDASet(BaseTest):
                 cov = s_mean.T @ s_mean + np.identity(self.dim) / prec
                 normal = self.model[i]
                 _, s_mean = self.model.class_subspace_param.expected_value(concatenated=False)
-                mean = self.model.mean + s_mean.t() @ self.class_means[i]
+                class_means = self.model.class_means
+                mean = self.model.mean + s_mean.t() @ class_means[i]
                 self.assertArraysAlmostEqual(normal.mean.numpy(), mean)
                 self.assertArraysAlmostEqual(normal.cov.numpy(), cov)
 
@@ -257,18 +247,18 @@ class TestPLDASet(BaseTest):
         m_quad = self.model.cache['m_quad'].numpy()
         noise_means = self.model.cache['noise_means'].numpy()
         class_means = class_mean_mean @ class_s_mean
-        class_quads = class_mean_quad.reshape(self.nclasses, -1) @ \
+        class_quads = class_mean_quad.reshape(len(self.model), -1) @ \
             class_s_quad.reshape(-1)
 
         data_quad, data = stats[:, 0], stats[:, 1:]
         npoints = len(data)
 
-        means = noise_means + class_means.reshape(self.nclasses, 1, -1) + \
+        means = noise_means + class_means.reshape(len(self.model), 1, -1) + \
             global_mean.reshape(1, 1, -1)
         lnorm = l_quads @ noise_s_quad.reshape(-1)
-        lnorm += (class_quads).reshape(self.nclasses, 1) + m_quad
+        lnorm += (class_quads).reshape(len(self.model), 1) + m_quad
         lnorm += 2 * np.sum(
-            noise_means * (class_means.reshape(self.nclasses, 1, -1) +
+            noise_means * (class_means.reshape(len(self.model), 1, -1) +
             global_mean.reshape(1, 1, -1)), axis=-1)
         lnorm += 2 * (class_means @ global_mean).reshape(-1, 1)
 

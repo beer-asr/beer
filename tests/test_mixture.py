@@ -7,7 +7,9 @@
 import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './tests')
-
+import os
+import glob
+import yaml
 import numpy as np
 from scipy.special import logsumexp
 import torch
@@ -21,6 +23,8 @@ class TestMixture(BaseTest):
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.mean = torch.randn(self.dim).type(self.type)
+        self.variance = 1 + torch.randn(self.dim).type(self.type) ** 2
         self.means = torch.randn(self.npoints, self.dim).type(self.type)
         self.vars = torch.randn(self.npoints, self.dim).type(self.type) ** 2
         self.pseudo_counts = 1e-2 + 100 * torch.rand(1).item()
@@ -28,37 +32,13 @@ class TestMixture(BaseTest):
         self.weights = (1 + torch.randn(self.ncomp) ** 2).type(self.type)
         self.weights /= self.weights.sum()
 
-        modelsets = [
-            beer.NormalDiagonalCovarianceSet.create(
-                torch.zeros(self.dim).type(self.type),
-                torch.ones(self.dim).type(self.type),
-                self.ncomp,
-                noise_std=0.1
-            ),
-            beer.NormalFullCovarianceSet.create(
-                torch.zeros(self.dim).type(self.type),
-                torch.eye(self.dim).type(self.type),
-                self.ncomp,
-                noise_std=0.1
-            ),
-            beer.NormalSetSharedDiagonalCovariance.create(
-                torch.zeros(self.dim).type(self.type),
-                torch.ones(self.dim).type(self.type),
-                self.ncomp,
-                noise_std=0.1
-            ),
-            beer.NormalSetSharedFullCovariance.create(
-                torch.zeros(self.dim).type(self.type),
-                torch.eye(self.dim).type(self.type),
-                self.ncomp,
-                noise_std=0.1
-            )
-        ]
-
         self.mixtures = []
-        for modelset in modelsets:
-            self.mixtures.append(beer.Mixture.create(self.weights, modelset,
-                                                     self.pseudo_counts))
+        for path in glob.glob('./tests/models/*yaml'):
+            if os.path.basename(path).startswith('mixture'):
+                with open(path) as fid:
+                    conf = yaml.load(fid)
+                    model = beer.create_model(conf, self.mean, self.variance)
+                self.mixtures.append(model)
 
     def test_create(self):
         for i, mixture in enumerate(self.mixtures):
