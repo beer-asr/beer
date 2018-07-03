@@ -62,7 +62,9 @@ class NormalIsotropicCovarianceLayer(torch.nn.Module):
     def forward(self, data):
         mean = self.h2mean(data)
         logvar = self.h2logvar(data)
-        return mean, logvar.exp() * torch.ones(1, self.out_dim, dtype=data.dtype)
+        return mean, logvar.exp() * torch.ones(1, self.out_dim,
+                                               dtype=data.dtype,
+                                               device=data.device)
 
 
 class NormalUnityCovarianceLayer(torch.nn.Module):
