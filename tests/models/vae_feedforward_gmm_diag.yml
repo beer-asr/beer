@@ -1,0 +1,28 @@
+type: NonLinearSubspaceModel
+normal_model:
+  type: Normal
+  covariance: isotropic
+  prior_strength: 1.
+  noise_std: 0
+encoder:
+  type: FeedForwardEncoder
+  dim_out: 2
+  dim_hlayer: 10
+  n_layer: 2
+  non_linearity: tanh
+  covariance: isotropic
+decoder:
+  type: FeedForwardDecoder
+  dim_hlayer: 12
+  n_layer: 2
+  non_linearity: tanh
+latent_model:
+  type: Mixture
+  prior_strength: 1.
+  components:
+    type: NormalSet
+    size: 10
+    covariance: diagonal
+    shared_covariance: false
+    prior_strength: 1.
+    noise_std: 0.1
