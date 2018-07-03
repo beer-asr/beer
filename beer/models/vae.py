@@ -163,29 +163,6 @@ class VAEGlobalMeanCovariance(VAE):
         super().__init__(encoder, decoder, latent_model)
         self.normal = normal
 
-    @classmethod
-    def create(cls, mean, variance, encoder, decoder, latent_model, pseudo_counts=1.):
-        '''Create a :any:`VAEGlobalMeanIsotropicCovariance`.
-
-        Args:
-            mean (``torch.Tensor[d]``): Mean of the normal.
-            variance (``torch.Tensor[1]``): Variance of the normal.
-            encoder (``MLPModel``): Encoder of the VAE.
-            decoder (``MLPModel``): Decoder of the VAE.
-            latent_model(``BayesianModel``): Bayesian Model
-                for the prior over the latent space.
-            nsamples (int): Number of samples to approximate the
-                expectation of the log-likelihood.
-            pseudo_counts (``torch.Tensor``): Strength of the prior.
-                Should be greater than 0.
-
-        Returns:
-            :any:`VAEGlobalMeanIsotropicCovariance`
-
-        '''
-        normal = NormalIsotropicCovariance.create(mean, variance, pseudo_counts)
-        return cls(normal, encoder, decoder, latent_model)
-
     def _expected_llh(self, data, means, variances, nsamples):
         samples = sample_from_normals(means, variances, nsamples)
         samples = samples.view(nsamples * len(data), -1)
@@ -203,6 +180,12 @@ class VAEGlobalMeanCovariance(VAE):
 
     # Most of the BayesianModel interface is implemented in the parent
     # class VAE.
+
+    @property
+    def grouped_parameters(self):
+        groups = self.normal.grouped_parameters
+        groups += self.latent_model.grouped_parameters
+        return groups
 
     def float(self):
         return self.__class__(

@@ -480,5 +480,43 @@ class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
         pass
 
 
-__all__ = ['BayesianModel', 'BayesianModelSet', 'BayesianParameter',
-           'BayesianParameterSet', 'average_models']
+class DiscreteLatentBayesianModel(BayesianModel, metaclass=abc.ABCMeta):
+    '''Abstract base class for a set of :any:`BayesianModel` with
+    discrete latent variable.
+
+    '''
+
+    def __init__(self, modelset):
+        super().__init__()
+        self._modelset = modelset
+
+    @property
+    def modelset(self):
+        '''Density for each value of the discrete latent variable.'''
+        return self._modelset
+
+    def posteriors(self, data, **kwargs):
+        '''Abstract method to be implemented by subclasses of
+        :any:`BayesianModelSet`.
+
+        Compute the probability of the discrete latent variable given
+        the data.
+
+        Args:
+            ``torch.Tensor[nframes, d]``: Data as a tensor.
+            kwargs: model specific arguments.
+
+        Returns:
+            ``torch.Tensor[nframes, ncomp]``
+
+        '''
+        pass
+
+
+__all__ = [
+    'BayesianModel',
+    'BayesianModelSet',
+    'DiscreteLatentBayesianModel',
+    'BayesianParameter',
+    'BayesianParameterSet',
+    'average_models']

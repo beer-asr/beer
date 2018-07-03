@@ -134,7 +134,7 @@ class TestEvidenceLowerbound(BaseTest):
                     previous = elbo
 
     def test_change_device(self):
-        for i, orig_model in enumerate(self.models):
+        for orig_model in self.models:
             model = orig_model.to(self.device)
             with self.subTest(model=model):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
