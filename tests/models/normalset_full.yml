@@ -1,0 +1,6 @@
+type: NormalSet
+size: 10
+covariance: full
+shared_covariance: false
+prior_strength: 1.
+noise_std: 0.

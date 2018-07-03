@@ -10,19 +10,7 @@ from ..utils import logsumexp
 
 
 class Mixture(BayesianModel):
-    '''Bayesian Mixture Model.
-
-    Example:
-            >>> # Create a set of Normal densities.
-            >>> mean = torch.zeros(2)
-            >>> cov = torch.eye(2)
-            >>> normalset = beer.NormalSetSharedFullCovariance.create(mean, cov, 3, noise_std=0.1)
-            >>> weights = torch.ones(3) / 3.
-            >>> # Create a Gaussian Mixture Model with shared cov. matrix.
-            >>> gmm = beer.Mixture.create(weights, normalset)
-            >>> gmm.weights
-            tensor([ 0.3333,  0.3333,  0.3333])
-    '''
+    '''Bayesian Mixture Model.'''
 
     def __init__(self, prior_weights, posterior_weights, modelset):
         '''
@@ -37,25 +25,6 @@ class Mixture(BayesianModel):
         super().__init__()
         self.weights_param = BayesianParameter(prior_weights, posterior_weights)
         self.modelset = modelset
-
-    @classmethod
-    def create(cls, weights, modelset, pseudo_counts=1.):
-        '''Create a :any:`Mixture` model.
-
-        Args:
-            weights (``torch.Tensor``): Mixing weights.
-            modelset (:any:`BayesianModelSet`): The set of mixture
-                component.
-            pseudo_counts (``torch.Tensor``): Strength of the prior over
-                the mixing weights.
-
-        Returns:
-            :any:`Mixture`
-
-        '''
-        prior_weights = DirichletPrior(pseudo_counts * weights)
-        posterior_weights = DirichletPrior(pseudo_counts * weights)
-        return cls(prior_weights, posterior_weights, modelset)
 
     @property
     def weights(self):
@@ -85,8 +54,8 @@ class Mixture(BayesianModel):
 
     @property
     def grouped_parameters(self):
-        groups = self.modelset.grouped_parameters
-        groups[0].insert(0, self.weights_param)
+        groups = [group for group in self.modelset.grouped_parameters]
+        groups[0] = [*groups[0], self.weights_param]
         return groups
 
     def sufficient_statistics(self, data):
@@ -170,6 +139,17 @@ class Mixture(BayesianModel):
 
         s_stats = self.modelset.sufficient_statistics_from_mean_var(mean, var)
         return self.modelset.expected_natural_params_from_resps(resps), s_stats
+
+
+def create(model_conf, mean, variance, create_model_handle):
+    dtype, device = mean.dtype, mean.device
+    modelset = create_model_handle(model_conf['components'], mean, variance)
+    n_element = len(modelset)
+    weights = torch.ones(n_element, dtype=dtype, device=device) / n_element
+    prior_strength = model_conf['prior_strength']
+    prior_weights = DirichletPrior(prior_strength * weights)
+    posterior_weights = DirichletPrior(prior_strength * weights)
+    return Mixture(prior_weights, posterior_weights, modelset)
 
 
 __all__ = ['Mixture']
