@@ -28,7 +28,7 @@ decoder:
   dim_input_normal_layer: 5
   dim_output_normal_layer: <feadim>
 latent_model:
-  type: PPCA
-  dim_subspace: 4
+  type: Normal
+  covariance: diagonal
   prior_strength: 1.
-  noise_std: 0.1
+  noise_std: 0.
