@@ -55,6 +55,44 @@ class TestNeuralNetwork(BaseTest):
         self.assertTrue(elu.inplace)
         self.assertAlmostEqual(elu.alpha, .5)
 
+    def test_create_nnet_block(self):
+        variables = {'%feadim': self.dim}
+        block_conf = {
+            'structure': [
+                'Linear:in_features=%feadim,out_features=20',
+                'Tanh',
+                'Linear:in_features=20,out_features=%feadim',
+                'Sigmoid'
+            ],
+            'residual_connection': 'none'
+        }
+        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
+        nnet_block = nnet_block.type(self.type)
+        nnet_block(self.data)
+
+        block_conf['residual_connection'] = 'none'
+        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
+        nnet_block = nnet_block.type(self.type)
+        nnet_block(self.data)
+
+        block_conf['residual_connection'] = 'identity'
+        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
+        nnet_block = nnet_block.type(self.type)
+        nnet_block(self.data)
+
+        block_conf = {
+            'structure': [
+                'Linear:in_features=%feadim,out_features=20',
+                'Tanh',
+                'Linear:in_features=20,out_features=20',
+                'Sigmoid'
+            ],
+            'residual_connection': 'Linear:in_features=%feadim,out_features=20'
+        }
+        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
+        nnet_block = nnet_block.type(self.type)
+        nnet_block(self.data)
+
     def test_create_encoder_nnet(self):
         variables = {'%feadim': self.dim}
         conf = {
@@ -98,43 +136,36 @@ class TestNeuralNetwork(BaseTest):
         self.assertEqual(outputs[1].shape[1], 30)
 
 
-    def test_create_nnet_block(self):
+    def test_create_decoder_nnet(self):
         variables = {'%feadim': self.dim}
-        block_conf = {
-            'structure': [
-                'Linear:in_features=%feadim,out_features=20',
-                'Tanh',
-                'Linear:in_features=20,out_features=%feadim',
-                'Sigmoid'
+        conf = {
+            'blocks': [
+                {
+                    'structure': [
+                        'Linear:in_features=%feadim,out_features=20',
+                        'Tanh',
+                        'Linear:in_features=20,out_features=30',
+                        'Sigmoid'
+                    ],
+                    'residual_connection': 'none'
+                },
+                {
+                    'structure': [
+                        'Linear:in_features=30,out_features=20',
+                        'Sigmoid',
+                        'Linear:in_features=20,out_features=30',
+                        'Sigmoid'
+                    ],
+                    'residual_connection': 'none'
+                }
             ],
-            'residual_connection': 'none'
+            'dim_input_normal_layer': '30',
+            'dim_output_normal_layer': '%feadim',
         }
-        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
-        nnet_block = nnet_block.type(self.type)
-        nnet_block(self.data)
-
-        block_conf['residual_connection'] = 'none'
-        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
-        nnet_block = nnet_block.type(self.type)
-        nnet_block(self.data)
-
-        block_conf['residual_connection'] = 'identity'
-        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
-        nnet_block = nnet_block.type(self.type)
-        nnet_block(self.data)
-
-        block_conf = {
-            'structure': [
-                'Linear:in_features=%feadim,out_features=20',
-                'Tanh',
-                'Linear:in_features=20,out_features=20',
-                'Sigmoid'
-            ],
-            'residual_connection': 'Linear:in_features=%feadim,out_features=20'
-        }
-        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
-        nnet_block = nnet_block.type(self.type)
-        nnet_block(self.data)
+        decoder = beer.models.nnet.create_decoder(conf, variables)
+        decoder = decoder.type(self.type)
+        outputs = decoder(self.data)
+        self.assertEqual(outputs.shape[1], self.dim)
 
 
 __all__ = [

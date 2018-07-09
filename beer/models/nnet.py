@@ -224,6 +224,17 @@ def create_encoder(encoder_conf, variables):
     return torch.nn.Sequential(*blocks, normal_layer)
 
 
+def create_decoder(decoder_conf, variables):
+    blocks = create_chained_blocks(decoder_conf['blocks'], variables)
+    dim_in_normal_layer = load_value(decoder_conf['dim_input_normal_layer'],
+                                     variables=variables)
+    dim_out_normal_layer = load_value(decoder_conf['dim_output_normal_layer'],
+                                      variables=variables)
+    normal_layer = NormalUnityCovarianceLayer(dim_in_normal_layer,
+                                              dim_out_normal_layer)
+    return torch.nn.Sequential(*blocks, normal_layer)
+
+
 def _create_block(block_conf, tensor_type):
     block_type = block_conf['type']
     if block_type == 'FeedForwardEncoder':
