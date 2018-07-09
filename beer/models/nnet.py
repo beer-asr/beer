@@ -78,8 +78,17 @@ class NormalUnityCovarianceLayer(torch.nn.Module):
         return mean
 
 
-def load_value(strval):
-    'Evaluate the string representation of a python type.'
+def load_value(strval, variables={}):
+    '''Evaluate the string representation of a python type.
+
+    Args:
+        strval (string): String to interpret.
+        variable (dictionary): Set of variables that will be replaced
+            by their associated value before to interpret the python
+            strings.
+    '''
+    for variable, value in variables.items():
+        strval = strval.replace(variable, str(value))
     return ast.literal_eval(strval)
 
 

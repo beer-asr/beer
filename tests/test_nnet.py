@@ -18,6 +18,9 @@ class TestNeuralNetwork(BaseTest):
         self.assertEqual(1, beer.models.nnet.load_value('1'))
         self.assertTrue(beer.models.nnet.load_value('True'))
         self.assertAlmostEqual(1.3, beer.models.nnet.load_value('1.3'))
+        self.assertEqual(2, beer.models.nnet.load_value('%var1 + %var2',
+                                                        {'%var1': 1,
+                                                         '%var2': 1}))
 
 
 
