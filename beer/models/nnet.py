@@ -173,7 +173,7 @@ def create_nnet_block(block_conf, variables=None):
             strings.
 
     Returns:
-        :any:`NeuralNetwork`
+        :any:`NeuralNetworkBlock`
 
     '''
     structure_list = [create_nnet_element(strval, variables)
@@ -187,6 +187,41 @@ def create_nnet_block(block_conf, variables=None):
     else:
         res_connection = create_nnet_element(res_connection, variables)
     return NeuralNetworkBlock(structure, res_connection)
+
+
+def create_chained_blocks(block_confs, variables):
+    '''Create a chain of nnet blocks
+
+    Args:
+        block_confs (list of dict): Configuration dictionaries.
+        variables (dictionary): Set of variables that will be replaced
+            by their associated value before to interpret the python
+            strings.
+
+    Returns:
+        list of :any:`NeuralNetworkBlock`
+
+    '''
+    return torch.nn.Sequential(*[create_nnet_block(block_conf, variables)
+                                 for block_conf in block_confs])
+
+
+def create_encoder(encoder_conf, variables):
+    blocks = create_chained_blocks(encoder_conf['blocks'], variables)
+    dim_in_normal_layer = load_value(encoder_conf['dim_input_normal_layer'],
+                                     variables=variables)
+    dim_out_normal_layer = load_value(encoder_conf['dim_output_normal_layer'],
+                                      variables=variables)
+    cov_type = encoder_conf['covariance']
+    if cov_type == 'isotropic':
+        normal_layer = NormalIsotropicCovarianceLayer(dim_in_normal_layer,
+                                                      dim_out_normal_layer)
+    elif cov_type == 'diagonal':
+        normal_layer = NormalDiagonalCovarianceLayer(dim_in_normal_layer,
+                                                        dim_out_normal_layer)
+    else:
+        raise ValueError('Unsupported covariance: {}'.format(cov_type))
+    return torch.nn.Sequential(*blocks, normal_layer)
 
 
 def _create_block(block_conf, tensor_type):

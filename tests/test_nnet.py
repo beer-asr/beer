@@ -55,6 +55,49 @@ class TestNeuralNetwork(BaseTest):
         self.assertTrue(elu.inplace)
         self.assertAlmostEqual(elu.alpha, .5)
 
+    def test_create_encoder_nnet(self):
+        variables = {'%feadim': self.dim}
+        conf = {
+            'blocks': [
+                {
+                    'structure': [
+                        'Linear:in_features=%feadim,out_features=20',
+                        'Tanh',
+                        'Linear:in_features=20,out_features=%feadim',
+                        'Sigmoid'
+                    ],
+                    'residual_connection': 'identity'
+                },
+                {
+                    'structure': [
+                        'Linear:in_features=%feadim,out_features=20',
+                        'Sigmoid',
+                        'Linear:in_features=20,out_features=%feadim',
+                        'Sigmoid'
+                    ],
+                    'residual_connection': 'none'
+                }
+            ],
+            'dim_input_normal_layer': '%feadim',
+            'dim_output_normal_layer': '30',
+            'covariance': 'diagonal'
+        }
+        encoder = beer.models.nnet.create_encoder(conf, variables)
+        encoder = encoder.type(self.type)
+        outputs = encoder(self.data)
+        self.assertEqual(len(outputs), 2)
+        self.assertEqual(outputs[0].shape[1], 30)
+        self.assertEqual(outputs[1].shape[1], 30)
+
+        conf['covariance'] = 'isotropic'
+        encoder = beer.models.nnet.create_encoder(conf, variables)
+        encoder = encoder.type(self.type)
+        outputs = encoder(self.data)
+        self.assertEqual(len(outputs), 2)
+        self.assertEqual(outputs[0].shape[1], 30)
+        self.assertEqual(outputs[1].shape[1], 30)
+
+
     def test_create_nnet_block(self):
         variables = {'%feadim': self.dim}
         block_conf = {
