@@ -33,11 +33,16 @@ def run():
     else:
         bsize = args.batch_size
 
+    # Normalizing constant to set all the features dimension between 0
+    # and 1.
+    norm_const = float(np.iinfo(np.uint8).max)
+
     idx = 0
     batchno = 1
     while idx < len(images):
-        batch_images = images[idx: idx + bsize]
+        batch_images = images[idx: idx + bsize].astype(np.float32)
         batch_images = batch_images.reshape(len(batch_images), -1)
+        batch_images /= norm_const
         batch_labels = labels[idx: idx + bsize]
         outpath = os.path.join(args.outdir, 'batch' + str(batchno))
         np.savez(outpath, features=batch_images, labels=batch_labels)
