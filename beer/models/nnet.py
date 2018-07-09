@@ -78,6 +78,25 @@ class NormalUnityCovarianceLayer(torch.nn.Module):
         return mean
 
 
+class Identity(torch.nn.Module):
+    def forward(self, data):
+        return data
+
+
+class NeuralNetworkBlock(torch.nn.Module):
+    def __init__(self, structure, residual_connection=None):
+        super().__init__()
+        self.structure = structure
+        self.residual_connection = residual_connection
+
+
+    def forward(self, data):
+        h = self.structure(data)
+        if self.residual_connection is not None:
+            h += self.residual_connection(data)
+        return h
+
+
 def load_value(strval, variables=None):
     '''Evaluate the string representation of a python type.
 
@@ -94,7 +113,7 @@ def load_value(strval, variables=None):
     return ast.literal_eval(strval)
 
 
-def parse_nnet_element(strval, variables=None):
+def parse_nnet_element(strval):
     '''Parse a string definining a neural network element (layer,
     activation function, ...).
 
@@ -105,28 +124,69 @@ def parse_nnet_element(strval, variables=None):
 
     Args:
         strval (string): String defining the neural network element.
+
+    Returns:
+        ``torch.nn.<function>``: name of the object/function
+        dict: Keyword arguments and their values (as string)
+
+    '''
+    str_kwargs = {}
+    if ':' in strval:
+        function_name, args_and_vals = strval.strip().split(':')
+        for arg_and_val in args_and_vals.split(','):
+            argname, str_argval = arg_and_val.split('=')
+            str_kwargs[argname] = str_argval
+    else:
+        function_name = strval
+    return function_name, str_kwargs
+
+
+def create_nnet_element(strval, variables=None):
+    '''Create a pytorch nnet element from a string.
+
+    Args:
+        strval (string): String defining the nnet element.
+        variables (dictionary): Set of variables that will be replaced
+            by their associated value before to interpret the python
+            strings.
+
+    Returs:
+        ``torch.nn.<object>``
+
+    '''
+    function_name, str_kwargs = parse_nnet_element(strval)
+    kwargs = {
+        argname: load_value(arg_strval, variables)
+        for argname, arg_strval in str_kwargs.items()
+    }
+    function = getattr(torch.nn, function_name)
+    return function(**kwargs)
+
+
+def create_nnet_block(block_conf, variables=None):
+    '''Create a part of neural network.
+
+    Args:
+        block_conf (dict): Configuration dictionary.
         variables (dictionary): Set of variables that will be replaced
             by their associated value before to interpret the python
             strings.
 
     Returns:
-        ``torch.nn.<function>``: pytorch function to create the object
-        dict: Keyword arguemnts for the pytorch function.
+        :any:`NeuralNetwork`
 
     '''
-    if ':' in strval:
-        function_name, args_and_vals = strval.strip().split(':')
-        function = getattr(torch.nn, function_name)
-        args_and_vals = [arg_and_val.split('=')
-                        for arg_and_val in args_and_vals.split(',')]
-        args_and_vals = {
-            argname: load_value(arg_strval, variables)
-            for argname, arg_strval in args_and_vals
-        }
+    structure_list = [create_nnet_element(strval, variables)
+                      for strval in block_conf['structure']]
+    structure = torch.nn.Sequential(*structure_list)
+    res_connection = block_conf['residual_connection']
+    if res_connection == 'none':
+        res_connection = None
+    elif res_connection == 'identity':
+        res_connection = Identity()
     else:
-        function = getattr(torch.nn, strval)
-        args_and_vals = {}
-    return function, args_and_vals
+        res_connection = create_nnet_element(res_connection, variables)
+    return NeuralNetworkBlock(structure, res_connection)
 
 
 def _create_block(block_conf, tensor_type):
