@@ -1,5 +1,6 @@
 '''Specific Neural Network architectures.'''
 
+import ast
 import torch
 from .bayesmodel import BayesianModel
 
@@ -75,6 +76,11 @@ class NormalUnityCovarianceLayer(torch.nn.Module):
     def forward(self, data):
         mean = self.h2mean(data)
         return mean
+
+
+def load_value(strval):
+    'Evaluate the string representation of a python type.'
+    return ast.literal_eval(strval)
 
 
 def _create_block(block_conf, tensor_type):
