@@ -1,19 +1,17 @@
-#!/bin/sh
+#!/bin/bash
 
 usage() {
-echo "Usage: $0 [options] <archives-list> <out-npzfile>"
+echo "Usage: $0 [options] <conf-yamlfile> <dbstats> <outfile>"
 }
 
 help() {
-echo "Compute the statistics (mean/var/counts) of a database."
+echo "Create a model from a configuration file."
 echo ""
 usage
 echo ""
 echo "Options:"
 echo "  -h --help        show this message"
-echo ""
 }
-
 
 # Parsing optional arguments.
 while [ $# -ge 0 ]; do
@@ -38,20 +36,22 @@ while [ $# -ge 0 ]; do
     shift
 done
 
-
 # Parsing mandatory arguments.
-if [ $# -ne 2 ]; then
+if [ $# -ne 3 ]; then
     usage
     exit 1
 fi
 
-archives=$1
-outfile=$2
+conf=$1
+dbstats=$2
+model_output=$3
 
-if [ ! -f "${outfile}" ]; then
-    echo "Computing stats..."
-    python utils/compute-stats.py ${archives} ${outfile} || exit 1
+if [ ! -f "${model_output}" ]; then
+    echo "Creating model..."
+    python utils/create-model.py \
+        "${conf}" \
+        "${dbstats}" \
+        "${model_output}" || exit 1
 else
-    echo "Statistics already computed. Skipping."
+    echo "Model already created. Skipping."
 fi
-
