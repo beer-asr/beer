@@ -5,37 +5,12 @@ import torch
 from .bayesmodel import BayesianModel
 
 
-non_linearity_fns = {
-    'tanh': torch.nn.Tanh(),
-    'sigmoid': torch.nn.Sigmoid()
-}
-
-
 class NeuralNetwork(torch.nn.Module):
     '''Generic Neural network class.'''
 
     def __init__(self, seqs):
         super().__init__()
         self.seq = torch.nn.Sequential(*seqs)
-
-    def forward(self, data):
-        return self.seq(data)
-
-
-class FeedForward(torch.nn.Module):
-    '''Simple fully connected MLP.'''
-
-    def __init__(self, dim_in, dim_out, dim_hlayer, n_layer, non_linearity):
-        super().__init__()
-        layers = []
-        last_dim = dim_in
-        for _ in range(n_layer - 1):
-            layers.append(torch.nn.Linear(last_dim, dim_hlayer))
-            layers.append(non_linearity_fns[non_linearity])
-            last_dim = dim_hlayer
-        layers.append(torch.nn.Linear(last_dim, dim_out))
-        layers.append(non_linearity_fns[non_linearity])
-        self.seq = torch.nn.Sequential(*layers)
 
     def forward(self, data):
         return self.seq(data)
@@ -97,20 +72,24 @@ class NeuralNetworkBlock(torch.nn.Module):
         return h
 
 
-def load_value(strval, variables=None):
-    '''Evaluate the string representation of a python type.
+def load_value(value, variables=None):
+    '''Evaluate the string representation of a python type if the given
+    value is a string.
 
     Args:
-        strval (string): String to interpret.
+        value (object): value to load w/o interpretation.
         variables (dictionary): Set of variables that will be replaced
             by their associated value before to interpret the python
             strings.
     '''
+    if not isinstance(value, str):
+        return value
+
     if variables is None:
         variables = {}
-    for variable, value in variables.items():
-        strval = strval.replace(variable, str(value))
-    return ast.literal_eval(strval)
+    for variable, val in variables.items():
+        value = value.replace(variable, str(val))
+    return ast.literal_eval(value)
 
 
 def parse_nnet_element(strval):
@@ -206,7 +185,7 @@ def create_chained_blocks(block_confs, variables):
                                  for block_conf in block_confs])
 
 
-def create_encoder(encoder_conf, variables):
+def create_encoder(encoder_conf, dtype, device, variables):
     blocks = create_chained_blocks(encoder_conf['blocks'], variables)
     dim_in_normal_layer = load_value(encoder_conf['dim_input_normal_layer'],
                                      variables=variables)
@@ -221,10 +200,11 @@ def create_encoder(encoder_conf, variables):
                                                         dim_out_normal_layer)
     else:
         raise ValueError('Unsupported covariance: {}'.format(cov_type))
-    return torch.nn.Sequential(*blocks, normal_layer)
+    retval = torch.nn.Sequential(*blocks, normal_layer)
+    return retval.type(dtype).to(device)
 
 
-def create_decoder(decoder_conf, variables):
+def create_decoder(decoder_conf, dtype, device, variables):
     blocks = create_chained_blocks(decoder_conf['blocks'], variables)
     dim_in_normal_layer = load_value(decoder_conf['dim_input_normal_layer'],
                                      variables=variables)
@@ -232,42 +212,9 @@ def create_decoder(decoder_conf, variables):
                                       variables=variables)
     normal_layer = NormalUnityCovarianceLayer(dim_in_normal_layer,
                                               dim_out_normal_layer)
-    return torch.nn.Sequential(*blocks, normal_layer)
+    retval = torch.nn.Sequential(*blocks, normal_layer)
+    return retval.type(dtype).to(device)
 
 
-def _create_block(block_conf, tensor_type):
-    block_type = block_conf['type']
-    if block_type == 'FeedForwardEncoder':
-        dim_in = block_conf['dim_in']
-        dim_out = block_conf['dim_out']
-        dim_hlayer = block_conf['dim_hlayer']
-        cov_type = block_conf['covariance']
-        n_layer = block_conf['n_layer']
-        non_linearity = block_conf['non_linearity']
-        nnet = FeedForward(dim_in, dim_hlayer, dim_hlayer, n_layer, non_linearity)
-        if cov_type == 'isotropic':
-            normal_layer = NormalIsotropicCovarianceLayer(dim_hlayer, dim_out)
-        elif cov_type == 'diagonal':
-            normal_layer = NormalDiagonalCovarianceLayer(dim_hlayer, dim_out)
-        else:
-            raise ValueError('Unsupported covariance: {}'.format(cov_type))
-        retval = NeuralNetwork([nnet, normal_layer]).type(tensor_type)
-        return retval
-    elif block_type == 'FeedForwardDecoder':
-        dim_in = block_conf['dim_in']
-        dim_out = block_conf['dim_out']
-        dim_hlayer = block_conf['dim_hlayer']
-        n_layer = block_conf['n_layer']
-        non_linearity = block_conf['non_linearity']
-        nnet = FeedForward(dim_in, dim_hlayer, dim_hlayer, n_layer, non_linearity)
-        normal_layer = NormalUnityCovarianceLayer(dim_hlayer, dim_out)
-        retval = NeuralNetwork([nnet, normal_layer]).type(tensor_type)
-        return retval
-    else:
-        raise ValueError('Unsupported architecture: {}'.format(block_type))
-
-
-def create(model_conf, mean, variance, create_model_handle):
-    return _create_block(model_conf, mean.dtype)
-
-__all__ = ['FeedForward']
+# This module does not have a public interface.
+__all__ = []

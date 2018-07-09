@@ -11,6 +11,7 @@ from .bayesmodel import BayesianModel
 from .normal import NormalDiagonalCovariance
 from .normal import NormalIsotropicCovariance
 from ..utils import sample_from_normals
+from . import nnet
 
 
 def _normal_diag_natural_params(mean, var):
@@ -223,19 +224,14 @@ class VAEGlobalMeanCovariance(VAE):
 
 def create(model_conf, mean, variance, create_model_handle):
     dtype, device = mean.dtype, mean.device
-    latent_dim = model_conf['encoder']['dim_out']
-    feadim = len(mean)
-    model_conf['encoder']['dim_in'] = len(mean)
-    if not 'dim_in' in model_conf['encoder']:
-        model_conf['encoder']['dim_in'] = feadim
-    if not 'dim_out' in model_conf['decoder']:
-        model_conf['decoder']['dim_out'] = feadim
-    if not 'dim_in' in model_conf['decoder']:
-        model_conf['decoder']['dim_in'] = latent_dim
+    variables = {'<feadim>': len(mean)}
+    latent_dim = model_conf['encoder']['dim_output_normal_layer']
+    encoder = nnet.create_encoder(model_conf['encoder'], dtype, device,
+                                  variables)
+    decoder = nnet.create_decoder(model_conf['decoder'], dtype, device,
+                                  variables)
     normal = create_model_handle(model_conf['normal_model'],
                                  mean, variance, create_model_handle)
-    encoder = create_model_handle(model_conf['encoder'], mean, variance, create_model_handle)
-    decoder = create_model_handle(model_conf['decoder'], mean, variance, create_model_handle)
     latent_model = create_model_handle(model_conf['latent_model'],
                                        torch.zeros(latent_dim, dtype=dtype,
                                                    device=device),

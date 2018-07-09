@@ -120,7 +120,8 @@ class TestNeuralNetwork(BaseTest):
             'dim_output_normal_layer': '30',
             'covariance': 'diagonal'
         }
-        encoder = beer.models.nnet.create_encoder(conf, variables)
+        encoder = beer.models.nnet.create_encoder(conf, self.data.dtype,
+                                                  self.data.device, variables)
         encoder = encoder.type(self.type)
         outputs = encoder(self.data)
         self.assertEqual(len(outputs), 2)
@@ -128,8 +129,8 @@ class TestNeuralNetwork(BaseTest):
         self.assertEqual(outputs[1].shape[1], 30)
 
         conf['covariance'] = 'isotropic'
-        encoder = beer.models.nnet.create_encoder(conf, variables)
-        encoder = encoder.type(self.type)
+        encoder = beer.models.nnet.create_encoder(conf, self.data.dtype,
+                                                  self.data.device, variables)
         outputs = encoder(self.data)
         self.assertEqual(len(outputs), 2)
         self.assertEqual(outputs[0].shape[1], 30)
@@ -162,8 +163,8 @@ class TestNeuralNetwork(BaseTest):
             'dim_input_normal_layer': '30',
             'dim_output_normal_layer': '%feadim',
         }
-        decoder = beer.models.nnet.create_decoder(conf, variables)
-        decoder = decoder.type(self.type)
+        decoder = beer.models.nnet.create_decoder(conf, self.data.dtype,
+                                                  self.data.device, variables)
         outputs = decoder(self.data)
         self.assertEqual(outputs.shape[1], self.dim)
 
