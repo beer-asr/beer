@@ -1,0 +1,34 @@
+type: BernoulliNonLinearSubspaceModel
+normal_model:
+  type: Normal
+  covariance: isotropic
+  prior_strength: 1.
+  noise_std: 0
+encoder:
+  blocks:
+  - residual_connection: 'none'
+    structure:
+    - Linear:in_features=<feadim>,out_features=10
+    - Tanh
+  - residual_connection: 'identity'
+    structure:
+    - Linear:in_features=10,out_features=20
+    - Tanh
+    - Linear:in_features=20,out_features=10
+  dim_input_normal_layer: 10
+  dim_output_normal_layer: 5
+  covariance: isotropic
+decoder:
+  blocks:
+  - residual_connection: 'identity'
+    structure:
+    - Linear:in_features=5,out_features=10
+    - Tanh
+    - Linear:in_features=10,out_features=5
+  dim_input_normal_layer: 5
+  dim_output_normal_layer: <feadim>
+latent_model:
+  type: Normal
+  covariance: diagonal
+  prior_strength: 1.
+  noise_std: 0.
