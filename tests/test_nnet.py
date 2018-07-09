@@ -22,7 +22,25 @@ class TestNeuralNetwork(BaseTest):
                                                         {'%var1': 1,
                                                          '%var2': 1}))
 
+    def test_parse_nnet_element(self):
+        strval = 'Linear:in_features=10,out_features=20'
+        fn, kwargs = beer.models.nnet.parse_nnet_element(strval)
+        linear_layer = fn(**kwargs)
+        self.assertTrue(isinstance(linear_layer, torch.nn.Linear))
+        self.assertEqual(linear_layer.in_features, 10)
+        self.assertEqual(linear_layer.out_features, 20)
 
+        strval = 'Tanh'
+        fn, kwargs = beer.models.nnet.parse_nnet_element(strval)
+        tanh = fn(**kwargs)
+        self.assertTrue(isinstance(tanh, torch.nn.Tanh))
+
+        strval = 'ELU:alpha=.5,inplace=True'
+        fn, kwargs = beer.models.nnet.parse_nnet_element(strval)
+        elu = fn(**kwargs)
+        self.assertTrue(isinstance(elu, torch.nn.ELU))
+        self.assertTrue(elu.inplace)
+        self.assertAlmostEqual(elu.alpha, .5)
 
 __all__ = [
     'TestNeuralNetwork',

@@ -78,18 +78,55 @@ class NormalUnityCovarianceLayer(torch.nn.Module):
         return mean
 
 
-def load_value(strval, variables={}):
+def load_value(strval, variables=None):
     '''Evaluate the string representation of a python type.
 
     Args:
         strval (string): String to interpret.
-        variable (dictionary): Set of variables that will be replaced
+        variables (dictionary): Set of variables that will be replaced
             by their associated value before to interpret the python
             strings.
     '''
+    if variables is None:
+        variables = {}
     for variable, value in variables.items():
         strval = strval.replace(variable, str(value))
     return ast.literal_eval(strval)
+
+
+def parse_nnet_element(strval, variables=None):
+    '''Parse a string definining a neural network element (layer,
+    activation function, ...).
+
+    The given string should be formatted as
+    "object:param1=val1,param2=val2". For instance:
+
+      Linear:in_features=10,out_features=20
+
+    Args:
+        strval (string): String defining the neural network element.
+        variables (dictionary): Set of variables that will be replaced
+            by their associated value before to interpret the python
+            strings.
+
+    Returns:
+        ``torch.nn.<function>``: pytorch function to create the object
+        dict: Keyword arguemnts for the pytorch function.
+
+    '''
+    if ':' in strval:
+        function_name, args_and_vals = strval.strip().split(':')
+        function = getattr(torch.nn, function_name)
+        args_and_vals = [arg_and_val.split('=')
+                        for arg_and_val in args_and_vals.split(',')]
+        args_and_vals = {
+            argname: load_value(arg_strval, variables)
+            for argname, arg_strval in args_and_vals
+        }
+    else:
+        function = getattr(torch.nn, strval)
+        args_and_vals = {}
+    return function, args_and_vals
 
 
 def _create_block(block_conf, tensor_type):
