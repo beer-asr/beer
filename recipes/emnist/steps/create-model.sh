@@ -11,6 +11,13 @@ usage
 echo ""
 echo "Options:"
 echo "  -h --help        show this message"
+echo ""
+echo "Example:"
+echo "  \$ $0 \\
+            conf/vae.yml \\
+            /path/to/dbstats.npz \\
+            ./vae.mdl"
+echo ""
 }
 
 # Parsing optional arguments.

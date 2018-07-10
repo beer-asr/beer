@@ -12,6 +12,11 @@ echo ""
 echo "Options:"
 echo "  -h --help        show this message"
 echo ""
+echo "Example:"
+echo "  \$ $0 \\
+            /path/to/archives_list \\
+            ./dbstats.npz"
+echo ""
 }
 
 

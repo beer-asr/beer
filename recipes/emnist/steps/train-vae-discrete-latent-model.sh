@@ -13,14 +13,15 @@ echo "Usage: $0 [options] <sge-options> <init-model> <dbstats> <archives> <outdi
 }
 
 help() {
-echo "Train a Variational Auto-Encoder model."
+echo "Train a Variational Auto-Encoder model with discrete latent"
+echo "variable prior (i.e. GMM or similar)."
 echo ""
 echo "Note:"
 echo "  The training has two stages, first the model is pre-trained"
 echo "  with the KL divergence term weighted to zero so the"
 echo "  encoder/decoder are decoupled from the latent prior. Then, the"
 echo "  second stage of the training is the standard optimization of"
-echo " the ELBO function (KL divergence weight is set to 1)."
+echo "  the ELBO function (KL divergence weight is set to 1)."
 echo ""
 usage
 echo ""
@@ -32,10 +33,23 @@ echo "  --pt-epochs      number of epochs for the pre-training"
 echo "  --epochs         number of epochs for the training"
 echo "  --lrate          learning rate for the latent model"
 echo "  --lrate-nnet     learning for the encoder/decoder networks"
-echo "  --nsamples       number of samples for the re-parameterization trick"
+echo "  --nsamples       number of samples for the re-parameterization"
+echo "                   trick"
 echo ""
-echo "Examples:"
-echo "  \$ $0 --pt-epochs=1 --epochs=10 --lrate=.1 --lrate-nnet=1e-3 --nsamples=5 \"-l mem_free=1G,ram_free=1G\" /path/to/init.mdl /path/to/dbstats.npz /path/to/archives/ expdir"
+echo "Example:"
+echo "  \$ $0 \\
+            --pt-epochs=1 \\
+            --epochs=10 \\
+            --lrate=.1 \\
+            --lrate-nnet=1e-3 \\
+            --nsamples=5 -- \\
+            "-l mem_free=1G,ram_free=1G" \\
+             /path/to/init.mdl \\
+             /path/to/dbstats.npz \\
+             /path/to/archives/ expdir"
+echo ""
+echo "Note the double hyphens \"--\" to avoid problem when parsing"
+echo "the SGE option \"-l ...\"."
 echo ""
 echo "The final model is written in \"<outdir>/final.mdl\"."
 echo ""
@@ -176,7 +190,7 @@ if [ ! -f "${outdir}/training/.done" ]; then
         utils/job.qsub \
         "${cmd}" || exit 1
 
-    ln -s final.mdl "${outdir}/final.mdl"
+    ln -s "$Poutdir}/training/final.mdl" "${outdir}/"
 
     date > "${outdir}/training/.done"
 else
