@@ -7,7 +7,6 @@ from .hmm import *
 from .ppca import *
 from .pldaset import *
 from .vae import *
-from .nnet import *
 
 
 _model_types = {
@@ -17,9 +16,8 @@ _model_types = {
     'HMM': None,
     'PPCA': ppca.create,
     'PLDASet': pldaset.create,
-    'NonLinearSubspaceModel': vae.create,
-    'FeedForwardEncoder': nnet.create,
-    'FeedForwardDecoder': nnet.create
+    'NonLinearSubspaceModel': vae.create_normal_vae,
+    'BernoulliNonLinearSubspaceModel': vae.create_bernoulli_vae,
 }
 
 

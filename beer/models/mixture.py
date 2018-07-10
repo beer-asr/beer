@@ -2,14 +2,14 @@
 'Bayesian Mixture model.'
 
 import torch
-from .bayesmodel import BayesianModel
+from .bayesmodel import DiscreteLatentBayesianModel
 from .bayesmodel import BayesianParameter
 from ..expfamilyprior import DirichletPrior
 from ..utils import onehot
 from ..utils import logsumexp
 
 
-class Mixture(BayesianModel):
+class Mixture(DiscreteLatentBayesianModel):
     '''Bayesian Mixture Model.'''
 
     def __init__(self, prior_weights, posterior_weights, modelset):
@@ -22,31 +22,14 @@ class Mixture(BayesianModel):
             modelset (:any:`BayesianModelSet`): Set of models.
 
         '''
-        super().__init__()
+        super().__init__(modelset)
         self.weights_param = BayesianParameter(prior_weights, posterior_weights)
-        self.modelset = modelset
 
     @property
     def weights(self):
         'Expected value of the weights of the mixture.'
         weights = torch.exp(self.weights_param.expected_value())
         return weights / weights.sum()
-
-    def log_predictions(self, s_stats):
-        '''Compute the log responsibility of the mixture for each frame.
-
-        Args:
-            s_stats (``torch.Tensor[n_frames, stats_dim]``): sufficient
-                statistics.
-
-        Returns:
-            (``torch.Tensor[n_frames, ncomponents]``)
-
-        '''
-        per_component_exp_llh = self.modelset(s_stats)
-        per_component_exp_llh += self.weights_param.expected_value().view(1, -1)
-        lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
-        return per_component_exp_llh - lognorm.view(-1, 1)
 
     ####################################################################
     # BayesianModel interface.
@@ -111,6 +94,17 @@ class Mixture(BayesianModel):
         return self.modelset.local_kl_div_posterior_prior(self.cache['resps'])
 
     ####################################################################
+    # DiscreteLatentBayesianModel interface.
+    ####################################################################
+
+    def posteriors(self, data):
+        s_stats = self.modelset.sufficient_statistics(data)
+        per_component_exp_llh = self.modelset(s_stats)
+        per_component_exp_llh += self.weights_param.expected_value().view(1, -1)
+        lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
+        return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
+
+    ####################################################################
     # VAELatentPrior interface.
     ####################################################################
 
@@ -130,8 +124,7 @@ class Mixture(BayesianModel):
             noise =  torch.randn(nsamples, *mean.size(), dtype=mean.dtype,
                                  device=mean.device)
             samples = (mean + torch.sqrt(var) * noise).view(nframes * nsamples, -1)
-            s_stats = self.sufficient_statistics(samples)
-            resps = torch.exp(self.log_predictions(s_stats))
+            resps = self.posteriors(samples)
             resps = resps.view(nsamples, nframes, ncomps).mean(dim=0)
 
         # Store the responsibilities to accumulate the s. statistics.

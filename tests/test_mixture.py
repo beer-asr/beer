@@ -74,5 +74,12 @@ class TestMixture(BaseTest):
                 exp_llh2 = model(stats, labels=labels).numpy()
                 self.assertArraysAlmostEqual(exp_llh1, exp_llh2)
 
+    def test_posteriors(self):
+        for model in enumerate(self.mixtures):
+            with self.subTest(model=model):
+                posts = model.posteriors(self.data)
+                self.assertAlmostEqual(posts.sum(), len(posts),
+                                       places=self.tolplaces)
+
 
 __all__ = ['TestMixture']

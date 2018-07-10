@@ -15,6 +15,7 @@ sys.path.insert(0, './tests')
 import argparse
 import unittest
 from basetest import BaseTest
+import test_nnet
 import test_create_model
 import test_bayesmodel
 import test_expfamilyprior
@@ -27,6 +28,7 @@ import test_utils
 import test_vbi
 
 testcases = {
+    'test_nnet': test_nnet,
     'test_features': test_features,
     'test_expfamilyprior': test_expfamilyprior,
     'test_bayesmodel': test_bayesmodel,
@@ -63,6 +65,7 @@ def run():
         test_modules = [testcases[args.testcase]]
     else:
         test_modules = [
+            test_nnet,
             test_bayesmodel,
             test_expfamilyprior,
             test_features,
@@ -84,7 +87,7 @@ def run():
                 suite.addTest(BaseTest.get_testsuite(testcase,
                                                      tensor_type=tensor_type,
                                                      seed=init_seed + i))
-    unittest.TextTestRunner(verbosity=args.verbosity, failfast=True).run(suite)
+    unittest.TextTestRunner(verbosity=args.verbosity, failfast=False).run(suite)
 
 
 if __name__ == '__main__':
