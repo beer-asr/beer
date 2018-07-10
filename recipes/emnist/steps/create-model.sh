@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 usage() {
 echo "Usage: $0 [options] <conf-yamlfile> <dbstats> <outfile>"

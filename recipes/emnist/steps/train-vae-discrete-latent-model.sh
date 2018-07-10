@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 gpu=  # Empty variable means we don't use the GPU.
 lograte=100
