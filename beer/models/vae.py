@@ -235,7 +235,7 @@ class BernoulliVAE(VAE):
         dec_means = self.sigmoid(self.decoder(samples))
         dec_means = dec_means.view(nsamples, len(data), -1)
         llh = _bernoulli_log_likelihood(data[None], dec_means)
-        return llh
+        return llh.mean(dim=0)
 
 
 def create_normal_vae(model_conf, mean, variance, create_model_handle):
