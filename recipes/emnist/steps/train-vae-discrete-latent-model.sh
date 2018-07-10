@@ -51,8 +51,9 @@ while [ $# -ge 0 ]; do
             help
             exit
             ;;
-        --gpu)
+        --use-gpu)
             gpu="--use-gpu"
+            shift
             ;;
         --lograte | \
         --pt-epochs | \
@@ -61,6 +62,7 @@ while [ $# -ge 0 ]; do
         --lrate-nnet | \
         --nsamples)
             eval ${optname}=${value}
+            shift
             ;;
         --)
             shift
@@ -73,9 +75,7 @@ while [ $# -ge 0 ]; do
         *)
             break
     esac
-    shift
 done
-
 
 # Parsing mandatory arguments.
 if [ $# -ne 5 ]; then
@@ -83,7 +83,7 @@ if [ $# -ne 5 ]; then
     exit 1
 fi
 
-sge_optsion=$1
+sge_options=$1
 init_model=$2
 dbstats=$3
 archives=$4
@@ -115,7 +115,7 @@ if [ ! -f "${outdir}/pretraining/.done" ]; then
     cmd="python utils/train-vae-discrete-latent-model.py \
         ${pretraining_options} \
         ${dbstats} \
-        ${train_archives} \
+        ${archives} \
         ${init_model} \
         ${outdir}/pretraining/final.mdl"
 
@@ -124,7 +124,7 @@ if [ ! -f "${outdir}/pretraining/.done" ]; then
 
     # Submit the command to the SGE.
     qsub \
-        "${sge_options}"\
+        ${sge_options} \
         -cwd \
         -j y \
         -sync y \
@@ -159,7 +159,7 @@ if [ ! -f "${outdir}/training/.done" ]; then
     cmd="python utils/train-vae-discrete-latent-model.py \
         ${training_options} \
         ${dbstats} \
-        ${train_archives} \
+        ${archives} \
         ${outdir}/pretraining/final.mdl \
         ${outdir}/training/final.mdl"
 
@@ -168,7 +168,7 @@ if [ ! -f "${outdir}/training/.done" ]; then
 
     # Submit the command to the SGE.
     qsub \
-        "${sge_options}"\
+        ${sge_options}\
         -cwd \
         -j y \
         -sync y \
@@ -182,3 +182,4 @@ if [ ! -f "${outdir}/training/.done" ]; then
 else
     echo "Model already trained. Skipping."
 fi
+

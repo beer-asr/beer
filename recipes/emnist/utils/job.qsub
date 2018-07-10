@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+if [ $# -ne 1 ]; then
+    echo "usage: <command>"
+    exit 1
+fi
+
+cmd=$1
+
+# Set the environment.
+. path.sh
+
+echo "command: ${cmd}"
+
+# Run the command.
+time $cmd
+
