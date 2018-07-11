@@ -72,7 +72,6 @@ def run():
     for batch_no, data in enumerate(batches(archives, args.batch_size,
                                             to_torch_dataset)):
         features, labels = data[0].to(device), data[1].to(device)
-        print(features.shape, labels.shape)
         means, variances = model.encoder(features)
         samples = beer.sample_from_normals(means, variances, args.nsamples)
         samples = samples.view(args.nsamples * len(features), -1)
