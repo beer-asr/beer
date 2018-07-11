@@ -1,8 +1,6 @@
-'''Generic training for Bayesian models with non-sequential discrete
-latent variable (i.e. Mixture model) embedded into a Variational
-Auto Encoder.  The script assumes the database is stored in "numpy"
-archives with the data in the "features" key and (optional) labels in
-the "labels" key.
+'''Generic training for a Variational Auto-Encoder with
+a Normal distribution as prior. The script assumes the database is
+stored in "numpy" archives with the data in the "features" key.
 
 '''
 
@@ -23,21 +21,20 @@ import beer
 LOG_MSG= 'epoch: {} batch: {} ln p(X) >= {:.3f}'
 
 
-def to_torch_dataset(np_features, np_labels):
-    fea, labels = torch.from_numpy(np_features).float(), \
-        torch.from_numpy(np_labels).long()
-    return torch.utils.data.TensorDataset(fea, labels)
+def to_torch_dataset(np_features):
+    fea = torch.from_numpy(np_features).float()
+    return torch.utils.data.TensorDataset(fea)
 
 def batches(archives_list, batch_size, to_torch_dataset):
     arlist = copy.deepcopy(archives_list)
     random.shuffle(arlist)
     for archive in arlist:
         data = np.load(archive)
-        dataset = to_torch_dataset(data['features'], data['labels'])
+        dataset = to_torch_dataset(data['features'])
         dataloader = torch.utils.data.DataLoader(dataset,
             batch_size=batch_size, shuffle=True)
-        for mb_data, mb_labels in dataloader:
-            yield mb_data, mb_labels
+        for mb_data in dataloader:
+            yield mb_data
 
 
 def run():
@@ -113,12 +110,9 @@ def run():
     for epoch in range(args.epochs):
         for batch_no, data in enumerate(batches(archives, bsize,
                                                 to_torch_dataset)):
-            features, labels = data[0].to(device), data[1].to(device)
-            print(labels)
-            import sys
-            sys.exit(0)
+            features = data.to(device)
             optimizer.zero_grad()
-            elbo = beer.evidence_lower_bound(model, features, labels=labels,
+            elbo = beer.evidence_lower_bound(model, features,
                                              datasize=float(db_stats['counts']),
                                              kl_weight=args.kl_weight,
                                              nsamples=args.nsamples)

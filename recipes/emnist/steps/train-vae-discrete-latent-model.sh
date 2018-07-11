@@ -7,6 +7,7 @@ epochs=10
 lrate=.1
 lrate_nnet=1e-3
 nsamples=5
+train_cmd=utils/train-vae-discrete-latent-model.py
 
 usage() {
 echo "Usage: $0 [options] <sge-options> <init-model> <dbstats> <archives> <outdir>"
@@ -28,6 +29,8 @@ echo ""
 echo "Options:"
 echo "  -h --help        show this message"
 echo "  --use-gpu        use gpu for the training"
+echo "  --unsupervised   unsupervised training (ignore the labels if"
+echo "                   any)"
 echo "  --lograte        log message rate"
 echo "  --pt-epochs      number of epochs for the pre-training"
 echo "  --epochs         number of epochs for the training"
@@ -69,6 +72,10 @@ while [ $# -ge 0 ]; do
             gpu="--use-gpu"
             shift
             ;;
+        --unsupervised)
+            train_cmd=utils/train-vae-model.py
+            shift
+            ;;
         --lograte | \
         --pt-epochs | \
         --epochs | \
@@ -96,6 +103,9 @@ if [ $# -ne 5 ]; then
     usage
     exit 1
 fi
+
+echo lrate: ${lrate}
+echo lrate_nnet: ${lrate_nnet}
 
 sge_options=$1
 init_model=$2
@@ -126,7 +136,7 @@ ${gpu}  \
 if [ ! -f "${outdir}/pretraining/.done" ]; then
     echo "Pre-training..."
     # Command to submit to the SGE.
-    cmd="python utils/train-vae-discrete-latent-model.py \
+    cmd="python "${train_cmd}" \
         ${pretraining_options} \
         ${dbstats} \
         ${archives} \
@@ -170,7 +180,7 @@ ${gpu}  \
 if [ ! -f "${outdir}/training/.done" ]; then
     echo "Training..."
     # Command to submit to the SGE.
-    cmd="python utils/train-vae-discrete-latent-model.py \
+    cmd="python "${train_cmd}" \
         ${training_options} \
         ${dbstats} \
         ${archives} \
@@ -190,7 +200,7 @@ if [ ! -f "${outdir}/training/.done" ]; then
         utils/job.qsub \
         "${cmd}" || exit 1
 
-    ln -s "$Poutdir}/training/final.mdl" "${outdir}/"
+    ln -s "${outdir}/training/final.mdl" "${outdir}/"
 
     date > "${outdir}/training/.done"
 else
