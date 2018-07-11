@@ -1,23 +1,23 @@
 #!/bin/sh
 
 usage() {
-echo "Usage: $0 [options] <conf-yamlfile> <dbstats> <outfile>"
+echo "Usage: $0 <conf-yamlfile> <dbstats> <outfile>"
 }
 
 help() {
-echo "Create a model from a configuration file."
-echo ""
+echo "Create a model from a configuration file.
+"
 usage
-echo ""
-echo "Options:"
-echo "  -h --help        show this message"
-echo ""
-echo "Example:"
-echo "  \$ $0 \\
-            conf/vae.yml \\
-            /path/to/dbstats.npz \\
-            ./vae.mdl"
-echo ""
+echo "
+Options:
+  -h --help        show this message
+
+Example:
+  \$ $0 \\
+        conf/vae.yml \\
+        /path/to/dbstats.npz \\
+        ./vae.mdl
+"
 }
 
 # Parsing optional arguments.

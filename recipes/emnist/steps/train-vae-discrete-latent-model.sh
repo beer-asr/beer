@@ -14,48 +14,50 @@ echo "Usage: $0 [options] <sge-options> <init-model> <dbstats> <archives> <outdi
 }
 
 help() {
-echo "Train a Variational Auto-Encoder model with discrete latent"
-echo "variable prior (i.e. GMM or similar)."
-echo ""
-echo "Note:"
-echo "  The training has two stages, first the model is pre-trained"
-echo "  with the KL divergence term weighted to zero so the"
-echo "  encoder/decoder are decoupled from the latent prior. Then, the"
-echo "  second stage of the training is the standard optimization of"
-echo "  the ELBO function (KL divergence weight is set to 1)."
-echo ""
+echo "\
+Train a Variational Auto-Encoder model with discrete latent
+variable prior (i.e. GMM or similar).
+
+Note:
+  The training has two stages, first the model is pre-trained
+  with the KL divergence term weighted to zero so the
+  encoder/decoder are decoupled from the latent prior. Then, the
+  second stage of the training is the standard optimization of
+  the ELBO function (KL divergence weight is set to 1).
+"
 usage
-echo ""
-echo "Options:"
-echo "  -h --help        show this message"
-echo "  --use-gpu        use gpu for the training"
-echo "  --unsupervised   unsupervised training (ignore the labels if"
-echo "                   any)"
-echo "  --lograte        log message rate"
-echo "  --pt-epochs      number of epochs for the pre-training"
-echo "  --epochs         number of epochs for the training"
-echo "  --lrate          learning rate for the latent model"
-echo "  --lrate-nnet     learning for the encoder/decoder networks"
-echo "  --nsamples       number of samples for the re-parameterization"
-echo "                   trick"
-echo ""
-echo "Example:"
-echo "  \$ $0 \\
+echo "
+Options:
+  -h --help        show this message
+  --use-gpu        use gpu for the training
+  --unsupervised   unsupervised training (ignore the labels if
+                   any)
+  --lograte        log message rate
+  --pt-epochs      number of epochs for the pre-training
+  --epochs         number of epochs for the training
+  --lrate          learning rate for the latent model
+  --lrate-nnet     learning for the encoder/decoder networks
+  --nsamples       number of samples for the re-parameterization
+                   trick
+
+Example:
+  \$ $0 \\
             --pt-epochs=1 \\
             --epochs=10 \\
             --lrate=.1 \\
             --lrate-nnet=1e-3 \\
-            --nsamples=5 -- \\
-            "-l mem_free=1G,ram_free=1G" \\
+            --nsamples=5 \\
+            -- \\
+            \"-l mem_free=1G,ram_free=1G\" \\
              /path/to/init.mdl \\
              /path/to/dbstats.npz \\
-             /path/to/archives/ expdir"
-echo ""
-echo "Note the double hyphens \"--\" to avoid problem when parsing"
-echo "the SGE option \"-l ...\"."
-echo ""
-echo "The final model is written in \"<outdir>/final.mdl\"."
-echo ""
+             /path/to/archives/ expdir
+
+Note the double hyphens \"--\" to avoid problem when parsing
+the SGE option \"-l ...\".
+
+The final model is written in \"<outdir>/final.mdl\".
+"
 }
 
 # Parsing optional arguments.

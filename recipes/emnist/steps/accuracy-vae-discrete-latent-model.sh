@@ -4,31 +4,32 @@ gpu=  # Empty variable means we don't use the GPU.
 nsamples=5
 
 usage() {
-echo "Usage: $0 [--use-gpu [--nsamples=N]] <sge-options> <model> <archives> <outdir>"
+echo "Usage: $0 [--use-gpu] [--nsamples=N] <sge-options> <model> <archives> <outdir>"
 }
 
 help() {
-echo "Compute the classification accuracy of a Variational Auto-Encoder"
-echo "with discrete latent model prior (i.e. GMM or similar)."
-echo ""
+echo "Compute the classification accuracy of a Variational Auto-Encoder
+with discrete latent model prior (i.e. GMM or similar).
+"
 usage
-echo ""
-echo "Options:"
-echo "  -h --help        show this message"
-echo "  --use-gpu        use the gpu"
-echo "  --nsamples       number of samples for the re-parameterization trick"
-echo ""
-echo "Example:"
-echo "  \$ $0 \\
-            --nsamples=5 -- \\
-            \"-l mem_free=1G,ram_free=1G\" \\
-            /path/to/model.mdl \\
-            /path/to/archives/ \\
-            results_dir"
-echo ""
-echo "Note the double hyphens \"--\" to avoid problem when parsing"
-echo "the SGE option \"-l ...\"."
-echo ""
+echo "
+Options:
+  -h --help        show this message
+  --use-gpu        use the gpu
+  --nsamples       number of samples for the re-parameterization trick
+
+Example:
+  \$ $0 \\
+        --nsamples=5 \\
+        -- \\
+        \"-l mem_free=1G,ram_free=1G\" \\
+        /path/to/model.mdl \\
+        /path/to/archives/ \\
+        results_dir
+
+Note the double hyphens \"--\" to avoid problem when parsing
+the SGE option \"-l ...\".
+"
 }
 
 # Parsing optional arguments.
