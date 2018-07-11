@@ -1,22 +1,22 @@
 #!/bin/sh
 
 usage() {
-echo "Usage: $0 [options] <archives-list> <out-npzfile>"
+echo "Usage: $0 <archives-list> <out-npzfile>"
 }
 
 help() {
-echo "Compute the statistics (mean/var/counts) of a database."
-echo ""
+echo "Compute the statistics (mean/var/counts) of a database.
+"
 usage
-echo ""
-echo "Options:"
-echo "  -h --help        show this message"
-echo ""
-echo "Example:"
-echo "  \$ $0 \\
-            /path/to/archives_list \\
-            ./dbstats.npz"
-echo ""
+echo "
+Options:
+  -h --help        show this message
+
+Example:
+  \$ $0 \\
+        /path/to/archives_list \\
+       ./dbstats.npz
+"
 }
 
 
