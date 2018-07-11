@@ -461,7 +461,7 @@ def create(model_conf, mean, variance, create_model_handle):
     posterior_mean = NormalIsotropicCovariancePrior(mean, mean_variance)
 
     # Noise subspace.
-    noise_subspace = torch.eye(dim_noise_subspace, len(mean), dtype=dtype,
+    noise_subspace = torch.zeros(dim_noise_subspace, len(mean), dtype=dtype,
                                  device=device)
     cov = torch.eye(noise_subspace.size(0), dtype=dtype, device=device)
     cov /= prior_strength
@@ -472,7 +472,7 @@ def create(model_conf, mean, variance, create_model_handle):
     posterior_noise_subspace = MatrixNormalPrior(rand_init, cov)
 
     # Class subspace.
-    class_subspace = torch.eye(dim_class_subspace, len(mean), dtype=dtype,
+    class_subspace = torch.zeros(dim_class_subspace, len(mean), dtype=dtype,
                                  device=device)
     cov = torch.eye(class_subspace.size(0), dtype=dtype, device=device)
     cov /= prior_strength
