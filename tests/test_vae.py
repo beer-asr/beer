@@ -23,7 +23,7 @@ class TestVAE(BaseTest):
         self.nsamples = int(1 + torch.randint(20, (1, 1)).item())
 
     def test_normal_log_likelihood(self):
-        data = torch.randn(self.npoints, self.dim)
+        data = torch.randn(self.npoints, self.dim).type(self.type)
         mean = torch.randn(self.nsamples, self.npoints, self.dim).type(self.type)
         variance = 1 + torch.randn(self.nsamples,
                                    self.npoints, self.dim).type(self.type) ** 2

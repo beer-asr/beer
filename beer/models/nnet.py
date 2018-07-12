@@ -53,6 +53,30 @@ class NormalUnityCovarianceLayer(torch.nn.Module):
         return mean
 
 
+class BernoulliLayer(torch.nn.Module):
+    def __init__(self, dim_in, dim_out):
+        super().__init__()
+        self.h2mean = torch.nn.Linear(dim_in, dim_out)
+        self.sigmoid = torch.nn.Sigmoid()
+
+    def forward(self, data):
+        mean = self.h2mean(data)
+        return self.sigmoid(mean)
+
+
+class BetaLayer(torch.nn.Module):
+    def __init__(self, dim_in, dim_out):
+        super().__init__()
+        self.h2alpha = torch.nn.Linear(dim_in, dim_out)
+        self.h2beta = torch.nn.Linear(dim_in, dim_out)
+        self.sigmoid = torch.nn.Sigmoid
+
+    def forward(self, data):
+        alpha = self.h2alpha(data).exp()
+        beta = self.h2beta(data).exp()
+        return alpha, beta
+
+
 class Identity(torch.nn.Module):
     def forward(self, data):
         return data
@@ -204,15 +228,37 @@ def create_encoder(encoder_conf, dtype, device, variables):
     return retval.type(dtype).to(device)
 
 
-def create_decoder(decoder_conf, dtype, device, variables):
+def create_normal_decoder(decoder_conf, dtype, device, variables):
     blocks = create_chained_blocks(decoder_conf['blocks'], variables)
-    dim_in_normal_layer = load_value(decoder_conf['dim_input_normal_layer'],
+    dim_in_model_layer = load_value(decoder_conf['dim_input_model_layer'],
                                      variables=variables)
-    dim_out_normal_layer = load_value(decoder_conf['dim_output_normal_layer'],
+    dim_out_model_layer = load_value(decoder_conf['dim_output_model_layer'],
                                       variables=variables)
-    normal_layer = NormalUnityCovarianceLayer(dim_in_normal_layer,
-                                              dim_out_normal_layer)
+    normal_layer = NormalUnityCovarianceLayer(dim_in_model_layer,
+                                              dim_out_model_layer)
     retval = torch.nn.Sequential(*blocks, normal_layer)
+    return retval.type(dtype).to(device)
+
+
+def create_bernoulli_decoder(decoder_conf, dtype, device, variables):
+    blocks = create_chained_blocks(decoder_conf['blocks'], variables)
+    dim_in_model_layer = load_value(decoder_conf['dim_input_model_layer'],
+                                     variables=variables)
+    dim_out_model_layer = load_value(decoder_conf['dim_output_model_layer'],
+                                      variables=variables)
+    bernoulli_layer = BernoulliLayer(dim_in_model_layer, dim_out_model_layer)
+    retval = torch.nn.Sequential(*blocks, bernoulli_layer)
+    return retval.type(dtype).to(device)
+
+
+def create_beta_decoder(decoder_conf, dtype, device, variables):
+    blocks = create_chained_blocks(decoder_conf['blocks'], variables)
+    dim_in_model_layer = load_value(decoder_conf['dim_input_model_layer'],
+                                     variables=variables)
+    dim_out_model_layer = load_value(decoder_conf['dim_output_model_layer'],
+                                      variables=variables)
+    beta_layer = BetaLayer(dim_in_model_layer, dim_out_model_layer)
+    retval = torch.nn.Sequential(*blocks, beta_layer)
     return retval.type(dtype).to(device)
 
 

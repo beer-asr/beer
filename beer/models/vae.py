@@ -236,17 +236,26 @@ class BernoulliVAE(VAE):
 
     '''
 
-    def __init__(self, encoder, decoder, latent_model):
-        super().__init__(encoder, decoder, latent_model)
-        self.sigmoid = torch.nn.Sigmoid()
+    def _expected_llh(self, data, means, variances, nsamples):
+        samples = sample_from_normals(means, variances, nsamples)
+        samples = samples.view(nsamples * len(data), -1)
+        dec_means = self.decoder(samples).view(nsamples, len(data), -1)
+        return _bernoulli_log_likelihood(data, dec_means)
+
+
+class BetaVAE(VAE):
+    '''Variational Auto-Encoder (VAE) for continuous data ranging from
+    0 to 1.
+
+    '''
 
     def _expected_llh(self, data, means, variances, nsamples):
         samples = sample_from_normals(means, variances, nsamples)
         samples = samples.view(nsamples * len(data), -1)
-        dec_means = self.sigmoid(self.decoder(samples))
-        dec_means = dec_means.view(nsamples, len(data), -1)
-        llh = _bernoulli_log_likelihood(data, dec_means)
-        return llh
+        dec_alphas, dec_betas = self.decoder(samples)
+        dec_alphas = dec_alphas.view(nsamples, len(data), -1)
+        dec_betas = dec_betas.view(nsamples, len(data), -1)
+        return _beta_log_likelihood(data, dec_alphas, dec_betas)
 
 
 def create_normal_vae(model_conf, mean, variance, create_model_handle):
@@ -255,8 +264,8 @@ def create_normal_vae(model_conf, mean, variance, create_model_handle):
     latent_dim = model_conf['encoder']['dim_output_normal_layer']
     encoder = nnet.create_encoder(model_conf['encoder'], dtype, device,
                                   variables)
-    decoder = nnet.create_decoder(model_conf['decoder'], dtype, device,
-                                  variables)
+    decoder = nnet.create_normal_decoder(model_conf['decoder'], dtype, device,
+                                         variables)
     normal = create_model_handle(model_conf['normal_model'],
                                  mean, variance, create_model_handle)
     latent_model = create_model_handle(model_conf['latent_model'],
@@ -273,14 +282,30 @@ def create_bernoulli_vae(model_conf, mean, variance, create_model_handle):
     latent_dim = model_conf['encoder']['dim_output_normal_layer']
     encoder = nnet.create_encoder(model_conf['encoder'], dtype, device,
                                   variables)
-    decoder = nnet.create_decoder(model_conf['decoder'], dtype, device,
-                                  variables)
+    decoder = nnet.create_bernoulli_decoder(model_conf['decoder'], dtype,
+                                            device, variables)
     latent_model = create_model_handle(model_conf['latent_model'],
                                        torch.zeros(latent_dim, dtype=dtype,
                                                    device=device),
                                        torch.ones(latent_dim, dtype=dtype,
                                                    device=device), create_model_handle)
     return BernoulliVAE(encoder, decoder, latent_model)
+
+
+def create_beta_vae(model_conf, mean, variance, create_model_handle):
+    dtype, device = mean.dtype, mean.device
+    variables = {'<feadim>': len(mean)}
+    latent_dim = model_conf['encoder']['dim_output_normal_layer']
+    encoder = nnet.create_encoder(model_conf['encoder'], dtype, device,
+                                  variables)
+    decoder = nnet.create_beta_decoder(model_conf['decoder'], dtype,
+                                       device, variables)
+    latent_model = create_model_handle(model_conf['latent_model'],
+                                       torch.zeros(latent_dim, dtype=dtype,
+                                                   device=device),
+                                       torch.ones(latent_dim, dtype=dtype,
+                                                   device=device), create_model_handle)
+    return BetaVAE(encoder, decoder, latent_model)
 
 
 __all__ = [

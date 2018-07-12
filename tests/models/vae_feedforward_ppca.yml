@@ -25,8 +25,8 @@ decoder:
     - Linear:in_features=5,out_features=10
     - Tanh
     - Linear:in_features=10,out_features=5
-  dim_input_normal_layer: 5
-  dim_output_normal_layer: <feadim>
+  dim_input_model_layer: 5
+  dim_output_model_layer: <feadim>
 latent_model:
   type: PPCA
   dim_subspace: 4

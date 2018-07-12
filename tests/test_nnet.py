@@ -137,7 +137,7 @@ class TestNeuralNetwork(BaseTest):
         self.assertEqual(outputs[1].shape[1], 30)
 
 
-    def test_create_decoder_nnet(self):
+    def test_create_normal_decoder(self):
         variables = {'%feadim': self.dim}
         conf = {
             'blocks': [
@@ -160,13 +160,30 @@ class TestNeuralNetwork(BaseTest):
                     'residual_connection': 'none'
                 }
             ],
-            'dim_input_normal_layer': '30',
-            'dim_output_normal_layer': '%feadim',
+            'dim_input_model_layer': '30',
+            'dim_output_model_layer': '%feadim',
         }
-        decoder = beer.models.nnet.create_decoder(conf, self.data.dtype,
-                                                  self.data.device, variables)
+        decoder = beer.models.nnet.create_normal_decoder(conf,
+                                                         self.data.dtype,
+                                                         self.data.device,
+                                                         variables)
         outputs = decoder(self.data)
         self.assertEqual(outputs.shape[1], self.dim)
+
+        decoder = beer.models.nnet.create_bernoulli_decoder(conf,
+                                                            self.data.dtype,
+                                                            self.data.device,
+                                                            variables)
+        outputs = decoder(self.data)
+        self.assertEqual(outputs.shape[1], self.dim)
+
+        decoder = beer.models.nnet.create_beta_decoder(conf,
+                                                       self.data.dtype,
+                                                       self.data.device,
+                                                       variables)
+        alphas, betas = decoder(self.data)
+        self.assertEqual(alphas.shape[1], self.dim)
+        self.assertEqual(betas.shape[1], self.dim)
 
 
 __all__ = [
