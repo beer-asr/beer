@@ -13,7 +13,7 @@ sge_opts="-l gpu=1,mem_free=1G,ram_free=1G"
 dbname=digits
 
 # Model configuration file.
-modelname=vae
+modelname=vae_ldim5
 modelconf="conf/${modelname}.yml"
 
 # Output directory of the experiment.
@@ -42,7 +42,7 @@ steps/train-vae-discrete-latent-model.sh \
     --use-gpu \
     --lograte=10 \
     --pt-epochs=10 \
-    --epochs=100 \
+    --epochs=30 \
     --lrate=.1 \
     --lrate-nnet=1e-3 \
     --nsamples=5 \

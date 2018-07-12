@@ -174,7 +174,7 @@ ${gpu}  \
 --lrate ${lrate}  \
 --lrate-nnet ${lrate_nnet} \
 --logging-rate ${lograte}  \
---dir-tmp-models ${outdir}/pretraining \
+--dir-tmp-models ${outdir}/training \
 --nsamples ${nsamples} \
 --kl-weight 1. \
 "
