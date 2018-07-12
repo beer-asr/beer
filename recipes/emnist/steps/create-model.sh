@@ -1,0 +1,64 @@
+#!/bin/sh
+
+usage() {
+echo "Usage: $0 <conf-yamlfile> <dbstats> <outfile>"
+}
+
+help() {
+echo "Create a model from a configuration file.
+"
+usage
+echo "
+Options:
+  -h --help        show this message
+
+Example:
+  \$ $0 \\
+        conf/vae.yml \\
+        /path/to/dbstats.npz \\
+        ./vae.mdl
+"
+}
+
+# Parsing optional arguments.
+while [ $# -ge 0 ]; do
+    param=`echo $1 | awk -F= '{print $1}'`
+    value=`echo $1 | awk -F= '{print $2}'`
+    case $param in
+        -h | --help)
+            help
+            exit
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            usage
+            exit 1
+            ;;
+        *)
+            break
+    esac
+    shift
+done
+
+# Parsing mandatory arguments.
+if [ $# -ne 3 ]; then
+    usage
+    exit 1
+fi
+
+conf=$1
+dbstats=$2
+model_output=$3
+
+if [ ! -f "${model_output}" ]; then
+    echo "Creating model..."
+    python utils/create-model.py \
+        "${conf}" \
+        "${dbstats}" \
+        "${model_output}" || exit 1
+else
+    echo "Model already created. Skipping."
+fi
