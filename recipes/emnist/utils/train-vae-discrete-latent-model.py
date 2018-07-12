@@ -114,9 +114,6 @@ def run():
         for batch_no, data in enumerate(batches(archives, bsize,
                                                 to_torch_dataset)):
             features, labels = data[0].to(device), data[1].to(device)
-            print(labels)
-            import sys
-            sys.exit(0)
             optimizer.zero_grad()
             elbo = beer.evidence_lower_bound(model, features, labels=labels,
                                              datasize=float(db_stats['counts']),

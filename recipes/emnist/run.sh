@@ -4,7 +4,7 @@
 source "$(pwd)/path.sh"
 
 # Database to use ("digits" or "letters").
-dbname=letters
+dbname=digits
 
 # Model configuration file.
 modelname=vaeplda
@@ -33,6 +33,7 @@ steps/create-model.sh \
 
 # Training the model.
 steps/train-vae-discrete-latent-model.sh \
+    --use-gpu \
     --lograte=10 \
     --pt-epochs=5 \
     --epochs=50 \
@@ -40,7 +41,7 @@ steps/train-vae-discrete-latent-model.sh \
     --lrate-nnet=1e-3 \
     --nsamples=5 \
     -- \
-    "-l mem_free=1G,ram_free=1G" \
+    "-l gpu=1,mem_free=1G,ram_free=1G" \
     "${outdir}/init.mdl" \
     "${outdir}/dbstats.npz" \
     "data/${dbname}/train/archives" \
@@ -49,9 +50,10 @@ steps/train-vae-discrete-latent-model.sh \
 
 # Compute the accuracy of the model.
 steps/accuracy-vae-discrete-latent-model.sh \
+    --use-gpu \
     --nsamples=5 \
     -- \
-    "-l mem_free=1G,ram_free=1G" \
+    "-l gpu=1,mem_free=1G,ram_free=1G" \
     "${outdir}/final.mdl" \
     "data/${dbname}/test/archives" \
     "${outdir}/results"

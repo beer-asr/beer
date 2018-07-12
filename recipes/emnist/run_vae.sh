@@ -3,11 +3,14 @@
 # Set the environment.
 source "$(pwd)/path.sh"
 
-# SGE options for the JHU/CLSP cluster.
-sge_opts="-l gpu=1,mem_free=1G,ram_free=1G,hostname='c*'"
+# SGE options.
+# JHU/CLSP cluster.
+#sge_opts="-l gpu=1,mem_free=1G,ram_free=1G,hostname='c*'"
+# BRNO/FIT cluster.
+sge_opts="-l gpu=1,mem_free=1G,ram_free=1G"
 
 # Database to use ("digits" or "letters").
-dbname=letters
+dbname=digits
 
 # Model configuration file.
 modelname=vae
@@ -38,8 +41,8 @@ steps/create-model.sh \
 steps/train-vae-discrete-latent-model.sh \
     --use-gpu \
     --lograte=10 \
-    --pt-epochs=5 \
-    --epochs=20 \
+    --pt-epochs=10 \
+    --epochs=100 \
     --lrate=.1 \
     --lrate-nnet=1e-3 \
     --nsamples=5 \

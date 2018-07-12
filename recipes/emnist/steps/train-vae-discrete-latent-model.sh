@@ -151,7 +151,7 @@ if [ ! -f "${outdir}/pretraining/.done" ]; then
     # Submit the command to the SGE.
     qsub \
         ${sge_options} \
-        -cwd \
+        -wd $(pwd)\
         -j y \
         -sync y \
         -o ${outdir}/pretraining/sge.log \
@@ -195,14 +195,14 @@ if [ ! -f "${outdir}/training/.done" ]; then
     # Submit the command to the SGE.
     qsub \
         ${sge_options}\
-        -cwd \
+        -wd $(pwd)\
         -j y \
         -sync y \
         -o ${outdir}/training/sge.log \
         utils/job.qsub \
         "${cmd}" || exit 1
 
-    ln -s "${outdir}/training/final.mdl" "${outdir}/"
+    cp "${outdir}/training/final.mdl" "${outdir}/"
 
     date > "${outdir}/training/.done"
 else
