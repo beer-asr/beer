@@ -65,15 +65,16 @@ class BernoulliLayer(torch.nn.Module):
 
 
 class BetaLayer(torch.nn.Module):
-    def __init__(self, dim_in, dim_out):
+    def __init__(self, dim_in, dim_out, min_value=1e-1):
         super().__init__()
         self.h2alpha = torch.nn.Linear(dim_in, dim_out)
         self.h2beta = torch.nn.Linear(dim_in, dim_out)
         self.sigmoid = torch.nn.Sigmoid
+        self.min_value = min_value
 
     def forward(self, data):
-        alpha = self.h2alpha(data).exp()
-        beta = self.h2beta(data).exp()
+        alpha = self.min_value + self.h2alpha(data).exp()
+        beta = self.min_value + self.h2beta(data).exp()
         return alpha, beta
 
 
