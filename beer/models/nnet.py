@@ -69,13 +69,13 @@ class BetaLayer(torch.nn.Module):
         super().__init__()
         self.h2alpha = torch.nn.Linear(dim_in, dim_out)
         self.h2beta = torch.nn.Linear(dim_in, dim_out)
-        self.sigmoid = torch.nn.Sigmoid
+        self.sigmoid = torch.nn.Sigmoid()
         self.min_value = min_value
         self.max_value = max_value
 
     def forward(self, data):
-        alpha = self.min_value + self.sigmoid(self.h2alpha(data))
-        beta = self.min_value + self.sigmoid(self.h2beta(data))
+        alpha = self.min_value + self.max_value * self.sigmoid(self.h2alpha(data))
+        beta = self.min_value + self.max_value * self.sigmoid(self.h2beta(data))
         return alpha, beta
 
 
