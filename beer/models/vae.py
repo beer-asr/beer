@@ -33,14 +33,25 @@ def _normal_diag_natural_params(mean, var):
 def _normal_log_likelihood(data, means, variances):
     distance_term = 0.5 * (data - means).pow(2) / variances
     precision_term = 0.5 * variances.log()
-    llh =  (-distance_term - precision_term).sum(dim=-1)
+    llh =  (-distance_term - precision_term).sum(dim=-1).mean(dim=0)
     llh -= .5 * means.shape[-1] * math.log(2 * math.pi)
     return llh
 
 
 def _bernoulli_log_likelihood(data, mean):
-    per_pixel_bce = data * mean.log() + (1.0 - data) * (1 - mean).log()
-    return per_pixel_bce.sum(dim=-1)
+    epsilon = 1e-6
+    per_pixel_bce = data * torch.log(epsilon + mean) + \
+        (1.0 - data) * torch.log(epsilon + 1 - mean)
+    return per_pixel_bce.sum(dim=-1).mean(dim=0)
+
+
+def _beta_log_likelihood(data, alpha, beta):
+    epsilon = 1e-6
+    llh = (alpha - 1) * torch.log(epsilon + data) + \
+        (beta - 1) * torch.log(epsilon + 1 - data) + \
+        torch.lgamma(alpha + beta) - torch.lgamma(alpha) - torch.lgamma(beta)
+    return llh.sum(dim=-1).mean(dim=0)
+
 
 
 class VAE(BayesianModel):
@@ -82,7 +93,7 @@ class VAE(BayesianModel):
         dec_means, dec_variances = self.decoder(samples)
         dec_means = dec_means.view(nsamples, len_data, -1)
         dec_variances = dec_variances.view(nsamples, len_data, -1)
-        return _normal_log_likelihood(data, dec_means, dec_variances).mean(dim=0)
+        return _normal_log_likelihood(data, dec_means, dec_variances)
 
     ####################################################################
     # BayesianModel interface.
@@ -234,8 +245,8 @@ class BernoulliVAE(VAE):
         samples = samples.view(nsamples * len(data), -1)
         dec_means = self.sigmoid(self.decoder(samples))
         dec_means = dec_means.view(nsamples, len(data), -1)
-        llh = _bernoulli_log_likelihood(data[None], dec_means)
-        return llh.mean(dim=0)
+        llh = _bernoulli_log_likelihood(data, dec_means)
+        return llh
 
 
 def create_normal_vae(model_conf, mean, variance, create_model_handle):
