@@ -311,5 +311,6 @@ def create_beta_vae(model_conf, mean, variance, create_model_handle):
 __all__ = [
     'VAE',
     'VAEGlobalMeanCovariance',
-    'BernoulliVAE'
+    'BernoulliVAE',
+    'BetaVAE'
 ]
