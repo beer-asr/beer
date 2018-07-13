@@ -84,6 +84,15 @@ class Identity(torch.nn.Module):
         return data
 
 
+class ReshapeLayer(torch.nn.Module):
+    def __init__(self, shape):
+        super().__init__()
+        self.shape = shape
+
+    def forward(self, data):
+        return data.view(*self.shape)
+
+
 class NeuralNetworkBlock(torch.nn.Module):
     def __init__(self, structure, residual_connection=None):
         super().__init__()
@@ -138,7 +147,7 @@ def parse_nnet_element(strval):
     str_kwargs = {}
     if ':' in strval:
         function_name, args_and_vals = strval.strip().split(':')
-        for arg_and_val in args_and_vals.split(','):
+        for arg_and_val in args_and_vals.split(';'):
             argname, str_argval = arg_and_val.split('=')
             str_kwargs[argname] = str_argval
     else:
@@ -160,11 +169,16 @@ def create_nnet_element(strval, variables=None):
 
     '''
     function_name, str_kwargs = parse_nnet_element(strval)
+    if hasattr(torch.nn, function_name):
+        function = getattr(torch.nn, function_name)
+    elif function_name == 'ReshapeLayer':
+        function = ReshapeLayer
+    else:
+        raise ValueError('Unknown nnet element type: {}'.format(function_name))
     kwargs = {
         argname: load_value(arg_strval, variables)
         for argname, arg_strval in str_kwargs.items()
     }
-    function = getattr(torch.nn, function_name)
     return function(**kwargs)
 
 
