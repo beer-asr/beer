@@ -1,0 +1,5 @@
+type: NormalizingFlowLayer
+covariance: diagonal
+in_dim: 10
+out_dim: 20
+flow_params_dim: 5

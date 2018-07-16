@@ -182,7 +182,7 @@ class VAEGlobalMeanCovariance(VAE):
     '''
 
     def __init__(self, normal, encoder, decoder, latent_model):
-        super().__init__(encoder, decoder, latent_model)
+        super().__init__(encoder, decoder, latent_model, None)
         self.normal = normal
 
     def _expected_llh(self, data, means, variances, nsamples):
@@ -243,7 +243,7 @@ class VAEGlobalMeanCovariance(VAE):
         }
 
 
-def create(model_conf, mean, variance, create_model_handle):
+def create_vae(model_conf, mean, variance, create_model_handle):
     dtype, device = mean.dtype, mean.device
     variables = {'<feadim>': len(mean)}
     llh_fn = llh_fns[model_conf['llh_type']]
@@ -257,7 +257,26 @@ def create(model_conf, mean, variance, create_model_handle):
                                                    device=device),
                                        torch.ones(latent_dim, dtype=dtype,
                                                    device=device), create_model_handle)
-    return VAE(normal, encoder, decoder, latent_model, llh_fn)
+    return VAE(encoder, decoder, latent_model, llh_fn)
+
+
+def create_non_linear_subspace_model(model_conf, mean, variance,
+                                     create_model_handle):
+    dtype, device = mean.dtype, mean.device
+    variables = {'<feadim>': len(mean)}
+    normal = create_model_handle(model_conf['normal_model'],
+                                 mean, variance, create_model_handle)
+    latent_dim = model_conf['encoder']['dim_output_normal_layer']
+    encoder = nnet.create_encoder(model_conf['encoder'], dtype, device,
+                                  variables)
+    decoder = nnet.create_normal_decoder(model_conf['decoder'], dtype, device,
+                                         variables)
+    latent_model = create_model_handle(model_conf['latent_model'],
+                                       torch.zeros(latent_dim, dtype=dtype,
+                                                   device=device),
+                                       torch.ones(latent_dim, dtype=dtype,
+                                                   device=device), create_model_handle)
+    return VAEGlobalMeanCovariance(normal, encoder, decoder, latent_model)
 
 
 __all__ = [

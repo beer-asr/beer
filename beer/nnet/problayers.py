@@ -54,7 +54,7 @@ class NormalUnityCovarianceLayer(torch.nn.Module):
 
     def forward(self, data):
         mean = self.h2mean(data)
-        return mean
+        return [mean]
 
 
 class BernoulliLayer(torch.nn.Module):
@@ -67,7 +67,7 @@ class BernoulliLayer(torch.nn.Module):
 
     def forward(self, data):
         mean = self.h2mean(data)
-        return self.sigmoid(mean)
+        return [self.sigmoid(mean)]
 
 
 class BetaLayer(torch.nn.Module):
@@ -88,33 +88,61 @@ class BetaLayer(torch.nn.Module):
         beta = self.min_value + self.max_value * self.sigmoid(self.h2beta(data))
         return alpha, beta
 
+
+class NormalizingFlowLayer(torch.nn.Module):
+    '''Output the parameters of the initial normal density and the
+    parameters of the flow.'''
+
+
+    def __init__(self, dim_in, flow_params_dim, normal_layer):
+        super().__init__()
+        self.normal_layer = normal_layer
+        self.h2flow = torch.nn.Linear(dim_in, flow_params_dim)
+
+    def forward(self, data):
+        flow_params = self.h2flow(data)
+        normal_params = self.normal_layer(data)
+        return (*normal_params, flow_params)
+
+
 def create(layer_conf):
     layer_type = layer_conf['type']
     in_dim = layer_conf['in_dim']
     out_dim = layer_conf['out_dim']
-    if layer_type == 'NormalLayer':
+
+    if layer_type == 'NormalizingFlowLayer':
+        cov_type = layer_conf['covariance']
+        flow_params_dim = layer_conf['flow_params_dim']
+        if cov_type == 'isotropic':
+            init_normal_layer = NormalIsotropicCovarianceLayer(in_dim, out_dim)
+        elif cov_type == 'diagonal':
+            init_normal_layer = NormalDiagonalCovarianceLayer(in_dim, out_dim)
+        else:
+            raise ValueError('Unsupported covariance type: {}'.format(cov_type))
+        return NormalizingFlowLayer(in_dim, flow_params_dim, init_normal_layer)
+    elif layer_type == 'NormalLayer':
         cov_type = layer_conf['covariance']
         if cov_type == 'isotropic':
-            layer = NormalIsotropicCovarianceLayer
+            return NormalIsotropicCovarianceLayer(in_dim, out_dim)
         elif cov_type == 'diagonal':
-            layer = NormalDiagonalCovarianceLayer
+            return NormalDiagonalCovarianceLayer(in_dim, out_dim)
         elif cov_type == 'unity':
-            layer = NormalUnityCovarianceLayer
+            return NormalUnityCovarianceLayer(in_dim, out_dim)
         else:
-            raise ValueError('Unknown covariance type: {}'.format(cov_type))
+            raise ValueError('Unsupported covariance type: {}'.format(cov_type))
     elif layer_type == 'BetaLayer':
-        layer = BetaLayer
+        return BetaLayer(in_dim, out_dim)
     elif layer_type == 'BernoulliLayer':
-        layer = BernoulliLayer
+        return BernoulliLayer(in_dim, out_dim)
     else:
         raise ValueError('Unknown probability layer type: {}'.format(layer_type))
-    return layer(in_dim, out_dim)
 
 
 __all__ = [
     'NormalDiagonalCovarianceLayer',
     'NormalIsotropicCovarianceLayer',
     'NormalUnityCovarianceLayer',
+    'NormalizingFlowLayer',
     'BernoulliLayer',
     'BetaLayer'
 ]

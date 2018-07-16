@@ -16,8 +16,8 @@ _model_types = {
     'HMM': None,
     'PPCA': ppca.create,
     'PLDASet': pldaset.create,
-    'VAE': vae.create,
-    'NonLinearSubspaceModel': None,
+    'VAE': vae.create_vae,
+    'NonLinearSubspaceModel': vae.create_non_linear_subspace_model,
 }
 
 
