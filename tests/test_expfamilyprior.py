@@ -67,7 +67,7 @@ class TestDirichletPrior(BaseTest):
 
     def setUp(self):
         dim = int(1 + torch.randint(100, (1, 1)).item())
-        self.concentrations = (torch.randn(dim) ** 2).type(self.type)
+        self.concentrations = (1 + torch.randn(dim) ** 2).type(self.type)
         self.model = beer.DirichletPrior(self.concentrations)
 
     def test_init(self):

@@ -5,3 +5,4 @@
 # python virtual enviroment named "beer".
 source activate beer
 
+export CUDA_VISIBLE_DEVICES=$(utils/free-gpus.sh)
