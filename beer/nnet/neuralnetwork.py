@@ -1,4 +1,4 @@
-'''Implementenation of a generic Neural Network composed of blocks
+'''Implementation of a generic Neural Network composed of blocks
 (residual or not).
 
 '''
@@ -8,6 +8,11 @@ import torch
 
 
 class ReshapeLayer(torch.nn.Module):
+    '''This layer is just a convenience so that the user can parameterize
+    how the data should be presented to the neural network or, to
+    alternate between simple feed-forward and convolutional layers.
+
+    '''
     def __init__(self, shape):
         super().__init__()
         self.shape = shape
@@ -21,7 +26,6 @@ class NeuralNetworkBlock(torch.nn.Module):
         super().__init__()
         self.structure = structure
         self.residual_connection = residual_connection
-
 
     def forward(self, data):
         h = self.structure(data)
@@ -119,80 +123,28 @@ def create_nnet_block(block_conf, variables=None):
 
     '''
     structure_list = [create_nnet_element(strval, variables)
-                      for strval in block_conf['structure']]
+                      for strval in block_conf['block_structure']]
     structure = torch.nn.Sequential(*structure_list)
-    res_connection = block_conf['residual_connection']
+    res_connection = block_conf['residual']
     return NeuralNetworkBlock(structure, res_connection)
 
 
-def create_chained_blocks(block_confs, variables):
-    '''Create a chain of nnet blocks
+def create(nnet_blocks_conf, dtype, device, variables):
+    '''Create a neural network.
 
     Args:
-        block_confs (list of dict): Configuration dictionaries.
+        nnet_blocks_conf (list of dict): Configuration dictionaries.
         variables (dictionary): Set of variables that will be replaced
             by their associated value before to interpret the python
-            strings.
+            strings from the configuration data.
 
     Returns:
         list of :any:`NeuralNetworkBlock`
 
     '''
-    return torch.nn.Sequential(*[create_nnet_block(block_conf, variables)
-                                 for block_conf in block_confs])
-
-
-def create_encoder(encoder_conf, dtype, device, variables):
-    blocks = create_chained_blocks(encoder_conf['nnet_structure'], variables)
-    dim_in_normal_layer = load_value(encoder_conf['dim_input_normal_layer'],
-                                     variables=variables)
-    dim_out_normal_layer = load_value(encoder_conf['dim_output_normal_layer'],
-                                      variables=variables)
-    cov_type = encoder_conf['covariance']
-    if cov_type == 'isotropic':
-        normal_layer = NormalIsotropicCovarianceLayer(dim_in_normal_layer,
-                                                      dim_out_normal_layer)
-    elif cov_type == 'diagonal':
-        normal_layer = NormalDiagonalCovarianceLayer(dim_in_normal_layer,
-                                                        dim_out_normal_layer)
-    else:
-        raise ValueError('Unsupported covariance: {}'.format(cov_type))
-    retval = torch.nn.Sequential(*blocks, normal_layer)
-    return retval.type(dtype).to(device)
-
-
-def create_normal_decoder(decoder_conf, dtype, device, variables):
-    blocks = create_chained_blocks(decoder_conf['blocks'], variables)
-    dim_in_model_layer = load_value(decoder_conf['dim_input_model_layer'],
-                                     variables=variables)
-    dim_out_model_layer = load_value(decoder_conf['dim_output_model_layer'],
-                                      variables=variables)
-    normal_layer = NormalUnityCovarianceLayer(dim_in_model_layer,
-                                              dim_out_model_layer)
-    retval = torch.nn.Sequential(*blocks, normal_layer)
-    return retval.type(dtype).to(device)
-
-
-def create_bernoulli_decoder(decoder_conf, dtype, device, variables):
-    blocks = create_chained_blocks(decoder_conf['blocks'], variables)
-    dim_in_model_layer = load_value(decoder_conf['dim_input_model_layer'],
-                                     variables=variables)
-    dim_out_model_layer = load_value(decoder_conf['dim_output_model_layer'],
-                                      variables=variables)
-    bernoulli_layer = BernoulliLayer(dim_in_model_layer, dim_out_model_layer)
-    retval = torch.nn.Sequential(*blocks, bernoulli_layer)
-    return retval.type(dtype).to(device)
-
-
-def create_beta_decoder(decoder_conf, dtype, device, variables):
-    blocks = create_chained_blocks(decoder_conf['blocks'], variables)
-    dim_in_model_layer = load_value(decoder_conf['dim_input_model_layer'],
-                                     variables=variables)
-    dim_out_model_layer = load_value(decoder_conf['dim_output_model_layer'],
-                                      variables=variables)
-    beta_layer = BetaLayer(dim_in_model_layer, dim_out_model_layer)
-    retval = torch.nn.Sequential(*blocks, beta_layer)
-    return retval.type(dtype).to(device)
+    network = torch.nn.Sequential(*[create_nnet_block(block_conf, variables)
+                                 for block_conf in nnet_blocks_conf])
+    return network.type(dtype).to(device)
 
 
 # This module does not have a public interface.
