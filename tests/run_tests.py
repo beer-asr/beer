@@ -16,6 +16,7 @@ import argparse
 import unittest
 from basetest import BaseTest
 import test_nnet
+import test_problayers
 import test_arnet
 import test_create_model
 import test_bayesmodel
@@ -30,6 +31,7 @@ import test_vae
 import test_vbi
 
 testcases = {
+    'test_problayers': test_problayers,
     'test_arnet': test_arnet,
     'test_nnet': test_nnet,
     'test_features': test_features,
@@ -69,6 +71,7 @@ def run():
         test_modules = [testcases[args.testcase]]
     else:
         test_modules = [
+            test_problayers,
             test_nnet,
             test_arnet,
             test_bayesmodel,

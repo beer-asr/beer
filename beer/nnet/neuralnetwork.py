@@ -1,88 +1,10 @@
-'''Specific Neural Network architectures.'''
+'''Implementenation of a generic Neural Network composed of blocks
+(residual or not).
+
+'''
 
 import ast
 import torch
-from .bayesmodel import BayesianModel
-
-
-class NeuralNetwork(torch.nn.Module):
-    '''Generic Neural network class.'''
-
-    def __init__(self, seqs):
-        super().__init__()
-        self.seq = torch.nn.Sequential(*seqs)
-
-    def forward(self, data):
-        return self.seq(data)
-
-
-class NormalDiagonalCovarianceLayer(torch.nn.Module):
-    def __init__(self, dim_in, dim_out):
-        super().__init__()
-        self.h2mean = torch.nn.Linear(dim_in, dim_out)
-        self.h2logvar = torch.nn.Linear(dim_in, dim_out)
-
-    def forward(self, data):
-        mean = self.h2mean(data)
-        logvar = self.h2logvar(data)
-        variance = 1e-2 * torch.nn.functional.softplus(logvar)
-        return mean, variance
-
-
-class NormalIsotropicCovarianceLayer(torch.nn.Module):
-    def __init__(self, dim_in, dim_out):
-        super().__init__()
-        self.h2mean = torch.nn.Linear(dim_in, dim_out)
-        self.h2logvar = torch.nn.Linear(dim_in, 1)
-        self.out_dim = dim_out
-
-    def forward(self, data):
-        mean = self.h2mean(data)
-        logvar = self.h2logvar(data)
-        variance = 1e-2 * torch.nn.functional.softplus(logvar)
-        return mean, variance * torch.ones(1, self.out_dim, dtype=data.dtype,
-                                           device=data.device)
-
-
-class NormalUnityCovarianceLayer(torch.nn.Module):
-    def __init__(self, dim_in, dim_out):
-        super().__init__()
-        self.h2mean = torch.nn.Linear(dim_in, dim_out)
-
-    def forward(self, data):
-        mean = self.h2mean(data)
-        return mean
-
-
-class BernoulliLayer(torch.nn.Module):
-    def __init__(self, dim_in, dim_out):
-        super().__init__()
-        self.h2mean = torch.nn.Linear(dim_in, dim_out)
-        self.sigmoid = torch.nn.Sigmoid()
-
-    def forward(self, data):
-        mean = self.h2mean(data)
-        return self.sigmoid(mean)
-
-
-class BetaLayer(torch.nn.Module):
-    def __init__(self, dim_in, dim_out, min_value=1e-1, max_value=10):
-        super().__init__()
-        self.h2alpha = torch.nn.Linear(dim_in, dim_out)
-        self.h2beta = torch.nn.Linear(dim_in, dim_out)
-        self.sigmoid = torch.nn.Sigmoid()
-        self.min_value = min_value
-        self.max_value = max_value
-
-    def forward(self, data):
-        alpha = self.min_value + self.max_value * self.sigmoid(self.h2alpha(data))
-        beta = self.min_value + self.max_value * self.sigmoid(self.h2beta(data))
-        return alpha, beta
-
-
-class Identity(torch.nn.Module):
-    def forward(self, data):
-        return data
 
 
 class ReshapeLayer(torch.nn.Module):
@@ -95,7 +17,7 @@ class ReshapeLayer(torch.nn.Module):
 
 
 class NeuralNetworkBlock(torch.nn.Module):
-    def __init__(self, structure, residual_connection=None):
+    def __init__(self, structure, residual_connection=False):
         super().__init__()
         self.structure = structure
         self.residual_connection = residual_connection
@@ -103,8 +25,8 @@ class NeuralNetworkBlock(torch.nn.Module):
 
     def forward(self, data):
         h = self.structure(data)
-        if self.residual_connection is not None:
-            h += self.residual_connection(data)
+        if self.residual_connection:
+            h += data
         return h
 
 
@@ -200,12 +122,6 @@ def create_nnet_block(block_conf, variables=None):
                       for strval in block_conf['structure']]
     structure = torch.nn.Sequential(*structure_list)
     res_connection = block_conf['residual_connection']
-    if res_connection == 'none':
-        res_connection = None
-    elif res_connection == 'identity':
-        res_connection = Identity()
-    else:
-        res_connection = create_nnet_element(res_connection, variables)
     return NeuralNetworkBlock(structure, res_connection)
 
 
@@ -227,7 +143,7 @@ def create_chained_blocks(block_confs, variables):
 
 
 def create_encoder(encoder_conf, dtype, device, variables):
-    blocks = create_chained_blocks(encoder_conf['blocks'], variables)
+    blocks = create_chained_blocks(encoder_conf['nnet_structure'], variables)
     dim_in_normal_layer = load_value(encoder_conf['dim_input_normal_layer'],
                                      variables=variables)
     dim_out_normal_layer = load_value(encoder_conf['dim_output_normal_layer'],
