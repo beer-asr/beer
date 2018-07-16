@@ -7,7 +7,7 @@ source "$(pwd)/path.sh"
 dbname=digits
 
 # Model configuration file.
-modelname=vaeplda
+modelname=vae_beta_ldim2_plda
 modelconf="conf/${modelname}.yml"
 
 # Output directory of the experiment.
@@ -35,8 +35,8 @@ steps/create-model.sh \
 steps/train-vae-discrete-latent-model.sh \
     --use-gpu \
     --lograte=10 \
-    --pt-epochs=5 \
-    --epochs=50 \
+    --pt-epochs=10 \
+    --epochs=30 \
     --lrate=.1 \
     --lrate-nnet=1e-3 \
     --nsamples=5 \
