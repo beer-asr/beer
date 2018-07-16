@@ -82,3 +82,9 @@ class MaskedLinear(torch.nn.Module):
     def to(self, device):
         self._linear_transform = self._linear_transform.to(device)
         self._mask = self._mask.to(device)
+
+
+class MaskedAutoRegressiveAutoEncoder(torch.nn.Module:
+    '''Implementation of the MADE autogressive network.'''
+
+    def __init__(self):
