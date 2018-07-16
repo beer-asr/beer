@@ -34,7 +34,7 @@ def batches(archives_list, batch_size, to_torch_dataset):
         dataloader = torch.utils.data.DataLoader(dataset,
             batch_size=batch_size, shuffle=True)
         for mb_data in dataloader:
-            yield mb_data
+            yield mb_data[0]
 
 
 def run():
@@ -110,6 +110,7 @@ def run():
     for epoch in range(args.epochs):
         for batch_no, data in enumerate(batches(archives, bsize,
                                                 to_torch_dataset)):
+
             features = data.to(device)
             optimizer.zero_grad()
             elbo = beer.evidence_lower_bound(model, features,

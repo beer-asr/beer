@@ -26,6 +26,7 @@ import test_normal
 import test_hmm
 import test_subspacemodels
 import test_utils
+import test_vae
 import test_vbi
 
 testcases = {
@@ -38,6 +39,7 @@ testcases = {
     'test_mixture': test_mixture,
     'test_normal': test_normal,
     'test_subspacemodels': test_subspacemodels,
+    'test_vae': test_vae,
     'test_utils': test_utils,
     'test_vbi': test_vbi,
     'test_hmm': test_hmm
@@ -77,6 +79,7 @@ def run():
             test_normal,
             test_subspacemodels,
             test_utils,
+            test_vae,
             test_vbi,
         ]
 
