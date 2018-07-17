@@ -1,24 +1,26 @@
 '''Module for Auto-Regressive Neural Network using mask.'''
 
+import random
 import torch
+from .problayers import NormalDiagonalCovarianceLayer
+from .neuralnetwork import parse_nnet_element
+from .neuralnetwork import MergeTransform
 
 
-def create_mask(ordering, max_connections, dtype, device):
+def create_mask(ordering, max_connections):
     '''Create a mask for an (deep) Auto-Regressive model.
 
     Args:
         ordering (seq of int): Order for each dimension of the input.
         max_connections (seq of int): Maximum connection from the input
             to each hidden unit.
-        dtype (``torch.Tensor.dtype``): Type of the returned tensor.
-        device (``torch.Tensor.device``): Device of the returned tensor.
 
     Returns:
         ``torch.Tensor[len(max_connections):len(ordering)]``
 
     '''
     in_dim, out_dim = len(ordering), len(max_connections)
-    retval = torch.zeros(out_dim, in_dim, dtype=dtype, device=device)
+    retval = torch.zeros(out_dim, in_dim)
     for i, m_i in enumerate(max_connections):
         for j, order in enumerate(ordering):
             if m_i >= order:
@@ -26,7 +28,7 @@ def create_mask(ordering, max_connections, dtype, device):
     return retval
 
 
-def create_final_mask(ordering, max_connections, dtype, device):
+def create_final_mask(ordering, max_connections):
     '''Create the final mask for an (deep) Auto-Regressive model.
 
     Args:
@@ -41,7 +43,7 @@ def create_final_mask(ordering, max_connections, dtype, device):
 
     '''
     out_dim, in_dim = len(ordering), len(max_connections)
-    retval = torch.zeros(out_dim, in_dim, dtype=dtype, device=device)
+    retval = torch.zeros(out_dim, in_dim)
     for i, order in enumerate(ordering):
         for j, m_j in enumerate(max_connections):
             if order > m_j:
@@ -82,3 +84,57 @@ class MaskedLinear(torch.nn.Module):
     def to(self, device):
         self._linear_transform = self._linear_transform.to(device)
         self._mask = self._mask.to(device)
+
+
+class ARNetNormalDiagonalCovarianceLayer(torch.nn.Module):
+    '''Output the mean and the diagonal covariance of a Normal
+    density for a AR network.
+
+    '''
+
+    def __init__(self, mask, dim_in, dim_out):
+        super().__init__()
+        h2mean = torch.nn.Linear(dim_in, dim_out)
+        self.h2mean = MaskedLinear(mask, h2mean)
+        h2logvar = torch.nn.Linear(dim_in, dim_out)
+        self.h2logvar =  MaskedLinear(mask, h2logvar)
+
+    def forward(self, data):
+        mean = self.h2mean(data)
+        logvar = self.h2logvar(data)
+        variance = 1e-2 * torch.nn.functional.sigmoid(logvar)
+        return (1 - variance) * mean, variance
+
+
+def create_arnetwork(conf):
+    dim_in = conf['data_dim']
+    context_dim = conf['context_dim']
+    depth = conf['depth']
+    width = conf['width']
+    function_name, kwargs = parse_nnet_element(conf['activation'])
+    function = getattr(torch.nn, function_name)
+    activation = function(**kwargs)
+    ordering = range(dim_in)
+    layer_connections = []
+    for i in range(depth):
+        layer_connections.append(random.choices(range(1, dim_in - 1), k=width))
+    arch = []
+    previous_ordering = ordering
+    previous_dim = dim_in
+    for i in range(depth):
+        ltrans = torch.nn.Linear(previous_dim, width)
+        mask = create_mask(previous_ordering, layer_connections[i])
+        if i > 0 or context_dim == 0:
+            arch.append(MaskedLinear(mask, ltrans))
+        else:
+            arch.append(MergeTransform(MaskedLinear(mask, ltrans),
+                                       torch.nn.Linear(context_dim, width)))
+        arch.append(activation)
+        previous_dim = width
+        previous_ordering = layer_connections[i]
+
+    # Final Normal layer.
+    mask = create_mask(ordering, layer_connections[-1])
+    arch.append(ARNetNormalDiagonalCovarianceLayer(mask, width, dim_in))
+
+    return torch.nn.Sequential(*arch)
