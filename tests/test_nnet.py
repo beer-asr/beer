@@ -16,8 +16,10 @@ class TestNeuralNetwork(BaseTest):
 
     def setUp(self):
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim2 = int(1 + torch.randint(100, (1, 1)).item())
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.data2 = torch.randn(self.npoints, self.dim2).type(self.type)
 
         self.conf_files = []
         for path in glob.glob('./tests/nnets/*yml'):
@@ -59,6 +61,21 @@ class TestNeuralNetwork(BaseTest):
         self.assertTrue(isinstance(elu, torch.nn.ELU))
         self.assertTrue(elu.inplace)
         self.assertAlmostEqual(elu.alpha, .5)
+
+    def test_create_nnet_elements(self):
+        variables = {'<feadim1>': self.dim, '<feadim2>': self.dim2}
+        strval = 'Linear:in_features=<feadim1>;out_features=20 | Linear:in_features=<feadim2>;out_features=20'
+        merge_layer = beer.nnet.neuralnetwork.create_nnet_element(strval,
+                                                                  variables)
+        self.assertTrue(isinstance(merge_layer.transforms[0], torch.nn.Linear))
+        self.assertTrue(isinstance(merge_layer.transforms[1], torch.nn.Linear))
+        self.assertEqual(merge_layer.transforms[0].in_features, self.dim)
+        self.assertEqual(merge_layer.transforms[1].in_features, self.dim2)
+        self.assertEqual(merge_layer.transforms[0].out_features, 20)
+        self.assertEqual(merge_layer.transforms[1].out_features, 20)
+        out = merge_layer(self.data, self.data2)
+        self.assertEqual(out.shape[0], self.npoints)
+        self.assertEqual(out.shape[1], 20)
 
     def test_ReshapeLayer(self):
         strval = 'ReshapeLayer:shape=(-1,10,20)'

@@ -22,6 +22,9 @@ class ReshapeLayer(torch.nn.Module):
 
 
 class NeuralNetworkBlock(torch.nn.Module):
+    '''Generic Neural Network block with (optional) residual connection.
+
+    '''
     def __init__(self, structure, residual_connection=False):
         super().__init__()
         self.structure = structure
@@ -32,6 +35,22 @@ class NeuralNetworkBlock(torch.nn.Module):
         if self.residual_connection:
             h += data
         return h
+
+
+class MergeTransform(torch.nn.Module):
+    '''Simple "layer" that sum the output of multiple transform.
+    Obviously, all the transforms shall have the same output dimension.
+
+    '''
+    def __init__(self, *transforms):
+        super().__init__()
+        self.transforms = transforms
+
+    def forward(self, *inputs):
+        retval = self.transforms[0](inputs[0])
+        for input_data, transform in zip(inputs[1:], self.transforms[1:]):
+            retval += transform(input_data)
+        return retval
 
 
 def load_value(value, variables=None):
@@ -95,18 +114,27 @@ def create_nnet_element(strval, variables=None):
         ``torch.nn.<object>``
 
     '''
-    function_name, str_kwargs = parse_nnet_element(strval)
-    if hasattr(torch.nn, function_name):
-        function = getattr(torch.nn, function_name)
-    elif function_name == 'ReshapeLayer':
-        function = ReshapeLayer
+    str_elements = strval.split('|')
+    elements = []
+    for str_element in str_elements:
+        function_name, str_kwargs = parse_nnet_element(str_element)
+        if hasattr(torch.nn, function_name):
+            function = getattr(torch.nn, function_name)
+        # If the function name is not part of the pytorch std. API look
+        # for the beer extensions or raise an error.
+        elif function_name == 'ReshapeLayer':
+            function = ReshapeLayer
+        else:
+            raise ValueError('Unknown nnet element type: {}'.format(function_name))
+        kwargs = {
+            argname: load_value(arg_strval, variables)
+            for argname, arg_strval in str_kwargs.items()
+        }
+        elements.append(function(**kwargs))
+    if len(elements) > 1:
+        return MergeTransform(*elements)
     else:
-        raise ValueError('Unknown nnet element type: {}'.format(function_name))
-    kwargs = {
-        argname: load_value(arg_strval, variables)
-        for argname, arg_strval in str_kwargs.items()
-    }
-    return function(**kwargs)
+        return elements[0]
 
 
 def create_nnet_block(block_conf, variables=None):
@@ -143,7 +171,7 @@ def create(nnet_blocks_conf, dtype, device, variables):
 
     '''
     network = torch.nn.Sequential(*[create_nnet_block(block_conf, variables)
-                                 for block_conf in nnet_blocks_conf])
+                                  for block_conf in nnet_blocks_conf])
     return network.type(dtype).to(device)
 
 

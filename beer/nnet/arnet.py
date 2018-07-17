@@ -1,4 +1,4 @@
-'''Module for Auto-Regressive Neural Network.'''
+'''Module for Auto-Regressive Neural Network using mask.'''
 
 import torch
 
