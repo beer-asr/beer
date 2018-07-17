@@ -20,6 +20,7 @@ _model_types = {
     'PLDASet': pldaset.create,
     'NonLinearSubspaceModel': vae.create_normal_vae,
     'BernoulliNonLinearSubspaceModel': vae.create_bernoulli_vae,
+    'BetaNonLinearSubspaceModel': vae.create_beta_vae,
 }
 
 

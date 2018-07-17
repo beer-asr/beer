@@ -25,7 +25,8 @@ class NormalDiagonalCovarianceLayer(torch.nn.Module):
     def forward(self, data):
         mean = self.h2mean(data)
         logvar = self.h2logvar(data)
-        return mean, logvar.exp()
+        variance = 1e-2 * torch.nn.functional.softplus(logvar)
+        return mean, variance
 
 
 class NormalIsotropicCovarianceLayer(torch.nn.Module):
@@ -38,9 +39,9 @@ class NormalIsotropicCovarianceLayer(torch.nn.Module):
     def forward(self, data):
         mean = self.h2mean(data)
         logvar = self.h2logvar(data)
-        return mean, logvar.exp() * torch.ones(1, self.out_dim,
-                                               dtype=data.dtype,
-                                               device=data.device)
+        variance = 1e-2 * torch.nn.functional.softplus(logvar)
+        return mean, variance * torch.ones(1, self.out_dim, dtype=data.dtype,
+                                           device=data.device)
 
 
 class NormalUnityCovarianceLayer(torch.nn.Module):
@@ -53,9 +54,44 @@ class NormalUnityCovarianceLayer(torch.nn.Module):
         return mean
 
 
+class BernoulliLayer(torch.nn.Module):
+    def __init__(self, dim_in, dim_out):
+        super().__init__()
+        self.h2mean = torch.nn.Linear(dim_in, dim_out)
+        self.sigmoid = torch.nn.Sigmoid()
+
+    def forward(self, data):
+        mean = self.h2mean(data)
+        return self.sigmoid(mean)
+
+
+class BetaLayer(torch.nn.Module):
+    def __init__(self, dim_in, dim_out, min_value=1e-1, max_value=10):
+        super().__init__()
+        self.h2alpha = torch.nn.Linear(dim_in, dim_out)
+        self.h2beta = torch.nn.Linear(dim_in, dim_out)
+        self.sigmoid = torch.nn.Sigmoid()
+        self.min_value = min_value
+        self.max_value = max_value
+
+    def forward(self, data):
+        alpha = self.min_value + self.max_value * self.sigmoid(self.h2alpha(data))
+        beta = self.min_value + self.max_value * self.sigmoid(self.h2beta(data))
+        return alpha, beta
+
+
 class Identity(torch.nn.Module):
     def forward(self, data):
         return data
+
+
+class ReshapeLayer(torch.nn.Module):
+    def __init__(self, shape):
+        super().__init__()
+        self.shape = shape
+
+    def forward(self, data):
+        return data.view(*self.shape)
 
 
 class NeuralNetworkBlock(torch.nn.Module):
@@ -112,7 +148,7 @@ def parse_nnet_element(strval):
     str_kwargs = {}
     if ':' in strval:
         function_name, args_and_vals = strval.strip().split(':')
-        for arg_and_val in args_and_vals.split(','):
+        for arg_and_val in args_and_vals.split(';'):
             argname, str_argval = arg_and_val.split('=')
             str_kwargs[argname] = str_argval
     else:
@@ -134,11 +170,16 @@ def create_nnet_element(strval, variables=None):
 
     '''
     function_name, str_kwargs = parse_nnet_element(strval)
+    if hasattr(torch.nn, function_name):
+        function = getattr(torch.nn, function_name)
+    elif function_name == 'ReshapeLayer':
+        function = ReshapeLayer
+    else:
+        raise ValueError('Unknown nnet element type: {}'.format(function_name))
     kwargs = {
         argname: load_value(arg_strval, variables)
         for argname, arg_strval in str_kwargs.items()
     }
-    function = getattr(torch.nn, function_name)
     return function(**kwargs)
 
 
@@ -204,15 +245,37 @@ def create_encoder(encoder_conf, dtype, device, variables):
     return retval.type(dtype).to(device)
 
 
-def create_decoder(decoder_conf, dtype, device, variables):
+def create_normal_decoder(decoder_conf, dtype, device, variables):
     blocks = create_chained_blocks(decoder_conf['blocks'], variables)
-    dim_in_normal_layer = load_value(decoder_conf['dim_input_normal_layer'],
+    dim_in_model_layer = load_value(decoder_conf['dim_input_model_layer'],
                                      variables=variables)
-    dim_out_normal_layer = load_value(decoder_conf['dim_output_normal_layer'],
+    dim_out_model_layer = load_value(decoder_conf['dim_output_model_layer'],
                                       variables=variables)
-    normal_layer = NormalUnityCovarianceLayer(dim_in_normal_layer,
-                                              dim_out_normal_layer)
+    normal_layer = NormalUnityCovarianceLayer(dim_in_model_layer,
+                                              dim_out_model_layer)
     retval = torch.nn.Sequential(*blocks, normal_layer)
+    return retval.type(dtype).to(device)
+
+
+def create_bernoulli_decoder(decoder_conf, dtype, device, variables):
+    blocks = create_chained_blocks(decoder_conf['blocks'], variables)
+    dim_in_model_layer = load_value(decoder_conf['dim_input_model_layer'],
+                                     variables=variables)
+    dim_out_model_layer = load_value(decoder_conf['dim_output_model_layer'],
+                                      variables=variables)
+    bernoulli_layer = BernoulliLayer(dim_in_model_layer, dim_out_model_layer)
+    retval = torch.nn.Sequential(*blocks, bernoulli_layer)
+    return retval.type(dtype).to(device)
+
+
+def create_beta_decoder(decoder_conf, dtype, device, variables):
+    blocks = create_chained_blocks(decoder_conf['blocks'], variables)
+    dim_in_model_layer = load_value(decoder_conf['dim_input_model_layer'],
+                                     variables=variables)
+    dim_out_model_layer = load_value(decoder_conf['dim_output_model_layer'],
+                                      variables=variables)
+    beta_layer = BetaLayer(dim_in_model_layer, dim_out_model_layer)
+    retval = torch.nn.Sequential(*blocks, beta_layer)
     return retval.type(dtype).to(device)
 
 

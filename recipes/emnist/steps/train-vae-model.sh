@@ -3,6 +3,8 @@
 gpu=  # Empty variable means we don't use the GPU.
 lograte=100
 pt_epochs=5
+pt_lrate=.1
+pt_lrate_nnet=1e-3
 epochs=10
 lrate=.1
 lrate_nnet=1e-3
@@ -33,10 +35,16 @@ Options:
   --unsupervised   unsupervised training (ignore the labels if
                    any)
   --lograte        log message rate
-  --pt-epochs      number of epochs for the pre-training
-  --epochs         number of epochs for the training
-  --lrate          learning rate for the latent model
-  --lrate-nnet     learning for the encoder/decoder networks
+  --pt-epochs      number of epochs of the pre-training
+  --pt-lrate       learning rate for the latent model during the
+                   pre-training
+  --pt-lrate-nnet  learning rate of the encoder/decoder networks during
+                   the pre-training
+  --epochs         number of epochs of the training
+  --lrate          learning rate for the latent model during the
+                   training
+  --lrate-nnet     learning for the encoder/decoder networks during
+                   the training
   --nsamples       number of samples for the re-parameterization
                    trick
 
@@ -80,6 +88,8 @@ while [ $# -ge 0 ]; do
             ;;
         --lograte | \
         --pt-epochs | \
+        --pt-lrate | \
+        --pt-lrate-nnet | \
         --epochs | \
         --lrate | \
         --lrate-nnet | \
@@ -127,8 +137,8 @@ mkdir -p ${outdir}/pretraining ${outdir}/training
 pretraining_options="\
 --epochs ${pt_epochs}  \
 ${gpu}  \
---lrate ${lrate}  \
---lrate-nnet ${lrate_nnet} \
+--lrate ${pt_lrate}  \
+--lrate-nnet ${pt_lrate_nnet} \
 --logging-rate ${lograte}  \
 --dir-tmp-models ${outdir}/pretraining \
 --nsamples ${nsamples} \
