@@ -3,6 +3,7 @@ from .bayesmodel import *
 from .normal import *
 from .normalset import *
 from .mixture import *
+from .mixtureset import *
 from .hmm import *
 from .ppca import *
 from .pldaset import *
@@ -13,6 +14,7 @@ _model_types = {
     'Normal': normal.create,
     'NormalSet': normalset.create,
     'Mixture': mixture.create,
+    'MixtureSet': mixtureset.create,
     'HMM': None,
     'PPCA': ppca.create,
     'PLDASet': pldaset.create,

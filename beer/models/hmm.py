@@ -35,7 +35,7 @@ class HMM(BayesianModel):
                 [ 1.0000,  0.0000]])
     '''
 
-    def __init__(self, init_states, final_states, trans_mat, modelset):
+    def __init__(self, init_states, final_states, trans_mat, modelset, training_type):
         '''
         Args:
             init_states  (list): Indices of initial states who have
@@ -52,9 +52,10 @@ class HMM(BayesianModel):
         self.trans_mat = trans_mat
         self.modelset = modelset
         self._resps = None
+        self.training_type = training_type
 
     @classmethod
-    def create(cls, init_states, final_states, trans_mat, modelset):
+    def create(cls, init_states, final_states, trans_mat, modelset, training_type):
         '''Create a :any:`HMM` model.
 
         Args:
@@ -69,7 +70,7 @@ class HMM(BayesianModel):
             :any:`HMM`
 
         '''
-        return cls(init_states, final_states, trans_mat, modelset)
+        return cls(init_states, final_states, trans_mat, modelset, training_type)
 
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
@@ -135,7 +136,7 @@ class HMM(BayesianModel):
             log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(),
                                        dim=1).view(-1)
         return log_alphas
-
+    
     @staticmethod
     def baum_welch_backward(final_states, trans_mat, llhs):
         final_log_prob = -np.log(len(final_states))
@@ -165,12 +166,22 @@ class HMM(BayesianModel):
             path.insert(0, backtrack[i, path[0]])
         return torch.LongTensor(path)
 
+    def decode(self, data):
+        stats = self.sufficient_statistics(data)
+        pc_llhs = self.modelset(stats)
+        best_path = HMM.viterbi(self.init_states,
+                                self.final_states,
+                                self.trans_mat, pc_llhs)
+        #phones = convert_state_to_phone(phone_dict, list(best_path.numpy()), nstate_per_phone)
+        return best_path
+
     def float(self):
         return self.__class__(
             self.init_states,
             self.final_states,
             self.trans_mat.float(),
-            self.modelset.float()
+            self.modelset.float(),
+            self.training_type
         )
 
     def double(self):
@@ -178,7 +189,8 @@ class HMM(BayesianModel):
             self.init_states,
             self.final_states,
             self.trans_mat.double(),
-            self.modelset.double()
+            self.modelset.double(),
+            self.training_type
         )
 
     def to(self, device):
@@ -186,26 +198,32 @@ class HMM(BayesianModel):
             self.init_states,
             self.final_states,
             self.trans_mat.to(device),
-            self.modelset.to(device)
+            self.modelset.to(device),
+            self.training_type
         )
 
     def forward(self, s_stats, state_path=None):
         pc_exp_llh = self.modelset(s_stats)
-        log_alphas = HMM.baum_welch_forward(self.init_states, self.trans_mat, pc_exp_llh)
-        log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat, pc_exp_llh)
-
         if state_path is not None:
-            resps = onehot(state_path, len(self.modelset),
-                           dtype=pc_exp_llh.dtype, device=pc_exp_llh.device)
-            exp_llh = (pc_exp_llh * resps).sum(dim=-1)
-            self._resps = resps
+            onehot_labels = onehot(state_path, len(self.modelset),
+                                   dtype=pc_exp_llh.dtype,
+                                   device=pc_exp_llh.device)
+            exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
+            self._resps = onehot_labels
+        elif self.training_type == 'viterbi':
+            onehot_labels = onehot(HMM.viterbi(self.init_states, 
+                                  self.final_states, self.trans_mat, pc_exp_llh), 
+                                  len(self.modelset), dtype=pc_exp_llh.dtype,
+                                  device=pc_exp_llh.device)
+            exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
+            self._resps = onehot_labels
         else:
             log_alphas = HMM.baum_welch_forward(self.init_states, self.trans_mat, pc_exp_llh)
             log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat, pc_exp_llh)
             exp_llh = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
             self._resps = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))
         return exp_llh
-
+    
     def accumulate(self, s_stats, parent_msg=None):
         retval = {
             **self.modelset.accumulate(s_stats, self._resps)
