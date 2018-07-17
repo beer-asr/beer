@@ -38,7 +38,11 @@ def logsumexp(tensor, dim=0):
         ``torch.Tensor``
     '''
     tmax, _ = torch.max(tensor, dim=dim, keepdim=True)
-    retval = tmax + (tensor - tmax).exp().sum(dim=dim, keepdim=True).log()
+    retval = torch.where(
+        (tmax == float('-inf')) | (tmax == float('inf')),
+         tmax,
+         tmax + (tensor - tmax).exp_().sum(dim=dim, keepdim=True).log_()
+         )
     new_size = list(tensor.size())
     del new_size[dim]
     return retval.view(*new_size)
