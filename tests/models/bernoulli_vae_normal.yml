@@ -1,4 +1,4 @@
-type: NonLinearSubspaceModel
+type: BernoulliNonLinearSubspaceModel
 normal_model:
   type: Normal
   covariance: isotropic
@@ -28,12 +28,7 @@ decoder:
   dim_input_model_layer: 5
   dim_output_model_layer: <feadim>
 latent_model:
-  type: Mixture
+  type: Normal
+  covariance: diagonal
   prior_strength: 1.
-  components:
-    type: NormalSet
-    size: 10
-    covariance: diagonal
-    shared_covariance: true
-    prior_strength: 1.
-    noise_std: 0.1
+  noise_std: 0.

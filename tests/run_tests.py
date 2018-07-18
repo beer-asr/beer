@@ -15,6 +15,7 @@ sys.path.insert(0, './tests')
 import argparse
 import unittest
 from basetest import BaseTest
+import test_nnet
 import test_create_model
 import test_bayesmodel
 import test_expfamilyprior
@@ -24,9 +25,11 @@ import test_normal
 import test_hmm
 import test_subspacemodels
 import test_utils
+import test_vae
 import test_vbi
 
 testcases = {
+    'test_nnet': test_nnet,
     'test_features': test_features,
     'test_expfamilyprior': test_expfamilyprior,
     'test_bayesmodel': test_bayesmodel,
@@ -34,6 +37,7 @@ testcases = {
     'test_mixture': test_mixture,
     'test_normal': test_normal,
     'test_subspacemodels': test_subspacemodels,
+    'test_vae': test_vae,
     'test_utils': test_utils,
     'test_vbi': test_vbi,
     'test_hmm': test_hmm
@@ -63,6 +67,7 @@ def run():
         test_modules = [testcases[args.testcase]]
     else:
         test_modules = [
+            test_nnet,
             test_bayesmodel,
             test_expfamilyprior,
             test_features,
@@ -71,6 +76,7 @@ def run():
             test_normal,
             test_subspacemodels,
             test_utils,
+            test_vae,
             test_vbi,
 
         ]

@@ -3,23 +3,24 @@ from .bayesmodel import *
 from .normal import *
 from .normalset import *
 from .mixture import *
+from .mixtureset import *
 from .hmm import *
 from .ppca import *
 from .pldaset import *
 from .vae import *
-from .nnet import *
 
 
 _model_types = {
     'Normal': normal.create,
     'NormalSet': normalset.create,
     'Mixture': mixture.create,
+    'MixtureSet': mixtureset.create,
     'HMM': None,
     'PPCA': ppca.create,
     'PLDASet': pldaset.create,
-    'NonLinearSubspaceModel': vae.create,
-    'FeedForwardEncoder': nnet.create,
-    'FeedForwardDecoder': nnet.create
+    'NonLinearSubspaceModel': vae.create_normal_vae,
+    'BernoulliNonLinearSubspaceModel': vae.create_bernoulli_vae,
+    'BetaNonLinearSubspaceModel': vae.create_beta_vae,
 }
 
 
