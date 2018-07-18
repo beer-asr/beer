@@ -53,23 +53,15 @@ class MergeTransform(torch.nn.Module):
         return retval
 
 
-def load_value(value, variables=None):
+def load_value(value):
     '''Evaluate the string representation of a python type if the given
     value is a string.
 
     Args:
         value (object): value to load w/o interpretation.
-        variables (dictionary): Set of variables that will be replaced
-            by their associated value before to interpret the python
-            strings.
     '''
     if not isinstance(value, str):
         return value
-
-    if variables is None:
-        variables = {}
-    for variable, val in variables.items():
-        value = value.replace(variable, str(val))
     return ast.literal_eval(value)
 
 
@@ -101,14 +93,11 @@ def parse_nnet_element(strval):
     return function_name, str_kwargs
 
 
-def create_nnet_element(strval, variables=None):
+def create_nnet_element(strval):
     '''Create a pytorch nnet element from a string.
 
     Args:
         strval (string): String defining the nnet element.
-        variables (dictionary): Set of variables that will be replaced
-            by their associated value before to interpret the python
-            strings.
 
     Returs:
         ``torch.nn.<object>``
@@ -127,7 +116,7 @@ def create_nnet_element(strval, variables=None):
         else:
             raise ValueError('Unknown nnet element type: {}'.format(function_name))
         kwargs = {
-            argname: load_value(arg_strval, variables)
+            argname: load_value(arg_strval)
             for argname, arg_strval in str_kwargs.items()
         }
         elements.append(function(**kwargs))
@@ -137,40 +126,36 @@ def create_nnet_element(strval, variables=None):
         return elements[0]
 
 
-def create_nnet_block(block_conf, variables=None):
+def create_nnet_block(block_conf):
     '''Create a part of neural network.
 
     Args:
         block_conf (dict): Configuration dictionary.
-        variables (dictionary): Set of variables that will be replaced
-            by their associated value before to interpret the python
-            strings.
 
     Returns:
         :any:`NeuralNetworkBlock`
 
     '''
-    structure_list = [create_nnet_element(strval, variables)
+    structure_list = [create_nnet_element(strval)
                       for strval in block_conf['block_structure']]
     structure = torch.nn.Sequential(*structure_list)
     res_connection = block_conf['residual']
     return NeuralNetworkBlock(structure, res_connection)
 
 
-def create(nnet_blocks_conf, dtype, device, variables):
+def create(nnet_blocks_conf, dtype, device):
     '''Create a neural network.
 
     Args:
         nnet_blocks_conf (list of dict): Configuration dictionaries.
-        variables (dictionary): Set of variables that will be replaced
-            by their associated value before to interpret the python
-            strings from the configuration data.
+        dtype (``torch.dtype``): Type of the returned network.
+        device (``torch.device``): Device of the returned network.
 
     Returns:
         list of :any:`NeuralNetworkBlock`
 
     '''
-    network = torch.nn.Sequential(*[create_nnet_block(block_conf, variables)
+    network = torch.nn.Sequential(*[create_nnet_block(block_conf)
                                   for block_conf in nnet_blocks_conf])
     return network.type(dtype).to(device)
 

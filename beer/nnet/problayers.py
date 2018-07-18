@@ -107,8 +107,8 @@ class NormalizingFlowLayer(torch.nn.Module):
 
 def create(layer_conf):
     layer_type = layer_conf['type']
-    in_dim = layer_conf['in_dim']
-    out_dim = layer_conf['out_dim']
+    in_dim = layer_conf['dim_in']
+    out_dim = layer_conf['dim_out']
 
     if layer_type == 'NormalizingFlowLayer':
         cov_type = layer_conf['covariance']
