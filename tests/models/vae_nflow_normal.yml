@@ -1,0 +1,45 @@
+type: VAENormalizingFlow
+llh_type: 'normal'
+normalizing_flow:
+  type: InverseAutoRegressive
+  depth: 5
+  iaf_block:
+    activation: Tanh
+    context_dim: 8
+    data_dim: 5
+    depth: 2
+    width: 30
+encoder:
+  nnet_structure:
+  - residual: false
+    block_structure:
+    - Linear:in_features=<feadim>;out_features=10
+    - Tanh
+  - residual: true
+    block_structure:
+    - Linear:in_features=10;out_features=20
+    - Tanh
+    - Linear:in_features=20;out_features=10
+  prob_layer:
+    type: NormalizingFlowLayer
+    covariance: isotropic
+    flow_params_dim: 8
+    dim_in: 10
+    dim_out: 5
+decoder:
+  nnet_structure:
+  - residual: true
+    block_structure:
+    - Linear:in_features=5;out_features=10
+    - Tanh
+    - Linear:in_features=10;out_features=5
+  prob_layer:
+    type: NormalLayer
+    covariance: isotropic
+    dim_in: 5
+    dim_out: <feadim>
+latent_model:
+  type: Normal
+  covariance: diagonal
+  prior_strength: 1.
+  noise_std: 0.

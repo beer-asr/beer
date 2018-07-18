@@ -256,21 +256,20 @@ class InverseAutoRegressiveFlow(torch.nn.Module):
             nnet_flow (list): Sequence of transformation.
         '''
         super().__init__()
-        self.flow = torch.nn.Sequential(*nnet_flow)
+        self.nnet_flow = torch.nn.Sequential(*nnet_flow)
 
     def forward(self, mean, variance, flow_params):
-        dtype, device = mean.dtype, mean.device
-        noise = sample_from_normals(means, variances, nsamples=1)
-        noise = init_noise.view(*means.shape)
+        init_noise = sample_from_normals(mean, variance, nsamples=1)
+        init_noise = init_noise.view(*mean.shape)
         llh = torch.log(variance).sum(dim=-1)
 
         flow = init_noise
         for flow_step in self.nnet_flow:
             new_mean, new_variance = flow_step(flow, flow_params)
-            log_det_jacobian += torch.log(new_variance).sum(dim=-1)
             flow = new_mean + torch.sqrt(new_variance) * flow
             llh += torch.log(new_variance).sum(dim=-1)
-        llh += -.5 * ((noise ** 2) - math.log(2 * math.pi))
+        llh += -.5 * ((init_noise ** 2) - math.log(2 * math.pi)).sum(dim=-1)
+        return llh, flow
 
 
 class VAENormalizingFlow(VAE):
@@ -287,18 +286,13 @@ class VAENormalizingFlow(VAE):
             nflow (:any:`InverseAutoRegressiveFlow`): Normalizing flow.
             llh_fn (function): Function to compute the log-likelihood.
         '''
-        super().__init__()
-        self.encoder = encoder
-        self.decoder = decoder
-        self.latent_model = latent_model
+        super().__init__(encoder, decoder, latent_model, llh_fn)
         self.nflow = nflow
-        self.llh_fn = llh_fn
 
-    def _expected_llh(self, data, means, variances, nsamples):
+    def _expected_llh(self, data, samples, nsamples):
         len_data = len(data)
-        samples = sample_from_normals(means, variances, nsamples)
-        samples = samples.view(nsamples * len_data, -1)
-        params = self.decoder(samples)
+        params = list(self.decoder(samples))
+        print(len(params), len(params[0]), len(params[1]))
         for i, param in enumerate(params):
             params[i] = param.view(nsamples, len_data, -1)
         return self.llh_fn(data, *params)
@@ -316,6 +310,8 @@ class VAENormalizingFlow(VAE):
             self.encoder.float(),
             self.decoder.float(),
             self.latent_model.float(),
+            self.nflow.float(),
+            self.llh_fn
         )
 
     def double(self):
@@ -323,6 +319,8 @@ class VAENormalizingFlow(VAE):
             self.encoder.double(),
             self.decoder.double(),
             self.latent_model.double(),
+            self.nflow.double(),
+            self.llh_fn
         )
 
     def to(self, device):
@@ -330,11 +328,14 @@ class VAENormalizingFlow(VAE):
             self.encoder.to(device),
             self.decoder.to(device),
             self.latent_model.to(device),
+            self.nflow.to(device),
+            self.llh_fn
         )
 
     def non_bayesian_parameters(self):
         retval = [param.data for param in self.encoder.parameters()]
         retval += [param.data for param in self.decoder.parameters()]
+        retval += [param.data for param in self.nflow.parameters()]
         return retval
 
     def set_non_bayesian_parameters(self, new_params):
@@ -353,8 +354,8 @@ class VAENormalizingFlow(VAE):
         # confusion with the sufficient statistics of the latent model.
         data = s_stats
 
-        mean, variance = self.encoder(data)
-        nflow_llh, nflow_samples = self.nflow(mean, variance)
+        mean, variance, flow_params = self.encoder(data)
+        nflow_llh, nflow_samples = self.nflow(mean, variance, flow_params)
 
         # (exp.) log-likelihood w.r.t. to the prior.
         latent_stats = self.latent_model.sufficient_statistics(nflow_samples)
@@ -365,7 +366,7 @@ class VAENormalizingFlow(VAE):
         self.cache['kl_divergence'] = prior_llh - nflow_llh
 
         # Return the log-likelihood of the model.
-        return self._expected_llh(data, means, variances, nsamples)
+        return self._expected_llh(data, nflow_samples, nsamples)
 
     def local_kl_div_posterior_prior(self, parent_msg=None):
         return self.cache['kl_divergence'] + \
@@ -383,26 +384,29 @@ def create_probabbilistic_nnet(conf, dtype, device):
     return torch.nn.Sequential(*nnet_blocks).type(dtype).to(device)
 
 
-def create_iaf(model_conf, mean, variance, create_model_handle):
-    dtype, device = mean.dtype, mean.device
-    depth = conf['depth']
+def create_nflow(conf, dtype, device):
+    flow_type = conf['type']
     nnet_flow = []
-    for i in range(depth):
-        nnet.arnet.create_arnetwork(conf['iaf_block'])
-    return InverseAutoRegressiveFlow(nnet_flow).type(dtype).to(device)
+    if flow_type == 'InverseAutoRegressive':
+        depth = conf['depth']
+        for i in range(depth):
+            nnet.arnet.create_arnetwork(conf['iaf_block'])
+        return InverseAutoRegressiveFlow(nnet_flow).type(dtype).to(device)
+    else:
+        raise ValueError('Unsupported flow type: {}'.format(flow_type))
 
-def create_iaf_vae(model_conf, mean, variance, create_model_handle):
+def create_nflow_vae(model_conf, mean, variance, create_model_handle):
     dtype, device = mean.dtype, mean.device
     llh_fn = llh_fns[model_conf['llh_type']]
     latent_dim = model_conf['encoder']['prob_layer']['dim_out']
-    encoder = nnet.create_encoder(model_conf['encoder'], dtype, device)
-    decoder = nnet.create_normal_decoder(model_conf['decoder'], dtype, device)
+    encoder = create_probabbilistic_nnet(model_conf['encoder'], dtype, device)
+    decoder = create_probabbilistic_nnet(model_conf['decoder'], dtype, device)
     latent_model = create_model_handle(model_conf['latent_model'],
                                        torch.zeros(latent_dim, dtype=dtype,
                                                    device=device),
                                        torch.ones(latent_dim, dtype=dtype,
                                                    device=device), create_model_handle)
-    iaf = create_iaf(model_conf['normalizing_flow'], mean, var)
+    iaf = create_nflow(model_conf['normalizing_flow'], dtype, device)
     return VAENormalizingFlow(encoder, decoder, latent_model, iaf, llh_fn)
 
 
