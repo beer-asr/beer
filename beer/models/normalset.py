@@ -30,40 +30,28 @@ class NormalIsotropicCovarianceSet(BayesianModelSet):
 
     def __init__(self, prior, posteriors):
         super().__init__()
-        self._components = [
-            NormalIsotropicCovariance(prior, post) for post in posteriors
-        ]
-        self._parameters = BayesianParameterSet([
-            BayesianParameter(comp.parameters[0].prior,
-                              comp.parameters[0].posterior)
-            for comp in self._components
+        self.normals = BayesianParameterSet([
+            BayesianParameter(prior, post)
+            for post in posteriors
         ])
+
+    def __getitem__(self, key):
+        np1, np2, _, _ = \
+            self.mean_precision.expected_value(concatenated=False)
+        return np2 / (-2 * np1)
+        return NormalSetElement(mean=self._components[key].mean,
+                                cov=self._components[key].cov)
+
+    def __len__(self):
+        return len(self.normals)
 
     def expected_natural_params_as_matrix(self):
         return torch.cat([param.expected_value()[None]
-                          for param in self.parameters], dim=0)
+                          for param in self.normals], dim=0)
 
     @staticmethod
     def sufficient_statistics(data):
         return NormalIsotropicCovariance.sufficient_statistics(data)
-
-    def float(self):
-        new_prior = self._components[0].mean_prec_param.prior.float()
-        new_posts = [comp.mean_prec_param.posterior.float()
-                     for comp in self._components]
-        return self.__class__(new_prior, new_posts)
-
-    def double(self):
-        new_prior = self._components[0].mean_prec_param.prior.double()
-        new_posts = [comp.mean_prec_param.posterior.double()
-                     for comp in self._components]
-        return self.__class__(new_prior, new_posts)
-
-    def to(self, device):
-        new_prior = self._components[0].mean_prec_param.prior.to(device)
-        new_posts = [comp.mean_prec_param.posterior.to(device)
-                     for comp in self._components]
-        return self.__class__(new_prior, new_posts)
 
     def forward(self, s_stats):
         feadim = s_stats.size(1) - 3
@@ -76,22 +64,6 @@ class NormalIsotropicCovarianceSet(BayesianModelSet):
             raise ValueError('"parent_msg" should not be None')
         weights = parent_msg
         return dict(zip(self.parameters, weights.t() @ s_stats))
-
-    def __getitem__(self, key):
-        return NormalSetElement(mean=self._components[key].mean,
-                                cov=self._components[key].cov)
-
-    def __len__(self):
-        return len(self._components)
-
-    def expected_natural_params_from_resps(self, resps):
-        matrix = self.expected_natural_params_as_matrix()
-        return resps @ matrix
-
-    @staticmethod
-    def sufficient_statistics_from_mean_var(mean, var):
-        return NormalIsotropicCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
 
 
 class NormalDiagonalCovarianceSet(BayesianModelSet):
@@ -108,6 +80,14 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
             for comp in self._components
         ])
 
+    def __getitem__(self, key):
+        return NormalSetElement(mean=self._components[key].mean,
+                                cov=self._components[key].cov)
+
+    def __len__(self):
+        return len(self._components)
+
+
     def expected_natural_params_as_matrix(self):
         return torch.cat([param.expected_value()[None]
                           for param in self.parameters], dim=0)
@@ -115,24 +95,6 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
     @staticmethod
     def sufficient_statistics(data):
         return NormalDiagonalCovariance.sufficient_statistics(data)
-
-    def float(self):
-        new_prior = self._components[0].mean_prec_param.prior.float()
-        new_posts = [comp.mean_prec_param.posterior.float()
-                     for comp in self._components]
-        return self.__class__(new_prior, new_posts)
-
-    def double(self):
-        new_prior = self._components[0].mean_prec_param.prior.double()
-        new_posts = [comp.mean_prec_param.posterior.double()
-                     for comp in self._components]
-        return self.__class__(new_prior, new_posts)
-
-    def to(self, device):
-        new_prior = self._components[0].mean_prec_param.prior.to(device)
-        new_posts = [comp.mean_prec_param.posterior.to(device)
-                     for comp in self._components]
-        return self.__class__(new_prior, new_posts)
 
     def forward(self, s_stats):
         feadim = .25 * s_stats.size(1)
@@ -145,22 +107,6 @@ class NormalDiagonalCovarianceSet(BayesianModelSet):
             raise ValueError('"parent_msg" should not be None')
         weights = parent_msg
         return dict(zip(self.parameters, weights.t() @ s_stats))
-
-    def __getitem__(self, key):
-        return NormalSetElement(mean=self._components[key].mean,
-                                cov=self._components[key].cov)
-
-    def __len__(self):
-        return len(self._components)
-
-    def expected_natural_params_from_resps(self, resps):
-        matrix = self.expected_natural_params_as_matrix()
-        return resps @ matrix
-
-    @staticmethod
-    def sufficient_statistics_from_mean_var(mean, var):
-        return NormalDiagonalCovariance.sufficient_statistics_from_mean_var(
-            mean, var)
 
 
 class NormalFullCovarianceSet(BayesianModelSet):
@@ -177,35 +123,20 @@ class NormalFullCovarianceSet(BayesianModelSet):
             for comp in self._components
         ])
 
+    def __getitem__(self, key):
+        return NormalSetElement(mean=self._components[key].mean,
+                                cov=self._components[key].cov)
+
+    def __len__(self):
+        return len(self._components)
+
     def expected_natural_params_as_matrix(self):
         return torch.cat([param.expected_value()[None]
                           for param in self.parameters], dim=0)
 
-    ####################################################################
-    # BayesianModel interface.
-    ####################################################################
-
     @staticmethod
     def sufficient_statistics(data):
         return NormalFullCovariance.sufficient_statistics(data)
-
-    def float(self):
-        new_prior = self._components[0].mean_prec_param.prior.float()
-        new_posts = [comp.mean_prec_param.posterior.float()
-                     for comp in self._components]
-        return self.__class__(new_prior, new_posts)
-
-    def double(self):
-        new_prior = self._components[0].mean_prec_param.prior.double()
-        new_posts = [comp.mean_prec_param.posterior.double()
-                     for comp in self._components]
-        return self.__class__(new_prior, new_posts)
-
-    def to(self, device):
-        new_prior = self._components[0].mean_prec_param.prior.to(device)
-        new_posts = [comp.mean_prec_param.posterior.to(device)
-                     for comp in self._components]
-        return self.__class__(new_prior, new_posts)
 
     def forward(self, s_stats):
         feadim = .5 * (-1 + math.sqrt(1 - 4 * (2 - s_stats.size(1))))
@@ -219,17 +150,6 @@ class NormalFullCovarianceSet(BayesianModelSet):
         weights = parent_msg
         return dict(zip(self.parameters, weights.t() @ s_stats))
 
-    def __getitem__(self, key):
-        return NormalSetElement(mean=self._components[key].mean,
-                                cov=self._components[key].cov)
-
-    def __len__(self):
-        return len(self._components)
-
-    def expected_natural_params_from_resps(self, resps):
-        matrix = self.expected_natural_params_as_matrix()
-        return resps @ matrix
-
 
 class NormalSetSharedIsotropicCovariance(BayesianModelSet):
     '''Set of Normal density models with a shared isotropic covariance
@@ -240,6 +160,18 @@ class NormalSetSharedIsotropicCovariance(BayesianModelSet):
         super().__init__()
         self._ncomp = prior.ncomp
         self.means_prec_param = BayesianParameter(prior, posterior)
+
+    def __getitem__(self, key):
+        np1, np2, _, _ = \
+            self.means_prec_param.expected_value(concatenated=False)
+
+        cov = (1 / (-2 * np1)) * torch.eye(np2.shape[1], dtype=np1.dtype,
+                                           device=np1.device)
+        mean = cov @ np2[key]
+        return NormalSetElement(mean=mean, cov=cov)
+
+    def __len__(self):
+        return self.means_prec_param.posterior.ncomp
 
     def _expected_nparams(self):
         np1, np2, np3, np4 = \
@@ -260,24 +192,6 @@ class NormalSetSharedIsotropicCovariance(BayesianModelSet):
         s_stats1 = torch.cat([(data**2).sum(dim=1).view(-1, 1), padding], dim=1)
         s_stats2 = torch.cat([data, padding], dim=1)
         return s_stats1, s_stats2
-
-    def float(self):
-        return self.__class__(
-            self.means_prec_param.prior.float(),
-            self.means_prec_param.posterior.float()
-        )
-
-    def double(self):
-        return self.__class__(
-            self.means_prec_param.prior.double(),
-            self.means_prec_param.posterior.double()
-        )
-
-    def to(self, device):
-        return self.__class__(
-            self.means_prec_param.prior.to(device),
-            self.means_prec_param.posterior.to(device)
-        )
 
     def forward(self, s_stats):
         s_stats1, s_stats2 = s_stats
@@ -300,31 +214,6 @@ class NormalSetSharedIsotropicCovariance(BayesianModelSet):
         ])
         return {self.means_prec_param: acc_stats}
 
-    def __getitem__(self, key):
-        np1, np2, _, _ = \
-            self.means_prec_param.expected_value(concatenated=False)
-
-        cov = (1 / (-2 * np1)) * torch.eye(np2.shape[1], dtype=np1.dtype,
-                                           device=np1.device)
-        mean = cov @ np2[key]
-        return NormalSetElement(mean=mean, cov=cov)
-
-    def __len__(self):
-        return self.means_prec_param.posterior.ncomp
-
-    def expected_natural_params_from_resps(self, resps):
-        matrix = self.expected_natural_params_as_matrix()
-        return resps @ matrix
-
-    @staticmethod
-    def sufficient_statistics_from_mean_var(mean, var):
-        dtype, device = mean.dtype, mean.device
-        padding = torch.ones(len(mean), 1, dtype=dtype, device=device)
-        s_stats1 = torch.cat([(mean ** 2 + var).sum(dim=1).view(-1, 1), padding],
-                             dim=1)
-        s_stats2 = torch.cat([mean, padding], dim=1)
-        return s_stats1, s_stats2
-
 
 class NormalSetSharedDiagonalCovariance(BayesianModelSet):
     '''Set of Normal density models with a shared full covariance
@@ -335,6 +224,17 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
         super().__init__()
         self._ncomp = prior.ncomp
         self.means_prec_param = BayesianParameter(prior, posterior)
+
+    def __getitem__(self, key):
+        np1, np2, _, _ = \
+            self.means_prec_param.expected_value(concatenated=False)
+
+        cov = 1 / (-2 * np1)
+        mean = cov * np2[key]
+        return NormalSetElement(mean=mean, cov=torch.diag(cov))
+
+    def __len__(self):
+        return self.means_prec_param.posterior.ncomp
 
     def _expected_nparams(self):
         np1, np2, np3, np4 = \
@@ -353,24 +253,6 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
         s_stats1 = torch.cat([data**2, torch.ones_like(data)], dim=1)
         s_stats2 = torch.cat([data, torch.ones_like(data)], dim=1)
         return s_stats1, s_stats2
-
-    def float(self):
-        return self.__class__(
-            self.means_prec_param.prior.float(),
-            self.means_prec_param.posterior.float()
-        )
-
-    def double(self):
-        return self.__class__(
-            self.means_prec_param.prior.double(),
-            self.means_prec_param.posterior.double()
-        )
-
-    def to(self, device):
-        return self.__class__(
-            self.means_prec_param.prior.to(device),
-            self.means_prec_param.posterior.to(device)
-        )
 
     def forward(self, s_stats):
         s_stats1, s_stats2 = s_stats
@@ -394,26 +276,9 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
         ])
         return {self.means_prec_param: acc_stats}
 
-    def __getitem__(self, key):
-        np1, np2, _, _ = \
-            self.means_prec_param.expected_value(concatenated=False)
-
-        cov = 1 / (-2 * np1)
-        mean = cov * np2[key]
-        return NormalSetElement(mean=mean, cov=torch.diag(cov))
-
-    def __len__(self):
-        return self.means_prec_param.posterior.ncomp
-
     def expected_natural_params_from_resps(self, resps):
         matrix = self.expected_natural_params_as_matrix()
         return resps @ matrix
-
-    @staticmethod
-    def sufficient_statistics_from_mean_var(mean, var):
-        s_stats1 = torch.cat([mean ** 2 + var, torch.ones_like(mean)], dim=1)
-        s_stats2 = torch.cat([mean, torch.ones_like(mean)], dim=1)
-        return s_stats1, s_stats2
 
 
 class NormalSetSharedFullCovariance(BayesianModelSet):
@@ -423,6 +288,16 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
         super().__init__()
         self._ncomp = prior.ncomp
         self.means_prec_param = BayesianParameter(prior, posterior)
+
+    def __getitem__(self, key):
+        np1, np2, _, _ = \
+            self.means_prec_param.expected_value(concatenated=False)
+        cov = torch.inverse(-2 * np1)
+        mean = cov @ np2[key]
+        return NormalSetElement(mean=mean, cov=cov)
+
+    def __len__(self):
+        return self.means_prec_param.posterior.ncomp
 
     def _expected_nparams(self):
         np1, np2, np3, np4 = \
@@ -448,24 +323,6 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
                                                device=data.device)], dim=1)
         return s_stats1, s_stats2
 
-    def float(self):
-        return self.__class__(
-            self.means_prec_param.prior.float(),
-            self.means_prec_param.posterior.float()
-        )
-
-    def double(self):
-        return self.__class__(
-            self.means_prec_param.prior.double(),
-            self.means_prec_param.posterior.double()
-        )
-
-    def to(self, device):
-        return self.__class__(
-            self.means_prec_param.prior.to(device),
-            self.means_prec_param.posterior.to(device)
-        )
-
     def forward(self, s_stats):
         s_stats1, s_stats2 = s_stats
         feadim = int(math.sqrt(s_stats1.size(1)))
@@ -487,20 +344,6 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
             len(weights) * torch.ones(1, dtype=weights.dtype, device=weights.device)
         ])
         return {self.means_prec_param: acc_stats}
-
-    def __getitem__(self, key):
-        np1, np2, _, _ = \
-            self.means_prec_param.expected_value(concatenated=False)
-        cov = torch.inverse(-2 * np1)
-        mean = cov @ np2[key]
-        return NormalSetElement(mean=mean, cov=cov)
-
-    def __len__(self):
-        return self.means_prec_param.posterior.ncomp
-
-    def expected_natural_params_from_resps(self, resps):
-        matrix = self.expected_natural_params_as_matrix()
-        return resps @ matrix
 
 
 def create(model_conf, mean, variance, create_model_handle):

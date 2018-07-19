@@ -7,54 +7,13 @@ import torch
 from ..expfamilyprior import ExpFamilyPrior
 
 
-def average_models(models, weights=None):
-    '''Weighted average the parameters of the set of models of the same
-    type.
+_BAESIAN_PARAMETER_REPR_STRING = 'BayesianParameter(prior_type={type})'
 
-    Args:
-        models (list): Sequence of model
-        weights (``torch.Tensor``): weights for each model.
+_BAESIAN_MODEL_REPR_STRING = \
+'''{name}:
+  {bayesian_parameters}
 
-    Returns:
-        :any:`BayesModel`
-
-    '''
-    # Load all the models
-    list_models = [model for model in models]
-
-    # We use the first model of the list as return value.
-    ret_model = list_models[0].copy()
-
-    dtype = list_models[0].parameters[0].prior.natural_hparams.dtype
-    device = list_models[0].parameters[0].prior.natural_hparams.device
-    if weights is None:
-        weights = torch.ones(len(models), dtype=dtype, device=device)
-        weights /= len(models)
-
-    # Average the Bayesian parameters.
-    nparams = len(list_models[0].parameters)
-    for i in range(nparams):
-        new_param = ret_model.parameters[i]
-        new_nhparams = weights[0] * new_param.posterior.natural_hparams
-        for j, model in enumerate(list_models[1:], start=1):
-            new_nhparams += \
-                weights[j] * model.parameters[i].posterior.natural_hparams
-        new_param.posterior.natural_hparams = new_nhparams
-        ret_model.parameters[i] = new_param
-
-    # Average the non Bayesian parameters.
-    nb_params = ret_model.non_bayesian_parameters()
-    n_nb_params = len(nb_params)
-    new_nb_params = []
-    for i in range(n_nb_params):
-        new_nb_param = torch.zeros_like(nb_params[i])
-        for j, model in enumerate(list_models):
-            nb_params = model.non_bayesian_parameters()
-            new_nb_param += weights[j] * nb_params[i]
-        new_nb_params.append(new_nb_param.clone())
-    ret_model.set_non_bayesian_parameters(new_nb_params)
-    return ret_model
-
+'''
 
 class BayesianParameter:
     '''Parameter which has a *prior* and a *posterior* distribution.
@@ -81,16 +40,18 @@ class BayesianParameter:
             torch.zeros_like(self.prior.natural_hparams, dtype=dtype,
                             device=device)
 
-    def __hash__(self):
-        return hash(repr(self))
+    def _to_string(self, indent_level=0):
+        retval = ' ' * indent_level
+        retval += _BAESIAN_PARAMETER_REPR_STRING.format(
+            type=repr(self.prior)
+        )
+        return retval
 
-    def copy(self):
-        '''Return a new copy of the parameter.'''
-        dtype = self.prior.natural_hparams.dtype
-        if dtype == torch.float32:
-            return self.float()
-        else:
-            return self.double()
+    def __repr__(self):
+        return self._to_string()
+
+    def __hash__(self):
+        return hash(self)
 
     def expected_value(self, concatenated=True):
         '''Expected value of the sufficient statistics of the parameter
@@ -114,33 +75,23 @@ class BayesianParameter:
         '''Reset the natural gradient to zero.'''
         self.natural_grad.zero_()
 
+    def kl_div(self):
+        '''KL divergence posterior/prior.'''
+        return ExpFamilyPrior.kl_div(self.posterior, self.prior)
+
     def float(self):
-        '''Convert value of the parameter to float precision.
-
-        Returns:
-            :any:`BayesianParameter`
-
-        '''
-        new_prior = self.prior.float()
-        new_posterior = self.posterior.float()
-        new_ngrad = self.natural_grad.float()
-        new_param = BayesianParameter(new_prior, new_posterior)
-        new_param.natural_grad = new_ngrad
-        return new_param
+        '''Convert value of the parameter to float precision.'''
+        self.prior = self.prior.float()
+        self.posterior = self.posterior.float()
+        self.natural_grad = self.natural_grad.float()
+        return self
 
     def double(self):
-        '''Convert the value of the parameter to double precision.
-
-        Returns:
-            :any:`BayesianParameter`
-
-        '''
-        new_prior =self.prior.double()
-        new_posterior = self.posterior.double()
-        new_ngrad = self.natural_grad.double()
-        new_param = BayesianParameter(new_prior, new_posterior)
-        new_param.natural_grad = new_ngrad
-        return new_param
+        '''Convert the value of the parameter to double precision.'''
+        self.prior = self.prior.double()
+        self.posterior = self.posterior.double()
+        self.natural_grad = self.natural_grad.double()
+        return self
 
     def to(self, device):
         '''Move the internal buffer of the parameter to the given
@@ -149,29 +100,30 @@ class BayesianParameter:
         Parameters:
             device (``torch.device``): Device on which to move on
 
-        Returns:
-            :any:`BayesianParameter`
-
         '''
-        new_prior = self.prior.to(device)
-        new_posterior = self.posterior.to(device)
-        new_ngrad = self.natural_grad.to(device)
-        new_param = BayesianParameter(new_prior, new_posterior)
-        new_param.natural_grad = new_ngrad
-        return new_param
+        self.prior = self.prior.to(device)
+        self.posterior = self.posterior.to(device)
+        self.natural_grad = self.natural_grad.to(device)
+        return self
+
 
 class BayesianParameterSet:
-    '''Set of Bayesian parameters.
-
-    The purpose of this class to register list of parameters at once.
-
-    Attributes:
-        parameters (list): List of :any:`BayesianParameter`.
-
-    '''
+    '''Set of Bayesian parameters.'''
 
     def __init__(self, parameters):
         self.__parameters = parameters
+
+    def _to_string(self, indent_level=0):
+        retval = ' ' * indent_level
+        for i, param in enumerate(self.__parameters):
+            retval += '(' + str(i) + ') '
+            retval += _BAESIAN_PARAMETER_REPR_STRING.format(
+                type=repr(param.prior)
+            ) + '\n' + ' ' * indent_level
+        return retval
+
+    def __repr__(self):
+        return self._to_string()
 
     def __len__(self):
         return len(self.__parameters)
@@ -180,26 +132,16 @@ class BayesianParameterSet:
         return self.__parameters[key]
 
     def float(self):
-        '''Convert value of the parameter to float precision.
-
-        Returns:
-            :any:`BayesianParameterSet`
-
-        '''
-        return BayesianParameterSet([
-            param.float() for param in self.__parameters
-        ])
+        '''Convert value of the parameter to float precision.'''
+        for param in self.__parameters:
+            param.float()
+        return self
 
     def double(self):
-        '''Convert the value of the parameter to double precision.
-
-        Returns:
-            :any:`BayesianParameterSet`
-
-        '''
-        return BayesianParameterSet([
-            param.double() for param in self.__parameters
-        ])
+        '''Convert the value of the parameter to double precision.'''
+        for param in self.__parameters:
+            param.double()
+        return self
 
     def to(self, device):
         '''Move the internal buffer of the parameter to the given
@@ -208,14 +150,10 @@ class BayesianParameterSet:
         Parameters:
             device (``torch.device``): Device on which to move on
 
-        Returns:
-            :any:`BayesianParameterSet`
-
         '''
-        return BayesianParameterSet([
-            param.to(device) for param in self.__parameters
-        ])
-
+        for param in self.__parameters:
+            param.to(device)
+        return self
 
 class BayesianModel(metaclass=abc.ABCMeta):
     '''Abstract base class for all the models.
@@ -232,46 +170,51 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
            llh = model(some_data)
 
-        Calling a model will be default call the :any:`forward` method
-        of the object and return the variational lower-bound of the data
-        given the model. This features is mostly to be consistent with
-        ``pytorch`` models.
+        Calling a model will by default call the :any:`forward` method
+        of the object and return the expected log-likelihood of the data
+        given the model.
     '''
 
     def __init__(self):
-        self.__parameters = []
+        self._bayesian_parameters = {}
+        self.__nnet_parameters = {}
+        self.__const_parameters = {}
         self.__cache = {}
 
     def __setattr__(self, name, value):
-        if isinstance(value, BayesianParameter):
-            self.__parameters.append(value)
-        elif isinstance(value, BayesianParameterSet):
-            for parameter in value:
-                self.__parameters.append(parameter)
-        elif isinstance(value, BayesianModel):
-            self.__parameters += value.parameters
+        if isinstance(value, BayesianParameter) or isinstance(value,
+                                                        BayesianParameterSet):
+            self._bayesian_parameters[name] = value
         super().__setattr__(name, value)
 
     def __call__(self, data, **kwargs):
         return self.forward(data, **kwargs)
 
-    @property
-    def parameters(self):
-        '''All the :any:`BayesianParameters` of the model.'''
-        return self.__parameters
+    def _to_string(self, indent_level=0):
+        indentation = ' ' * indent_level
+        retval = indentation + self.__class__.__name__
+        retval += '\n' + indentation
+        indentation += indentation + '  '
+        for name, param in self._bayesian_parameters.items():
+            retval += indentation + '(' + name + '):'
+            if isinstance(param, BayesianParameter):
+                retval += param._to_string(1)
+            else:
+                retval += '\n'
+                retval += param._to_string(len(indentation) + 2)
+
+        return retval
+
+    def __repr__(self):
+        return self._to_string()
 
     @property
     def grouped_parameters(self):
         '''All the Bayes parameters of the model organized into groups
-        to be optimized with a coordinate.
-
-        Note:
-            By default, for efficiency reason, all the parameters are
-            put in a single group. Models which need a different
-            behavior have to override this method.
+        to be optimized with a coordinate ascent algorithm.
 
         '''
-        return [self.__parameters]
+        return self.mean_field_factorization()
 
     @property
     def cache(self):
@@ -285,38 +228,6 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''Clear the cache.'''
         self.__cache = {}
 
-    def non_bayesian_parameters(self):
-        '''List of all non-Bayesian parameters (i.e. parameter that
-        don't have prior, posterior distribution) of the model.
-
-        Returns:
-            list of ``torch.Tensor``
-
-        '''
-        return []
-
-    def set_non_bayesian_parameters(self, new_params):
-        '''Set new values for the non Bayesian parameters.
-
-        Args:
-            new_params (list): List of ``torch.Tensor``.
-
-        '''
-        pass
-
-    def local_kl_div_posterior_prior(self, parent_msg=None):
-        '''KL divergence between the posterior/prior distribution over the
-        "local" parameters
-
-        parent_msg (object): Message from the parent/co-parents
-                to compute the local KL divergence.
-
-        Returns:
-            ``torch.Tensor`` or 0.
-        '''
-        val = self.__parameters[0].expected_value()
-        return torch.tensor(0., dtype=val.dtype, device=val.device)
-
     def kl_div_posterior_prior(self):
         '''Kullback-Leibler divergence between the posterior/prior
         distribution of the "global" parameters.
@@ -327,19 +238,9 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         retval = 0.
         for parameter in self.parameters:
-            retval += ExpFamilyPrior.kl_div(parameter.posterior,
-                                            parameter.prior).view(1)
+            retval += parameter.kl_div
         return retval
 
-    def copy(self):
-        '''Return a new copy of the model.'''
-        dtype = self.__parameters[0].prior.natural_hparams.dtype
-        if dtype == torch.float32:
-            return self.float()
-        else:
-            return self.double()
-
-    @abc.abstractmethod
     def float(self):
         '''Create a new :any:`BayesianModel` with all the parameters set
         to float precision.
@@ -350,7 +251,6 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         pass
 
-    @abc.abstractmethod
     def double(self):
         '''Abstract method to be implemented by subclasses of
         :any:`BayesianModel`.
@@ -364,7 +264,6 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         pass
 
-    @abc.abstractmethod
     def to(self, device):
         '''Create a new :any:`BayesianModel` with all the parameters
         allocated on `device`.
@@ -374,6 +273,10 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
         '''
         pass
+
+    ####################################################################
+    # Abstract methods to be implemented by subclasses.
+    ####################################################################
 
     @abc.abstractmethod
     def accumulate(self, s_stats, parent_msg=None):
@@ -409,6 +312,19 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
         Returns:
             ``torch.Tensor[n_frames]``: expected log-likelihood.
+
+        '''
+        pass
+
+    def mean_field_factorization(self):
+        '''Abstract method to be implemented by subclasses of
+        :any:`BayesianModel`.
+
+        Return the Bayesian parameters grouped into list according to
+        the mean-field factorization of the VB posterior of the model.
+
+        Returns:
+            list of list of :any:`BayesianParameters`
 
         '''
         pass
@@ -461,24 +377,6 @@ class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
     def __len__(self):
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def expected_natural_params_from_resps(self, resps):
-        '''Abstract method to be implemented by subclasses of
-        :any:`BayesianModelSet`.
-
-        Compute the expected value natural of the parameters as
-        a vector for each frame.
-
-        Args:
-            ``torch.Tensor[nframes, nclasses]``: Per-frame
-                responsibilities to averge the natural parameters of the
-                set's components.
-
-        Returns:
-            ``torch.Tensor[nframes, dim]``
-        '''
-        pass
-
 
 class DiscreteLatentBayesianModel(BayesianModel, metaclass=abc.ABCMeta):
     '''Abstract base class for a set of :any:`BayesianModel` with
@@ -518,5 +416,5 @@ __all__ = [
     'BayesianModelSet',
     'DiscreteLatentBayesianModel',
     'BayesianParameter',
-    'BayesianParameterSet',
-    'average_models']
+    'BayesianParameterSet'
+]

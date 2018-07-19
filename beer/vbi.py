@@ -102,8 +102,6 @@ class EvidenceLowerBoundInstance:
             acc_stats = self._acc_stats[parameter]
             natural_grad = parameter.prior.natural_hparams + \
                 scale * acc_stats - parameter.posterior.natural_hparams
-
-            # NOTE: the gradient is always accumulated.
             parameter.natural_grad += natural_grad
 
 
