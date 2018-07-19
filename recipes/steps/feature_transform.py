@@ -9,7 +9,7 @@ import beer
 from accumulate_data_stats import accumulate
 import sys
 
-def feature_transform(feat, context=0, mean=None, std=None, 
+def feature_transform(feat, context=0, mean=None, var=None, 
                       mean_norm=None, var_norm=None, add_delta=None):
 
     '''Perform feature transformation with mean/var normalization, and append
@@ -18,20 +18,19 @@ def feature_transform(feat, context=0, mean=None, std=None,
         feat (np.array(float)): feature
         context(int): context frame for both left and right sides
         mean: None or np.array(float) when mean_norm or var_norm required
-        std: None or np.array(float) when var_norm required
+        var: None or np.array(float) when var_norm required
         mean_norm: if not None, it should be the mean of feature(np.array(float))
-        var_norm(str): if not None, it should be the std of
-                       feature(np.array(float))
+        var_norm(str): if not None, it should be the var of feature(np.array(float))
         add_delta: None or str
     Returns:
         feat: np.array(float)
     '''
     if var_norm :
-        if (mean is None) or (std is None):
+        if (mean is None) or (var is None):
             sys.exit('Mean or standard deviation is not given when perform \
                       variance normalization !')
         else:
-            feat = (feat - mean) / std + mean
+            feat = (feat - mean) / np.sqrt(var) + mean
     if mean_norm:
         if mean is None:
             sys.exit('Mean is not given while performing mean normalization !')
@@ -76,20 +75,20 @@ def main():
     norm_type = args.norm_type
     add_delta = args.add_delta
     context = args.context
-    
-    global_mean, global_std, _, dict_utt_details = accumulate(ori_feats)
+ 
+    global_mean, global_var, _, dict_utt_details = accumulate(ori_feats)
     ori_feats = np.load(ori_feats)
     if norm_type == 'per_utt':
         for utt in ori_feats.keys():
             ft = feature_transform(ori_feats[utt], context,
                  mean=dict_utt_details[utt][0],
-                 std=dict_utt_details[utt][1],
+                 var=dict_utt_details[utt][1],
                  mean_norm=mean_norm, var_norm=var_norm, add_delta=add_delta)
             np.save(new_dir + utt + '.npy', ft)
     else:
         for utt in ori_feats.keys():
             ft = feature_transform(ori_feats[utt], context,
-                 mean=global_mean, std=global_std,
+                 mean=global_mean, var=global_var,
                  mean_norm=mean_norm, var_norm=var_norm, add_delta=add_delta)
             np.save(new_dir + utt + '.npy', ft)
 

@@ -90,15 +90,12 @@ class MixtureSet(BayesianModelSet):
             [weight_param.posterior.to(device) for weight_param in self.mix_weights],
             self.modelset.to(device)
         )
-    
-    #@property
-    #def grouped_parameters(self):
-    #    return [self.parameters]
 
 def create(model_conf, mean, variance, create_model_handle):
     dtype, device = mean.dtype, mean.device
-    modelset = create_model_handle(model_conf['components'], mean, variance)
     n_mix = model_conf['size']
+    model_conf['components']['size'] *= n_mix
+    modelset = create_model_handle(model_conf['components'], mean, variance)
     n_element = int(len(modelset) / n_mix) 
     weights = torch.ones(n_element, dtype=dtype, device=device) / n_element
     weights = weights.repeat(n_mix, 1)
@@ -106,3 +103,6 @@ def create(model_conf, mean, variance, create_model_handle):
     prior_weights = [DirichletPrior(prior_strength * j) for j in weights]
     posterior_weights = [DirichletPrior(prior_strength * j) for j in weights]
     return MixtureSet(prior_weights, posterior_weights, modelset)
+
+
+__all__ = ['MixtureSet']

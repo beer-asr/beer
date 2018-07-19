@@ -63,16 +63,15 @@ def main():
     logging.info("Data shuffled into %d batches", len(batches))
 
     # Training
-    elbo_fn = beer.EvidenceLowerBound(tot_counts)
-    params = emissions.parameters
-    optimizer = beer.BayesianModelOptimizer(params, lrate)
+    params = emissions.grouped_parameters
+    optimizer = beer.BayesianModelCoordinateAscentOptimizer(*params, lrate=lrate)
 
     for epoch in range(epochs):
         logging.info("Epoch: %d", epoch)
         hmm_epoch = hmm_mdl_dir + '/' + str(epoch) + '.mdl'
         for batch_keys in batches:
             optimizer.zero_grad()
-            elbo = elbo_fn.zero()
+            elbo = beer.evidence_lower_bound(datasize=tot_counts)
             batch_nutt = len(batch_keys)
             for utt in batch_keys:
                 logging.info("Training with utterance %s", utt)
@@ -86,7 +85,8 @@ def main():
                           trans_mat_ali, ali_sets, training_type)
                 #hmm_ali = beer.HMM.create(init_state, final_state,
                 #          trans_mat_ali, ali_sets, training_type).to(device)
-                elbo += elbo_fn(hmm_ali, ft)
+                elbo += beer.evidence_lower_bound(hmm_ali, ft,
+                        datasize=tot_counts)
             elbo.natural_backward()
             logging.info("Elbo value is %f", float(elbo) / (tot_counts *
                          batch_nutt))
