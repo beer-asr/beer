@@ -170,9 +170,9 @@ class PLDASet(BayesianModelSet):
             global_mean.view(1, 1, -1)), dim=-1)
         lnorm += 2 * (class_means @ global_mean).view(-1, 1)
 
-        deltas = -2 * torch.sum(means * data.view(1, npoints, -1), dim=-1)
+        deltas = -2 * torch.sum(means.detach() * data.view(1, npoints, -1), dim=-1)
         deltas += data_quad.view(1, -1)
-        deltas += lnorm
+        deltas += lnorm.detach()
 
         # We store values necessary for the accumulation and to compute
         # the expected value of the natural parameters.
@@ -183,7 +183,7 @@ class PLDASet(BayesianModelSet):
 
     def latent_posterior(self, stats):
         # Extract the portion of the s. statistics we need.
-        data = stats[:, 1:]
+        data = stats[:, 1:].detach()
         length = len(stats)
 
         prec = self.cache['prec']
@@ -406,7 +406,7 @@ class PLDASet(BayesianModelSet):
         if parent_msg is None:
             raise ValueError('"parent_msg" should not be None')
         resps = parent_msg
-        return torch.sum(resps * self.cache['l_kl_divs'].t(), dim=-1)
+        return torch.sum(resps * self.cache['l_kl_divs'].t(), dim=-1).detach()
 
     def expected_natural_params_from_resps(self, resps):
         means = self.cache['means']

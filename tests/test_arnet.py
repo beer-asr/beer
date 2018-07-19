@@ -13,7 +13,7 @@ from basetest import BaseTest
 class TestUtils(BaseTest):
 
     def test_create_mask(self):
-        ordering = [3, 1, 2]
+        ordering = [2, 0, 1]
         max_connections = [2, 1, 2, 2]
         device = torch.device('cpu')
         mask1 = beer.nnet.arnet.create_mask(ordering, max_connections).numpy()
@@ -26,7 +26,7 @@ class TestUtils(BaseTest):
         self.assertArraysAlmostEqual(mask1, mask2)
 
     def test_create_final_mask(self):
-        ordering = [3, 1, 2]
+        ordering = [2, 0, 1]
         max_connections = [1, 2, 2, 1]
         device = torch.device('cpu')
         mask1 = beer.nnet.arnet.create_final_mask(ordering, max_connections).numpy()

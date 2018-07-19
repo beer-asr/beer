@@ -102,11 +102,9 @@ class VAE(BayesianModel):
         len_data = len(data)
         samples = sample_from_normals(means, variances, nsamples)
         samples = samples.view(nsamples * len_data, -1)
-        params = self.decoder(samples)
+        params = list(self.decoder(samples))
         for i, param in enumerate(params):
             params[i] = param.view(nsamples, len_data, -1)
-        if len(params) < 2:
-            params.append(torch.ones_like(params[-1]))
         return self.llh_fn(data, *params)
 
     ####################################################################
@@ -258,18 +256,33 @@ class InverseAutoRegressiveFlow(torch.nn.Module):
         super().__init__()
         self.nnet_flow = torch.nn.Sequential(*nnet_flow)
 
-    def forward(self, mean, variance, flow_params):
-        init_noise = sample_from_normals(mean, variance, nsamples=1)
-        init_noise = init_noise.view(*mean.shape)
-        llh = torch.log(variance).sum(dim=-1)
+    def sample(self, mean, variance, flow_params, stop_level=-1):
+        noise = torch.randn(*mean.shape, dtype=mean.dtype, device=mean.device)
 
-        flow = init_noise
-        for flow_step in self.nnet_flow:
+        # Initialize the flow
+        feadim = mean.shape[1]
+        flow = mean + variance.sqrt() * noise
+        llh = -.5 * ((noise ** 2).sum(dim=-1) + feadim * math.log(2 * math.pi))
+        llh = - .5 * torch.log(variance).sum(dim=-1)
+
+        for i, flow_step in enumerate(self.nnet_flow):
             new_mean, new_variance = flow_step(flow, flow_params)
             flow = new_mean + torch.sqrt(new_variance) * flow
-            llh += torch.log(new_variance).sum(dim=-1)
-        llh += -.5 * ((init_noise ** 2) - math.log(2 * math.pi)).sum(dim=-1)
+            llh += -.5 * torch.log(new_variance).sum(dim=-1)
+            if stop_level >= 0 and i >= stop_level:
+                break
         return llh, flow
+
+    def forward(self, mean, variance, flow_params, nsamples=1, stop_level=-1):
+        samples = []
+        avg_llh = torch.zeros(len(mean), dtype=mean.dtype, device=mean.device)
+        for i in range(nsamples):
+            llh, samp = self.sample(mean, variance, flow_params,
+                                    stop_level=stop_level)
+            avg_llh += llh
+            samples.append(samp)
+        return avg_llh / nsamples, torch.cat(samples)
+
 
 
 class VAENormalizingFlow(VAE):
@@ -292,7 +305,6 @@ class VAENormalizingFlow(VAE):
     def _expected_llh(self, data, samples, nsamples):
         len_data = len(data)
         params = list(self.decoder(samples))
-        print(len(params), len(params[0]), len(params[1]))
         for i, param in enumerate(params):
             params[i] = param.view(nsamples, len_data, -1)
         return self.llh_fn(data, *params)
@@ -355,22 +367,95 @@ class VAENormalizingFlow(VAE):
         data = s_stats
 
         mean, variance, flow_params = self.encoder(data)
-        nflow_llh, nflow_samples = self.nflow(mean, variance, flow_params)
+        nflow_llh, nflow_samples = self.nflow(mean, variance, flow_params,
+                                             nsamples=nsamples)
+
+        nflow_samples = nflow_samples.view(-1, mean.shape[1])
 
         # (exp.) log-likelihood w.r.t. to the prior.
         latent_stats = self.latent_model.sufficient_statistics(nflow_samples)
         self.cache['latent_stats'] = latent_stats
-        prior_llh = self.latent_model(latent_stats)
+        prior_llh = self.latent_model(latent_stats, **kwargs)
 
         # KL divergence posterior / prior.
-        self.cache['kl_divergence'] = prior_llh - nflow_llh
+        l_kl_div = (nflow_llh - prior_llh).view(nsamples, len(mean)).mean(dim=0)
+        self.cache['kl_divergence'] = l_kl_div
 
         # Return the log-likelihood of the model.
         return self._expected_llh(data, nflow_samples, nsamples)
 
     def local_kl_div_posterior_prior(self, parent_msg=None):
         return self.cache['kl_divergence'] + \
-            self.latent_model.local_kl_div_posterior_prior()
+            self.latent_model.local_kl_div_posterior_prior().detach()
+
+
+
+class VAEGlobalMeanVarianceNormalizingFlow(VAENormalizingFlow):
+    '''Variational Auto-Encoder (VAE) with a global mean and
+    (isostropic) covariance matrix parameters.
+
+    '''
+
+    def __init__(self, normal, encoder, decoder, latent_model, nflow):
+        super().__init__(encoder, decoder, latent_model, nflow, None)
+        self.normal = normal
+
+    def _expected_llh(self, data, samples, nsamples):
+        dec_means = self.decoder(samples)[0]
+        centered_data = (data - dec_means)
+        s_stats = self.normal.sufficient_statistics(centered_data)
+        llh = self.normal(s_stats).view(nsamples, len(data), -1)
+        self.cache['centered_s_stats'] = s_stats
+        return llh
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
+
+    # Most of the BayesianModel interface is implemented in the parent
+    # class VAE.
+
+    @property
+    def grouped_parameters(self):
+        groups = self.normal.grouped_parameters
+        groups += self.latent_model.grouped_parameters
+        return groups
+
+    def float(self):
+        return self.__class__(
+            self.normal.float(),
+            self.encoder.float(),
+            self.decoder.float(),
+            self.latent_model.float(),
+            self.nflow.float()
+        )
+
+    def double(self):
+        return self.__class__(
+            self.normal.double(),
+            self.encoder.double(),
+            self.decoder.double(),
+            self.latent_model.double(),
+            self.nflow.double()
+        )
+
+    def to(self, device):
+        return self.__class__(
+            self.normal.to(device),
+            self.encoder.to(device),
+            self.decoder.to(device),
+            self.latent_model.to(device),
+            self.nflow.to(device)
+        )
+
+    def accumulate(self, _, parent_msg=None):
+        latent_stats = self.cache['latent_stats']
+        centered_s_stats = self.cache['centered_s_stats']
+        self.clear_cache()
+        return {
+            **self.latent_model.accumulate(latent_stats),
+            **self.normal.accumulate(centered_s_stats)
+        }
 
 
 #################
@@ -390,7 +475,9 @@ def create_nflow(conf, dtype, device):
     if flow_type == 'InverseAutoRegressive':
         depth = conf['depth']
         for i in range(depth):
-            nnet.arnet.create_arnetwork(conf['iaf_block'])
+            nnet_flow.append(
+                nnet.arnet.create_arnetwork(conf['iaf_block']).type(dtype).to(device)
+            )
         return InverseAutoRegressiveFlow(nnet_flow).type(dtype).to(device)
     else:
         raise ValueError('Unsupported flow type: {}'.format(flow_type))
@@ -440,8 +527,27 @@ def create_non_linear_subspace_model(model_conf, mean, variance,
     return VAEGlobalMeanCovariance(normal, encoder, decoder, latent_model)
 
 
+def create_non_linear_subspace_model_nflow(model_conf, mean, variance,
+                                           create_model_handle):
+    dtype, device = mean.dtype, mean.device
+    normal = create_model_handle(model_conf['normal_model'],
+                                 mean, variance, create_model_handle)
+    latent_dim = model_conf['encoder']['prob_layer']['dim_out']
+    encoder = create_probabbilistic_nnet(model_conf['encoder'], dtype, device)
+    decoder = create_probabbilistic_nnet(model_conf['decoder'], dtype, device)
+    latent_model = create_model_handle(model_conf['latent_model'],
+                                       torch.zeros(latent_dim, dtype=dtype,
+                                                   device=device),
+                                       torch.ones(latent_dim, dtype=dtype,
+                                                   device=device), create_model_handle)
+    iaf = create_nflow(model_conf['normalizing_flow'], dtype, device)
+    return VAEGlobalMeanVarianceNormalizingFlow(normal,
+        encoder, decoder, latent_model, iaf)
+
+
 __all__ = [
     'VAE',
     'VAEGlobalMeanCovariance',
-    'VAENormalizingFlow'
+    'VAENormalizingFlow',
+    'VAEGlobalMeanVarianceNormalizingFlow'
 ]

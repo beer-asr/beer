@@ -44,7 +44,7 @@ class MergeTransform(torch.nn.Module):
     '''
     def __init__(self, *transforms):
         super().__init__()
-        self.transforms = transforms
+        self.transforms = torch.nn.Sequential(*transforms)
 
     def forward(self, *inputs):
         retval = self.transforms[0](inputs[0])

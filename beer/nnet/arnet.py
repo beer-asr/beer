@@ -23,7 +23,7 @@ def create_mask(ordering, max_connections):
     retval = torch.zeros(out_dim, in_dim)
     for i, m_i in enumerate(max_connections):
         for j, order in enumerate(ordering):
-            if m_i >= order:
+            if m_i + 1 >= order + 1:
                 retval[i, j] = 1
     return retval
 
@@ -46,7 +46,7 @@ def create_final_mask(ordering, max_connections):
     retval = torch.zeros(out_dim, in_dim)
     for i, order in enumerate(ordering):
         for j, m_j in enumerate(max_connections):
-            if order > m_j:
+            if order + 1 > m_j + 1:
                 retval[i, j] = 1
     return retval
 
@@ -63,7 +63,7 @@ class MaskedLinear(torch.nn.Module):
                 transformation to mask.
         '''
         super().__init__()
-        self._mask = mask
+        self.register_buffer('_mask', mask)
         self._linear_transform = linear_transform
 
     def forward(self, data):
@@ -72,18 +72,6 @@ class MaskedLinear(torch.nn.Module):
             self._linear_transform.weight * self._mask,
             self._linear_transform.bias
         )
-
-    def float(self):
-        self._linear_transform = self._linear_transform.float()
-        self._mask = self._mask.float()
-
-    def double(self):
-        self._linear_transform = self._linear_transform.double()
-        self._mask = self._mask.double()
-
-    def to(self, device):
-        self._linear_transform = self._linear_transform.to(device)
-        self._mask = self._mask.to(device)
 
 
 class ARNetNormalDiagonalCovarianceLayer(torch.nn.Module):
@@ -102,8 +90,17 @@ class ARNetNormalDiagonalCovarianceLayer(torch.nn.Module):
     def forward(self, data):
         mean = self.h2mean(data)
         logvar = self.h2logvar(data)
-        variance = 1e-2 * torch.nn.functional.sigmoid(logvar)
+        variance = 1e-2 + torch.nn.functional.sigmoid(logvar)
         return (1 - variance) * mean, variance
+
+
+class SequentialMultipleInput(torch.nn.Sequential):
+    def forward(self, *inputs):
+        new_input = self[0](*inputs)
+        if len(self) > 1:
+            for module in self[1:]:
+                new_input = module(new_input)
+        return new_input
 
 
 def create_arnetwork(conf):
@@ -117,7 +114,7 @@ def create_arnetwork(conf):
     ordering = range(dim_in)
     layer_connections = []
     for i in range(depth):
-        layer_connections.append(random.choices(range(1, dim_in - 1), k=width))
+        layer_connections.append(random.choices(range(0, dim_in - 1), k=width))
     arch = []
     previous_ordering = ordering
     previous_dim = dim_in
@@ -134,7 +131,7 @@ def create_arnetwork(conf):
         previous_ordering = layer_connections[i]
 
     # Final Normal layer.
-    mask = create_mask(ordering, layer_connections[-1])
+    mask = create_final_mask(ordering, layer_connections[-1])
     arch.append(ARNetNormalDiagonalCovarianceLayer(mask, width, dim_in))
 
-    return torch.nn.Sequential(*arch)
+    return SequentialMultipleInput(*arch)

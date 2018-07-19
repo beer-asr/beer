@@ -77,7 +77,9 @@ class Mixture(DiscreteLatentBayesianModel):
             self.cache['resps'] = resps
         else:
             exp_llh = logsumexp(per_component_exp_llh, dim=1).view(-1)
-            self.cache['resps'] = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1))
+            resps = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1)).detach()
+            exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
+            self.cache['resps'] = resps
 
         return exp_llh
 
