@@ -56,11 +56,7 @@ def main():
     log_format = "%(asctime)s :%(lineno)d %(levelname)s:%(message)s"
     logging.basicConfig(level=logging.INFO, format=log_format)
 
-    # Prepare data
-    keys = list(feats.keys())
-    random.shuffle(keys)
-    batches = [keys[i: i+batch_size] for i in range(0, len(keys), batch_size)]
-    logging.info("Data shuffled into %d batches", len(batches))
+
 
     # Training
     params = emissions.grouped_parameters
@@ -68,6 +64,12 @@ def main():
 
     for epoch in range(epochs):
         logging.info("Epoch: %d", epoch)
+        # Prepare data
+        keys = list(feats.keys())
+        random.shuffle(keys)
+        batches = [keys[i: i+batch_size] for i in range(0, len(keys), batch_size)]
+        logging.info("Data shuffled into %d batches", len(batches))
+ 
         hmm_epoch = hmm_mdl_dir + '/' + str(epoch) + '.mdl'
         for batch_keys in batches:
             optimizer.zero_grad()
