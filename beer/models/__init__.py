@@ -1,4 +1,5 @@
 
+from .parameters import *
 from .bayesmodel import *
 from .normal import *
 from .normalset import *

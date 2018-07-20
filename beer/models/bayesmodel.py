@@ -4,156 +4,10 @@
 import abc
 import torch
 
-from ..expfamilyprior import ExpFamilyPrior
+from .parameters import BayesianParameter
+from .parameters import BayesianParameterSet
 
 
-_BAESIAN_PARAMETER_REPR_STRING = 'BayesianParameter(prior_type={type})'
-
-_BAESIAN_MODEL_REPR_STRING = \
-'''{name}:
-  {bayesian_parameters}
-
-'''
-
-class BayesianParameter:
-    '''Parameter which has a *prior* and a *posterior* distribution.
-
-    Note:
-        This class is hashable and therefore can be used as a key in a
-        dictionary.
-
-    Attributes:
-        natural_grad (``torch.Tensor``): Natural gradient of the ELBO
-            w.r.t. to the hyper-parameters of the posterior
-            distribution.
-        prior (:any:`beer.ExpFamilyPrior`): Prior distribution over the
-            parameter.
-        posterior (:any:`beer.ExpFamilyPrior`): Posterior distribution
-            over the parameter.
-    '''
-
-    def __init__(self, prior, posterior):
-        self.prior, self.posterior = prior, posterior
-        dtype = self.prior.natural_hparams.dtype
-        device = self.prior.natural_hparams.device
-        self.natural_grad = \
-            torch.zeros_like(self.prior.natural_hparams, dtype=dtype,
-                            device=device)
-
-    def _to_string(self, indent_level=0):
-        retval = ' ' * indent_level
-        retval += _BAESIAN_PARAMETER_REPR_STRING.format(
-            type=repr(self.prior)
-        )
-        return retval
-
-    def __repr__(self):
-        return self._to_string()
-
-    def __hash__(self):
-        return hash(self)
-
-    def expected_value(self, concatenated=True):
-        '''Expected value of the sufficient statistics of the parameter
-        w.r.t. the posterior distribution.
-
-        Args:
-            concatenated (boolean): If true, concatenate the sufficient
-                statistics into a single ``torch.Tensor``. If false,
-                the statistics are returned in a tuple.
-
-        Returns:
-            ``torch.Tensor`` or a ``tuple``
-        '''
-        if concatenated:
-            return self.posterior.expected_sufficient_statistics
-        return self.posterior.split_sufficient_statistics(
-            self.posterior.expected_sufficient_statistics
-        )
-
-    def zero_natural_grad(self):
-        '''Reset the natural gradient to zero.'''
-        self.natural_grad.zero_()
-
-    def kl_div(self):
-        '''KL divergence posterior/prior.'''
-        return ExpFamilyPrior.kl_div(self.posterior, self.prior)
-
-    def float(self):
-        '''Convert value of the parameter to float precision.'''
-        self.prior = self.prior.float()
-        self.posterior = self.posterior.float()
-        self.natural_grad = self.natural_grad.float()
-        return self
-
-    def double(self):
-        '''Convert the value of the parameter to double precision.'''
-        self.prior = self.prior.double()
-        self.posterior = self.posterior.double()
-        self.natural_grad = self.natural_grad.double()
-        return self
-
-    def to(self, device):
-        '''Move the internal buffer of the parameter to the given
-        device.
-
-        Parameters:
-            device (``torch.device``): Device on which to move on
-
-        '''
-        self.prior = self.prior.to(device)
-        self.posterior = self.posterior.to(device)
-        self.natural_grad = self.natural_grad.to(device)
-        return self
-
-
-class BayesianParameterSet:
-    '''Set of Bayesian parameters.'''
-
-    def __init__(self, parameters):
-        self.__parameters = parameters
-
-    def _to_string(self, indent_level=0):
-        retval = ' ' * indent_level
-        for i, param in enumerate(self.__parameters):
-            retval += '(' + str(i) + ') '
-            retval += _BAESIAN_PARAMETER_REPR_STRING.format(
-                type=repr(param.prior)
-            ) + '\n' + ' ' * indent_level
-        return retval
-
-    def __repr__(self):
-        return self._to_string()
-
-    def __len__(self):
-        return len(self.__parameters)
-
-    def __getitem__(self, key):
-        return self.__parameters[key]
-
-    def float(self):
-        '''Convert value of the parameter to float precision.'''
-        for param in self.__parameters:
-            param.float()
-        return self
-
-    def double(self):
-        '''Convert the value of the parameter to double precision.'''
-        for param in self.__parameters:
-            param.double()
-        return self
-
-    def to(self, device):
-        '''Move the internal buffer of the parameter to the given
-        device.
-
-        Parameters:
-            device (``torch.device``): Device on which to move on
-
-        '''
-        for param in self.__parameters:
-            param.to(device)
-        return self
 
 class BayesianModel(metaclass=abc.ABCMeta):
     '''Abstract base class for all the models.
@@ -176,37 +30,65 @@ class BayesianModel(metaclass=abc.ABCMeta):
     '''
 
     def __init__(self):
+        self._submodels = {}
         self._bayesian_parameters = {}
-        self.__nnet_parameters = {}
-        self.__const_parameters = {}
-        self.__cache = {}
+        self._nnet_parameters = {}
+        self._const_parameters = {}
+        self._cache = {}
+
+    def _register_submodel(self, name, submodel):
+        self._submodels[name] = submodel
+
+    def _register_parameter(self, name, param):
+        self._bayesian_parameters[name] = param
+
+    def _register_parameterset(self, name, paramset):
+        self._bayesian_parameters[name] = paramset
 
     def __setattr__(self, name, value):
-        if isinstance(value, BayesianParameter) or isinstance(value,
-                                                        BayesianParameterSet):
-            self._bayesian_parameters[name] = value
+        if isinstance(value, BayesianModel):
+            self._register_submodel(name, value)
+        if isinstance(value, BayesianParameter):
+            self._register_parameter(name, value)
+        if isinstance(value, BayesianParameterSet):
+            self._register_parameterset(name, value)
         super().__setattr__(name, value)
 
     def __call__(self, data, **kwargs):
         return self.forward(data, **kwargs)
 
     def _to_string(self, indent_level=0):
+        indent_step = 2
         indentation = ' ' * indent_level
-        retval = indentation + self.__class__.__name__
-        retval += '\n' + indentation
-        indentation += indentation + '  '
-        for name, param in self._bayesian_parameters.items():
-            retval += indentation + '(' + name + '):'
-            if isinstance(param, BayesianParameter):
-                retval += param._to_string(1)
-            else:
-                retval += '\n'
-                retval += param._to_string(len(indentation) + 2)
+        retval = indentation + self.__class__.__name__ + ':'
+        indentation += '  '
 
+        # print the parameters
+        if len(self._bayesian_parameters) > 0:
+            indentation = ' ' * (indent_level + indent_step)
+            retval += '\n'
+            for name, param in self._bayesian_parameters.items():
+                retval += indentation + '(' + name + '): '
+                if isinstance(param, BayesianParameter):
+                    retval += param._to_string()
+                else:
+                    retval += '\n'
+                    retval += param._to_string(len(indentation) + indent_step)
+
+        # Print the submodels.
+        if len(self._submodels) > 0:
+            indentation = ' ' * (indent_level + indent_step)
+            retval += '\n'
+            for name, submodel in self._submodels.items():
+                retval += indentation + '(' + name + '):\n'
+                retval += submodel._to_string(indent_level + 2 * indent_step)
         return retval
 
     def __repr__(self):
         return self._to_string()
+
+    def __hash__(self):
+        return hash(self)
 
     @property
     def grouped_parameters(self):
@@ -222,11 +104,11 @@ class BayesianModel(metaclass=abc.ABCMeta):
         computing the ELBO.
 
         '''
-        return self.__cache
+        return self._cache
 
     def clear_cache(self):
         '''Clear the cache.'''
-        self.__cache = {}
+        self._cache = {}
 
     def kl_div_posterior_prior(self):
         '''Kullback-Leibler divergence between the posterior/prior
@@ -386,12 +268,7 @@ class DiscreteLatentBayesianModel(BayesianModel, metaclass=abc.ABCMeta):
 
     def __init__(self, modelset):
         super().__init__()
-        self._modelset = modelset
-
-    @property
-    def modelset(self):
-        '''Density for each value of the discrete latent variable.'''
-        return self._modelset
+        self.modelset = modelset
 
     def posteriors(self, data, **kwargs):
         '''Abstract method to be implemented by subclasses of
@@ -415,6 +292,4 @@ __all__ = [
     'BayesianModel',
     'BayesianModelSet',
     'DiscreteLatentBayesianModel',
-    'BayesianParameter',
-    'BayesianParameterSet'
 ]
