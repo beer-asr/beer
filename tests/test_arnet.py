@@ -14,7 +14,7 @@ class TestUtils(BaseTest):
 
     def test_create_mask(self):
         ordering = [2, 0, 1]
-        max_connections = [2, 1, 2, 2]
+        max_connections = [1, 0, 1, 1]
         device = torch.device('cpu')
         mask1 = beer.nnet.arnet.create_mask(ordering, max_connections).numpy()
         mask2 = np.array([
@@ -27,7 +27,7 @@ class TestUtils(BaseTest):
 
     def test_create_final_mask(self):
         ordering = [2, 0, 1]
-        max_connections = [1, 2, 2, 1]
+        max_connections = [0, 1, 1, 0]
         device = torch.device('cpu')
         mask1 = beer.nnet.arnet.create_final_mask(ordering, max_connections).numpy()
         mask2 = np.array([
@@ -47,7 +47,8 @@ class TestMaskedLinearTransform(BaseTest):
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
         self.ltrans = torch.nn.Linear(self.dim, self.dim_out)
         self.mask = torch.ones(self.dim_out, self.dim)
-        self.masked_ltrans = beer.nnet.arnet.MaskedLinear(self.mask, self.ltrans)
+        self.masked_ltrans = beer.nnet.arnet.MaskedLinear(self.mask,
+            self.ltrans).type(self.type)
 
     def test_ltrans(self):
         # Don't test the output values, just make sure that everything

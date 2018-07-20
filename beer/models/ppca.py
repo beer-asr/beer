@@ -224,7 +224,7 @@ def create(model_conf, mean, variance, create_model_handle):
     posterior_mean = NormalIsotropicCovariancePrior(mean, mean_variance)
 
     # Subspace.
-    mean_subspace = torch.zeros(dim_subspace, len(mean), dtype=dtype,
+    mean_subspace = torch.eye(dim_subspace, len(mean), dtype=dtype,
                                 device=device)
     cov = torch.eye(dim_subspace, dtype=dtype, device=device) / prior_strength
     prior_subspace = MatrixNormalPrior(mean_subspace, cov)

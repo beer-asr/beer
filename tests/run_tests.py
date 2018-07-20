@@ -95,7 +95,7 @@ def run():
                 suite.addTest(BaseTest.get_testsuite(testcase,
                                                      tensor_type=tensor_type,
                                                      seed=init_seed + i))
-    unittest.TextTestRunner(verbosity=args.verbosity, failfast=False).run(suite)
+    unittest.TextTestRunner(verbosity=args.verbosity, failfast=True).run(suite)
 
 
 if __name__ == '__main__':

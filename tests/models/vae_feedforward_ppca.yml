@@ -1,9 +1,14 @@
-type: NonLinearSubspaceModel
-normal_model:
-  type: Normal
-  covariance: isotropic
-  prior_strength: 1.
-  noise_std: 0
+type: VAE
+llh_type: normal
+normalizing_flow:
+  type: InverseAutoRegressive
+  depth: 1
+  iaf_block:
+    activation: Tanh
+    context_dim: 12
+    data_dim: 5
+    depth: 2
+    width: 20
 encoder:
   nnet_structure:
   - residual: false
@@ -16,8 +21,9 @@ encoder:
     - Tanh
     - Linear:in_features=20;out_features=10
   prob_layer:
-    type: NormalLayer
+    type: NormalizingFlowLayer
     covariance: isotropic
+    flow_params_dim: 12
     dim_in: 10
     dim_out: 5
 decoder:
@@ -29,7 +35,7 @@ decoder:
     - Linear:in_features=10;out_features=5
   prob_layer:
     type: NormalLayer
-    covariance: unity
+    covariance: isotropic
     dim_in: 5
     dim_out: <feadim>
 latent_model:

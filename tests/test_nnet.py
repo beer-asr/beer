@@ -30,9 +30,7 @@ class TestNeuralNetwork(BaseTest):
         self.assertEqual(1, beer.nnet.neuralnetwork.load_value('1'))
         self.assertTrue(beer.nnet.neuralnetwork.load_value('True'))
         self.assertAlmostEqual(1.3, beer.nnet.neuralnetwork.load_value('1.3'))
-        self.assertEqual(2, beer.nnet.neuralnetwork.load_value('%var1 + %var2',
-                                                        {'%var1': 1,
-                                                         '%var2': 1}))
+        self.assertEqual(2, beer.nnet.neuralnetwork.load_value('1 +1 '))
 
     def test_parse_nnet_element(self):
         strval = 'Linear:in_features=10;out_features=20'
@@ -63,10 +61,10 @@ class TestNeuralNetwork(BaseTest):
         self.assertAlmostEqual(elu.alpha, .5)
 
     def test_create_nnet_elements(self):
-        variables = {'<feadim1>': self.dim, '<feadim2>': self.dim2}
-        strval = 'Linear:in_features=<feadim1>;out_features=20 | Linear:in_features=<feadim2>;out_features=20'
-        merge_layer = beer.nnet.neuralnetwork.create_nnet_element(strval,
-                                                                  variables)
+        variables = {'feadim1': self.dim, 'feadim2': self.dim2}
+        strval = 'Linear:in_features={feadim1};out_features=20 | Linear:in_features={feadim2};out_features=20'
+        strval = strval.format(**variables)
+        merge_layer = beer.nnet.neuralnetwork.create_nnet_element(strval).type(self.type)
         self.assertTrue(isinstance(merge_layer.transforms[0], torch.nn.Linear))
         self.assertTrue(isinstance(merge_layer.transforms[1], torch.nn.Linear))
         self.assertEqual(merge_layer.transforms[0].in_features, self.dim)
@@ -98,9 +96,9 @@ class TestNeuralNetwork(BaseTest):
                 # Doesn't test the content of the object, just make sure
                 # that the creation does not crash.
                 with open(conf_file, 'r') as fid:
-                    conf = yaml.load(fid)
-                    nnet = beer.nnet.neuralnetwork.create(conf, dtype, device,
-                                                          {'<feadim>': self.dim})
+                    data = fid.read().replace('<feadim>', str(self.dim))
+                    conf = yaml.load(data)
+                    nnet = beer.nnet.neuralnetwork.create(conf, dtype, device)
                     nnet(self.data)
 
 __all__ = [

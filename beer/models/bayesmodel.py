@@ -32,7 +32,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
     def __init__(self):
         self._submodels = {}
         self._bayesian_parameters = {}
-        self._nnet_parameters = {}
+        self._modules = {}
         self._const_parameters = {}
         self._cache = {}
 
@@ -45,6 +45,9 @@ class BayesianModel(metaclass=abc.ABCMeta):
     def _register_parameterset(self, name, paramset):
         self._bayesian_parameters[name] = paramset
 
+    def _register_module(self, name, module):
+        self._modules[name] = module
+
     def __setattr__(self, name, value):
         if isinstance(value, BayesianModel):
             self._register_submodel(name, value)
@@ -52,6 +55,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
             self._register_parameter(name, value)
         if isinstance(value, BayesianParameterSet):
             self._register_parameterset(name, value)
+        if isinstance(value, torch.nn.Module):
+            self._register_module(name, value)
         super().__setattr__(name, value)
 
     def __call__(self, data, **kwargs):
@@ -75,6 +80,11 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
         '''
         return self._cache
+
+    def modules_parameters(self):
+        for module in self._modules.values():
+            for param in module.parameters():
+                yield param
 
     def bayesian_parameters(self):
         for param in self._bayesian_parameters.values():
@@ -118,7 +128,11 @@ class BayesianModel(metaclass=abc.ABCMeta):
             :any:`BayesianModel`
 
         '''
-        pass
+        for parameter in self.bayesian_parameters():
+            parameter.float_()
+        for name, module in self._modules.items():
+            setattr(self, name, module.float())
+        return self
 
     def double(self):
         '''Abstract method to be implemented by subclasses of
@@ -131,7 +145,11 @@ class BayesianModel(metaclass=abc.ABCMeta):
             :any:`BayesianModel`
 
         '''
-        pass
+        for parameter in self.bayesian_parameters():
+            parameter.double_()
+        for name, module in self._modules.items():
+            setattr(self, name, module.double())
+        return self
 
     def to(self, device):
         '''Create a new :any:`BayesianModel` with all the parameters
@@ -141,7 +159,11 @@ class BayesianModel(metaclass=abc.ABCMeta):
             :any:`BayesianModel`
 
         '''
-        pass
+        for parameter in self.bayesian_parameters():
+            parameter.to_(device)
+        for name, module in self._modules.items():
+            setattr(self, name, module.to(device))
+        return self
 
     ####################################################################
     # Abstract methods to be implemented by subclasses.

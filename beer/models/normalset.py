@@ -268,22 +268,22 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
     def __init__(self, prior, posterior):
         super().__init__()
         self._ncomp = prior.ncomp
-        self.means_prec_param = BayesianParameter(prior, posterior)
+        self.means_precision = BayesianParameter(prior, posterior)
 
     def __getitem__(self, key):
         np1, np2, _, _ = \
-            self.means_prec_param.expected_value(concatenated=False)
+            self.means_precision.expected_value(concatenated=False)
 
         cov = 1 / (-2 * np1)
         mean = cov * np2[key]
         return NormalSetElement(mean=mean, cov=torch.diag(cov))
 
     def __len__(self):
-        return self.means_prec_param.posterior.ncomp
+        return self.means_precision.posterior.ncomp
 
     def _expected_nparams(self):
         np1, np2, np3, np4 = \
-            self.means_prec_param.expected_value(concatenated=False)
+            self.means_precision.expected_value(concatenated=False)
         return torch.cat([np1.view(-1), np4.view(-1)]), \
             torch.cat([np2, np3], dim=1)
 
@@ -316,7 +316,7 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
             len(s_stats1) * torch.ones(feadim, dtype=s_stats1.dtype,
                                        device=s_stats1.device)
         ])
-        return {self.means_prec_param: acc_stats}
+        return {self.means_precision: acc_stats}
 
 
 class NormalSetSharedFullCovariance(BayesianModelSet):
@@ -408,7 +408,7 @@ def create(model_conf, mean, variance, create_model_handle):
                 mean, variance, size, prior_strength, noise_std)
     elif covariance_type == 'diagonal':
         if shared_cov:
-            return NormalSetSharedIsotropicCovariance.create(
+            return NormalSetSharedDiagonalCovariance.create(
                 mean, variance, size, prior_strength, noise_std)
         else:
             return NormalSetDiagonalCovariance.create(

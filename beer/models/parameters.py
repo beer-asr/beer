@@ -64,21 +64,19 @@ class BayesianParameter:
         '''KL divergence posterior/prior.'''
         return ExpFamilyPrior.kl_div(self.posterior, self.prior)
 
-    def float(self):
+    def float_(self):
         '''Convert value of the parameter to float precision.'''
         self.prior = self.prior.float()
         self.posterior = self.posterior.float()
         self.natural_grad = self.natural_grad.float()
-        return self
 
-    def double(self):
+    def double_(self):
         '''Convert the value of the parameter to double precision.'''
         self.prior = self.prior.double()
         self.posterior = self.posterior.double()
         self.natural_grad = self.natural_grad.double()
-        return self
 
-    def to(self, device):
+    def to_(self, device):
         '''Move the internal buffer of the parameter to the given
         device.
 
@@ -89,7 +87,6 @@ class BayesianParameter:
         self.prior = self.prior.to(device)
         self.posterior = self.posterior.to(device)
         self.natural_grad = self.natural_grad.to(device)
-        return self
 
 
 class BayesianParameterSet:
@@ -104,21 +101,20 @@ class BayesianParameterSet:
     def __getitem__(self, key):
         return self.__parameters[key]
 
-    def float(self):
-        '''Convert value of the parameter to float precision.'''
+    def float_(self):
+        '''Convert value of the parameter to float precision in-place.'''
         for param in self.__parameters:
             param.float()
-        return self
 
-    def double(self):
-        '''Convert the value of the parameter to double precision.'''
+    def double_(self):
+        '''Convert the value of the parameter to double precision
+        in-place.'''
         for param in self.__parameters:
             param.double()
-        return self
 
-    def to(self, device):
+    def to_(self, device):
         '''Move the internal buffer of the parameter to the given
-        device.
+        device in-place.
 
         Parameters:
             device (``torch.device``): Device on which to move on
@@ -126,7 +122,6 @@ class BayesianParameterSet:
         '''
         for param in self.__parameters:
             param.to(device)
-        return self
 
 
 __all__ = [

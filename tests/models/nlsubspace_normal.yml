@@ -4,6 +4,15 @@ normal_model:
   covariance: isotropic
   prior_strength: 1.
   noise_std: 0
+normalizing_flow:
+  type: InverseAutoRegressive
+  depth: 1
+  iaf_block:
+    activation: Tanh
+    context_dim: 12
+    data_dim: 5
+    depth: 2
+    width: 20
 encoder:
   nnet_structure:
   - residual: false
@@ -16,8 +25,9 @@ encoder:
     - Tanh
     - Linear:in_features=20;out_features=10
   prob_layer:
-    type: NormalLayer
+    type: NormalizingFlowLayer
     covariance: isotropic
+    flow_params_dim: 12
     dim_in: 10
     dim_out: 5
 decoder:

@@ -1,4 +1,4 @@
 type: NormalLayer
 covariance: isotropic
-in_dim: 10
-out_dim: 20
+dim_in: 10
+dim_out: 20

@@ -14,7 +14,7 @@ from basetest import BaseTest
 # increase, it may happen in practice due to floating point precision
 # issue that it decreases a little bit at one step. Settings TOLERANCE
 # to 0 will make the test fails if one of such update occurs.
-TOLERANCE = 1e-6
+TOLERANCE = 1e-2
 
 # Number of iteration to run while testing the VBI algorithm.
 N_EPOCHS = 2
@@ -72,7 +72,7 @@ class TestEvidenceLowerbound(BaseTest):
         for i, model in enumerate(self.models):
             with self.subTest(model=self.conf_files[i]):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                        *model.grouped_parameters, lrate=1.)
+                        model.mean_field_groups, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_EPOCHS):
                     self.seed(1)
@@ -90,7 +90,7 @@ class TestEvidenceLowerbound(BaseTest):
         for i, model in enumerate(self.models):
             with self.subTest(model=self.conf_files[i]):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                        *model.grouped_parameters, lrate=1.)
+                        model.mean_field_groups, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     self.seed(1)
@@ -107,7 +107,7 @@ class TestEvidenceLowerbound(BaseTest):
             model = orig_model.float()
             with self.subTest(model=self.conf_files[i]):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                        *model.grouped_parameters, lrate=1.)
+                        model.mean_field_groups, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     self.seed(1)
@@ -124,7 +124,7 @@ class TestEvidenceLowerbound(BaseTest):
             model = orig_model.double()
             with self.subTest(model=self.conf_files[i]):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                        *model.grouped_parameters, lrate=1.)
+                        model.mean_field_groups, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     self.seed(1)
@@ -141,7 +141,7 @@ class TestEvidenceLowerbound(BaseTest):
             model = orig_model.to(self.device)
             with self.subTest(model=self.conf_files[i]):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                        *model.grouped_parameters, lrate=1.)
+                        model.mean_field_groups, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     self.seed(1)
