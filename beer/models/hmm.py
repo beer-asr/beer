@@ -136,7 +136,7 @@ class HMM(BayesianModel):
             log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(),
                                        dim=1).view(-1)
         return log_alphas
-    
+
     @staticmethod
     def baum_welch_backward(final_states, trans_mat, llhs):
         final_log_prob = -np.log(len(final_states))
@@ -211,8 +211,8 @@ class HMM(BayesianModel):
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
             self._resps = onehot_labels
         elif self.training_type == 'viterbi':
-            onehot_labels = onehot(HMM.viterbi(self.init_states, 
-                                  self.final_states, self.trans_mat, pc_exp_llh), 
+            onehot_labels = onehot(HMM.viterbi(self.init_states,
+                                  self.final_states, self.trans_mat, pc_exp_llh),
                                   len(self.modelset), dtype=pc_exp_llh.dtype,
                                   device=pc_exp_llh.device)
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
@@ -223,7 +223,7 @@ class HMM(BayesianModel):
             exp_llh = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
             self._resps = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))
         return exp_llh
-    
+
     def accumulate(self, s_stats, parent_msg=None):
         retval = {
             **self.modelset.accumulate(s_stats, self._resps)
