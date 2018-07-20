@@ -181,6 +181,9 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
     # Accumulate the statistics and scale them accordingly.
     acc_stats = model.accumulate(stats)
 
+    # Clean up intermediary results.
+    model.clear_cache()
+
     return EvidenceLowerBoundInstance(elbo_value, acc_stats,
                                       model.bayesian_parameters(),
                                       mb_datasize, datasize)
