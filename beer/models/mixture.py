@@ -31,47 +31,26 @@ class Mixture(DiscreteLatentBayesianModel):
         weights = torch.exp(self.weights_param.expected_value())
         return weights / weights.sum()
 
+    def _local_kl_divergence(self, log_resps):
+        log_weights = self.weights_param.expected_value()
+        retval = torch.sum(log_resps.exp() * (log_resps - log_weights), dim=-1)
+        return retval
+
     ####################################################################
     # BayesianModel interface.
     ####################################################################
 
-    @property
-    def grouped_parameters(self):
-        groups = [group for group in self.modelset.grouped_parameters]
-        groups[0] = [*groups[0], self.weights_param]
-        return groups
-
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
-    def float(self):
-        return self.__class__(
-            self.weights_param.prior.float(),
-            self.weights_param.posterior.float(),
-            self.modelset.float()
-        )
-
-    def double(self):
-        return self.__class__(
-            self.weights_param.prior.double(),
-            self.weights_param.posterior.double(),
-            self.modelset.double()
-        )
-
-    def to(self, device):
-        return self.__class__(
-            self.weights_param.prior.to(device),
-            self.weights_param.posterior.to(device),
-            self.modelset.to(device)
-        )
-
     def mean_field_factorization(self):
-        return [self.weights_param, *self.modelset.mean_field_factorization()]
+        mf_groups = self.modelset.mean_field_factorization()
+        mf_groups[0].append(self.weights_param)
+        return mf_groups
 
     def forward(self, s_stats, labels=None):
         log_weights = self.weights_param.expected_value().view(1, -1)
         per_component_exp_llh = self.modelset(s_stats)
-        per_component_exp_llh += log_weights
 
         if labels is not None:
             resps = onehot(labels, len(self.modelset),
@@ -79,12 +58,15 @@ class Mixture(DiscreteLatentBayesianModel):
             exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
             self.cache['resps'] = resps
         else:
-            exp_llh = logsumexp(per_component_exp_llh, dim=1).view(-1)
-            resps = torch.exp(per_component_exp_llh - exp_llh.view(-1, 1)).detach()
+            w_per_component_exp_llh = per_component_exp_llh + log_weights
+            exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
+            log_resps = w_per_component_exp_llh - exp_llh.view(-1, 1).detach()
+            local_kl_div = self._local_kl_divergence(log_resps)
+            resps = log_resps.exp()
             exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
-            self.cache['resps'] = resps
+            self.cache['resps'] = log_resps.exp()
 
-        return exp_llh
+        return exp_llh - local_kl_div
 
     def accumulate(self, s_stats, parent_msg=None):
         resps = self.cache['resps']

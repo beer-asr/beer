@@ -76,8 +76,7 @@ class NormalSet(BayesianModelSet):
     @staticmethod
     @abc.abstractmethod
     def sufficient_statistics(data):
-        return torch.cat([data ** 2, data, torch.ones_like(data),
-                          torch.ones_like(data)], dim=-1)
+        pass
 
 
 class NormalSetIsotropicCovariance(NormalSet):
@@ -129,15 +128,15 @@ class NormalSetDiagonalCovariance(NormalSet):
 
     @staticmethod
     def _get_mean(param):
-        return NormalIsotropicCovariance._get_mean(param)
+        return NormalDiagonalCovariance._get_mean(param)
 
     @staticmethod
     def _get_cov(param):
-        return NormalIsotropicCovariance._get_cov(param)
+        return NormalDiagonalCovariance._get_cov(param)
 
     @staticmethod
     def sufficient_statistics(data):
-        return NormalIsotropicCovariance.sufficient_statistics(data)
+        return NormalDiagonalCovariance.sufficient_statistics(data)
 
 
 class NormalSetFullCovariance(NormalSet):
@@ -162,15 +161,15 @@ class NormalSetFullCovariance(NormalSet):
 
     @staticmethod
     def _get_mean(param):
-        return NormalIsotropicCovariance._get_mean(param)
+        return NormalFullCovariance._get_mean(param)
 
     @staticmethod
     def _get_cov(param):
-        return NormalIsotropicCovariance._get_cov(param)
+        return NormalFullCovariance._get_cov(param)
 
     @staticmethod
     def sufficient_statistics(data):
-        return NormalIsotropicCovariance.sufficient_statistics(data)
+        return NormalFullCovariance.sufficient_statistics(data)
 
 
 class NormalSetSharedIsotropicCovariance(BayesianModelSet):
@@ -342,21 +341,21 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
     def __init__(self, prior, posterior):
         super().__init__()
         self._ncomp = prior.ncomp
-        self.means_prec_param = BayesianParameter(prior, posterior)
+        self.means_precision = BayesianParameter(prior, posterior)
 
     def __getitem__(self, key):
         np1, np2, _, _ = \
-            self.means_prec_param.expected_value(concatenated=False)
+            self.means_precision.expected_value(concatenated=False)
         cov = torch.inverse(-2 * np1)
         mean = cov @ np2[key]
         return NormalSetElement(mean=mean, cov=cov)
 
     def __len__(self):
-        return self.means_prec_param.posterior.ncomp
+        return self.means_precision.posterior.ncomp
 
     def _expected_nparams(self):
         np1, np2, np3, np4 = \
-            self.means_prec_param.expected_value(concatenated=False)
+            self.means_precision.expected_value(concatenated=False)
         return np1.view(-1), \
             torch.cat([np2, np3[:, None]], dim=1), np4
 
@@ -391,7 +390,7 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
             weights.sum(dim=0),
             len(weights) * torch.ones(1, dtype=weights.dtype, device=weights.device)
         ])
-        return {self.means_prec_param: acc_stats}
+        return {self.means_precision: acc_stats}
 
 
 def create(model_conf, mean, variance, create_model_handle):

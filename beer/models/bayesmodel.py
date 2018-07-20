@@ -78,10 +78,20 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
     def bayesian_parameters(self):
         for param in self._bayesian_parameters.values():
-            yield param
+            if isinstance(param, BayesianParameterSet):
+                paramset = param
+                for param in paramset:
+                    yield param
+            else:
+                yield param
         for submodel in self._submodels.values():
             for param in submodel.bayesian_parameters():
-                yield param
+                if isinstance(param, BayesianParameterSet):
+                    paramset = param
+                    for param in paramset:
+                        yield param
+                else:
+                    yield param
 
     def clear_cache(self):
         '''Clear the cache.'''
