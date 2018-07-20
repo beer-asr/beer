@@ -63,6 +63,7 @@ class Mixture(DiscreteLatentBayesianModel):
                            dtype=log_weights.dtype, device=log_weights.device)
             exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
             self.cache['resps'] = resps
+            local_kl_div = 0
         else:
             w_per_component_exp_llh = per_component_exp_llh + log_weights
             exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
@@ -80,7 +81,6 @@ class Mixture(DiscreteLatentBayesianModel):
             self.weights_param: resps.sum(dim=0),
             **self.modelset.accumulate(s_stats, resps)
         }
-        self.clear_cache()
         return retval
 
     def local_kl_div_posterior_prior(self, parent_msg=None):

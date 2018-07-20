@@ -107,7 +107,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         retval = 0.
         for parameter in self.bayesian_parameters():
-            retval += parameter.kl_div()
+            retval += parameter.kl_div().view(1)
         return retval
 
     def float(self):

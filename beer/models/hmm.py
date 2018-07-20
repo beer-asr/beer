@@ -172,35 +172,8 @@ class HMM(BayesianModel):
         best_path = HMM.viterbi(self.init_states,
                                 self.final_states,
                                 self.trans_mat, pc_llhs)
-        #phones = convert_state_to_phone(phone_dict, list(best_path.numpy()), nstate_per_phone)
         return best_path
 
-    def float(self):
-        return self.__class__(
-            self.init_states,
-            self.final_states,
-            self.trans_mat.float(),
-            self.modelset.float(),
-            self.training_type
-        )
-
-    def double(self):
-        return self.__class__(
-            self.init_states,
-            self.final_states,
-            self.trans_mat.double(),
-            self.modelset.double(),
-            self.training_type
-        )
-
-    def to(self, device):
-        return self.__class__(
-            self.init_states,
-            self.final_states,
-            self.trans_mat.to(device),
-            self.modelset.to(device),
-            self.training_type
-        )
 
     def forward(self, s_stats, state_path=None):
         pc_exp_llh = self.modelset(s_stats)
@@ -212,23 +185,25 @@ class HMM(BayesianModel):
             self._resps = onehot_labels
         elif self.training_type == 'viterbi':
             onehot_labels = onehot(HMM.viterbi(self.init_states,
-                                  self.final_states, self.trans_mat, pc_exp_llh),
+                                  self.final_states, self.trans_mat,
+                                  pc_exp_llh.detach()),
                                   len(self.modelset), dtype=pc_exp_llh.dtype,
                                   device=pc_exp_llh.device)
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
             self._resps = onehot_labels
         else:
-            log_alphas = HMM.baum_welch_forward(self.init_states, self.trans_mat, pc_exp_llh)
-            log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat, pc_exp_llh)
+            log_alphas = HMM.baum_welch_forward(self.init_states,
+                                                self.trans_mat, pc_exp_llh.detach())
+            log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat,
+                                                pc_exp_llh.detach())
             exp_llh = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
-            self._resps = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))
+            resps = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))
         return exp_llh
 
     def accumulate(self, s_stats, parent_msg=None):
         retval = {
-            **self.modelset.accumulate(s_stats, self._resps)
+            **self.modelset.accumulate(s_stats, self.cache['resps'])
         }
-        self._resps = None
         return retval
 
 
@@ -251,24 +226,6 @@ class AlignModelSet(BayesianModelSet):
 
     def sufficient_statistics(self, data):
         return len(data), self.model_set.sufficient_statistics(data)
-
-    def float(self):
-        return self.__class__(
-            self.model_set.float(),
-            self.state_ids
-        )
-
-    def double(self):
-        return self.__class__(
-            self.model_set.double(),
-            self.state_ids
-        )
-
-    def to(self, device):
-        return self.__class__(
-            self.model_set.to(device),
-            self.state_ids
-        )
 
     def forward(self, len_s_stats):
         length, s_stats = len_s_stats
@@ -303,17 +260,6 @@ class AlignModelSet(BayesianModelSet):
 
     def __len__(self):
         return len(self.state_ids)
-
-    # TODO: This is code is to change as it would be more
-    # consistent if the object change the responsibilities and
-    # give the modified resps to the internal model set.
-    def expected_natural_params_as_matrix(self):
-        parameters = self.model_set.expected_natural_params_as_matrix()
-        return parameters[self.state_ids]
-
-    def expected_natural_params_from_resps(self, resps):
-        matrix = self.expected_natural_params_as_matrix()
-        return resps @ matrix
 
 
 __all__ = ['HMM', 'AlignModelSet']
