@@ -35,18 +35,8 @@ class BayesianParameter:
             torch.zeros_like(self.prior.natural_hparams, dtype=dtype,
                             device=device)
 
-    def _to_string(self, indent_level=0):
-        retval = ' ' * indent_level
-        retval += _BAESIAN_PARAMETER_REPR_STRING.format(
-            type=repr(self.prior)
-        )
-        return retval
-
-    def __repr__(self):
-        return self._to_string()
-
     def __hash__(self):
-        return hash(self)
+        return hash(repr(self))
 
     def expected_value(self, concatenated=True):
         '''Expected value of the sufficient statistics of the parameter
@@ -107,18 +97,6 @@ class BayesianParameterSet:
 
     def __init__(self, parameters):
         self.__parameters = parameters
-
-    def _to_string(self, indent_level=0):
-        retval = ' ' * indent_level
-        for i, param in enumerate(self.__parameters):
-            retval += '(' + str(i) + ') '
-            retval += _BAESIAN_PARAMETER_REPR_STRING.format(
-                type=repr(param.prior)
-            ) + '\n' + ' ' * indent_level
-        return retval
-
-    def __repr__(self):
-        return self._to_string()
 
     def __len__(self):
         return len(self.__parameters)

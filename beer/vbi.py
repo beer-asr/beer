@@ -175,15 +175,14 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
     # Compute the ELBO.
     stats = model.sufficient_statistics(minibatch_data)
     exp_llh = model(stats, **kwargs)
-    local_kl_div = model.local_kl_div_posterior_prior()
     kl_div = model.kl_div_posterior_prior()
-    elbo_value = scale * (exp_llh.sum() - kl_weight * local_kl_div.sum()) - \
-        kl_weight * kl_div
+    elbo_value = scale * exp_llh.sum() - kl_div.sum()
 
     # Accumulate the statistics and scale them accordingly.
     acc_stats = model.accumulate(stats)
 
-    return EvidenceLowerBoundInstance(elbo_value, acc_stats, model.parameters,
+    return EvidenceLowerBoundInstance(elbo_value, acc_stats,
+                                      model.bayesian_parameters(),
                                       mb_datasize, datasize)
 
 
@@ -265,7 +264,7 @@ class BayesianModelCoordinateAscentOptimizer(BayesianModelOptimizer):
 
     '''
 
-    def __init__(self, *groups, lrate=1., std_optim=None):
+    def __init__(self, groups, lrate=1., std_optim=None):
         '''
         Args:
             ... (list): N List of ``BayesianParameter``.
@@ -277,7 +276,7 @@ class BayesianModelCoordinateAscentOptimizer(BayesianModelOptimizer):
         '''
         parameters = []
         for group in groups:
-            parameters += group
+            parameters += [param for param in group]
         super().__init__(parameters, lrate=lrate, std_optim=std_optim)
         self._groups = groups
         self._update_count = 0

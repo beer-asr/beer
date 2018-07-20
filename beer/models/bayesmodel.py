@@ -57,41 +57,11 @@ class BayesianModel(metaclass=abc.ABCMeta):
     def __call__(self, data, **kwargs):
         return self.forward(data, **kwargs)
 
-    def _to_string(self, indent_level=0):
-        indent_step = 2
-        indentation = ' ' * indent_level
-        retval = indentation + self.__class__.__name__ + ':'
-        indentation += '  '
-
-        # print the parameters
-        if len(self._bayesian_parameters) > 0:
-            indentation = ' ' * (indent_level + indent_step)
-            retval += '\n'
-            for name, param in self._bayesian_parameters.items():
-                retval += indentation + '(' + name + '): '
-                if isinstance(param, BayesianParameter):
-                    retval += param._to_string()
-                else:
-                    retval += '\n'
-                    retval += param._to_string(len(indentation) + indent_step)
-
-        # Print the submodels.
-        if len(self._submodels) > 0:
-            indentation = ' ' * (indent_level + indent_step)
-            retval += '\n'
-            for name, submodel in self._submodels.items():
-                retval += indentation + '(' + name + '):\n'
-                retval += submodel._to_string(indent_level + 2 * indent_step)
-        return retval
-
-    def __repr__(self):
-        return self._to_string()
-
     def __hash__(self):
-        return hash(self)
+        return hash(repr(self))
 
     @property
-    def grouped_parameters(self):
+    def mean_field_groups(self):
         '''All the Bayes parameters of the model organized into groups
         to be optimized with a coordinate ascent algorithm.
 
@@ -106,6 +76,13 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         return self._cache
 
+    def bayesian_parameters(self):
+        for param in self._bayesian_parameters.values():
+            yield param
+        for submodel in self._submodels.values():
+            for param in submodel.bayesian_parameters():
+                yield param
+
     def clear_cache(self):
         '''Clear the cache.'''
         self._cache = {}
@@ -119,8 +96,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
 
         '''
         retval = 0.
-        for parameter in self.parameters:
-            retval += parameter.kl_div
+        for parameter in self.bayesian_parameters():
+            retval += parameter.kl_div()
         return retval
 
     def float(self):
@@ -198,6 +175,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         pass
 
+    @abc.abstractmethod
     def mean_field_factorization(self):
         '''Abstract method to be implemented by subclasses of
         :any:`BayesianModel`.

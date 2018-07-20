@@ -50,6 +50,9 @@ class NormalSet(BayesianModelSet):
         return torch.cat([param.expected_value()[None]
                           for param in self.normals], dim=0)
 
+    def mean_field_factorization(self):
+        return [[*self.normals]]
+
     def forward(self, s_stats):
         retval = s_stats @ self.expected_natural_params_as_matrix().t()
         retval -= .5 * self._feadim * math.log(2 * math.pi)
@@ -212,6 +215,9 @@ class NormalSetSharedIsotropicCovariance(BayesianModelSet):
         return torch.cat([np1.view(-1), np4.view(-1)]), \
             torch.cat([np2, np3.view(-1, 1)], dim=1).view(len(self), -1)
 
+    def mean_field_factorization(self):
+        return [[self.means_precision]]
+
     def sufficient_statistics(self, data):
         dtype, device = data.dtype, data.device
         padding = torch.ones(len(data), 1, dtype=dtype, device=device)
@@ -282,6 +288,9 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
         return torch.cat([np1.view(-1), np4.view(-1)]), \
             torch.cat([np2, np3], dim=1)
 
+    def mean_field_factorization(self):
+        return [[self.means_precision]]
+
     @staticmethod
     def sufficient_statistics(data):
         s_stats1 = torch.cat([data**2, torch.ones_like(data)], dim=1)
@@ -350,6 +359,9 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
             self.means_prec_param.expected_value(concatenated=False)
         return np1.view(-1), \
             torch.cat([np2, np3[:, None]], dim=1), np4
+
+    def mean_field_factorization(self):
+        return [[self.means_precision]]
 
     @staticmethod
     def sufficient_statistics(data):

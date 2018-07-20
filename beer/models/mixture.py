@@ -65,6 +65,9 @@ class Mixture(DiscreteLatentBayesianModel):
             self.modelset.to(device)
         )
 
+    def mean_field_factorization(self):
+        return [self.weights_param, *self.modelset.mean_field_factorization()]
+
     def forward(self, s_stats, labels=None):
         log_weights = self.weights_param.expected_value().view(1, -1)
         per_component_exp_llh = self.modelset(s_stats)

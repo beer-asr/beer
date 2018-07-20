@@ -35,6 +35,9 @@ class Normal(BayesianModel):
     def cov(self):
         return self._get_cov(self.mean_precision)
 
+    def mean_field_factorization(self):
+        return [[self.mean_precision]]
+
     def forward(self, s_stats):
         exp_llh = s_stats @ self.mean_precision.expected_value()
         exp_llh -= .5 * self._feadim * math.log(2 * math.pi)
@@ -112,7 +115,7 @@ class NormalDiagonalCovariance(Normal):
         return np2 / (-2 * np1)
 
     @staticmethod
-    def cov_from_natural_params(param):
+    def _get_cov(param):
         np1, _, _, _ = param.expected_value(concatenated=False)
         return torch.diag(1/(-2 * np1))
 
