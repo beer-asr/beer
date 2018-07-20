@@ -229,7 +229,8 @@ class PLDASet(BayesianModelSet):
 
     def mean_field_factorization(self):
         return [
-            [self.precision_param, self.mean_param, self.noise_subspace_param, *self.class_mean_params],
+            [self.precision_param, self.mean_param],
+            [self.noise_subspace_param, *self.class_mean_params],
             [self.class_subspace_param],
         ]
 
@@ -399,7 +400,7 @@ def create(model_conf, mean, variance, create_model_handle):
     posterior_noise_subspace = MatrixNormalPrior(rand_init, cov)
 
     # Class subspace.
-    class_subspace = torch.zeros(dim_class_subspace, len(mean), dtype=dtype,
+    class_subspace = torch.eye(dim_class_subspace, len(mean), dtype=dtype,
                                  device=device)
     cov = torch.eye(class_subspace.size(0), dtype=dtype, device=device)
     cov /= prior_strength
@@ -411,7 +412,7 @@ def create(model_conf, mean, variance, create_model_handle):
 
     # cov = same as class subspace.
     class_mean_priors, class_mean_posteriors = [], []
-    class_means_p = torch.zeros(n_classes, dim_class_subspace, dtype=dtype,
+    class_means_p = torch.eye(n_classes, dim_class_subspace, dtype=dtype,
                                 device=device)
     for mean_i in class_means_p:
         class_mean_priors.append(NormalFullCovariancePrior(mean_i, cov))

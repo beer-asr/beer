@@ -20,9 +20,7 @@ _model_types = {
     'PPCA': ppca.create,
     'PLDASet': pldaset.create,
     'VAE': vae.create_vae,
-    'VAENormalizingFlow': vae.create_nflow_vae,
     'NonLinearSubspaceModel': vae.create_non_linear_subspace_model,
-    'NonLinearSubspaceModelNormalizingFlow': vae.create_non_linear_subspace_model_nflow
 }
 
 

@@ -46,13 +46,13 @@ class Mixture(DiscreteLatentBayesianModel):
     # BayesianModel interface.
     ####################################################################
 
-    def sufficient_statistics(self, data):
-        return self.modelset.sufficient_statistics(data)
-
     def mean_field_factorization(self):
         mf_groups = self.modelset.mean_field_factorization()
         mf_groups[0].append(self.weights_param)
         return mf_groups
+
+    def sufficient_statistics(self, data):
+        return self.modelset.sufficient_statistics(data)
 
     def forward(self, s_stats, labels=None):
         log_weights = self.weights_param.expected_value().view(1, -1)
