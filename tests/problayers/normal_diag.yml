@@ -1,0 +1,4 @@
+type: NormalLayer
+covariance: diagonal
+dim_in: 10
+dim_out: 20

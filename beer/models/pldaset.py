@@ -170,9 +170,9 @@ class PLDASet(BayesianModelSet):
             global_mean.view(1, 1, -1)), dim=-1)
         lnorm += 2 * (class_means @ global_mean).view(-1, 1)
 
-        deltas = -2 * torch.sum(means * data.view(1, npoints, -1), dim=-1)
+        deltas = -2 * torch.sum(means.detach() * data.view(1, npoints, -1), dim=-1)
         deltas += data_quad.view(1, -1)
-        deltas += lnorm
+        deltas += lnorm.detach()
 
         # We store values necessary for the accumulation and to compute
         # the expected value of the natural parameters.
@@ -183,7 +183,7 @@ class PLDASet(BayesianModelSet):
 
     def latent_posterior(self, stats):
         # Extract the portion of the s. statistics we need.
-        data = stats[:, 1:]
+        data = stats[:, 1:].detach()
         length = len(stats)
 
         prec = self.cache['prec']
@@ -227,10 +227,10 @@ class PLDASet(BayesianModelSet):
     # BayesianModel interface.
     ####################################################################
 
-    @property
-    def grouped_parameters(self):
+    def mean_field_factorization(self):
         return [
-            [self.precision_param, self.mean_param, self.noise_subspace_param, *self.class_mean_params],
+            [self.precision_param, self.mean_param],
+            [self.noise_subspace_param, *self.class_mean_params],
             [self.class_subspace_param],
         ]
 
@@ -243,48 +243,6 @@ class PLDASet(BayesianModelSet):
         self._precompute(stats)
 
         return stats
-
-    def float(self):
-        return self.__class__(
-            self.mean_param.prior.float(),
-            self.mean_param.posterior.float(),
-            self.precision_param.prior.float(),
-            self.precision_param.posterior.float(),
-            self.noise_subspace_param.prior.float(),
-            self.noise_subspace_param.posterior.float(),
-            self.class_subspace_param.prior.float(),
-            self.class_subspace_param.posterior.float(),
-            [param.prior.float() for param in self.class_mean_params],
-            [param.posterior.float() for param in self.class_mean_params]
-        )
-
-    def double(self):
-        return self.__class__(
-            self.mean_param.prior.double(),
-            self.mean_param.posterior.double(),
-            self.precision_param.prior.double(),
-            self.precision_param.posterior.double(),
-            self.noise_subspace_param.prior.double(),
-            self.noise_subspace_param.posterior.double(),
-            self.class_subspace_param.prior.double(),
-            self.class_subspace_param.posterior.double(),
-            [param.prior.double() for param in self.class_mean_params],
-            [param.posterior.double() for param in self.class_mean_params]
-        )
-
-    def to(self, device):
-        return self.__class__(
-            self.mean_param.prior.to(device),
-            self.mean_param.posterior.to(device),
-            self.precision_param.prior.to(device),
-            self.precision_param.posterior.to(device),
-            self.noise_subspace_param.prior.to(device),
-            self.noise_subspace_param.posterior.to(device),
-            self.class_subspace_param.prior.to(device),
-            self.class_subspace_param.posterior.to(device),
-            [param.prior.to(device) for param in self.class_mean_params],
-            [param.posterior.to(device) for param in self.class_mean_params]
-        )
 
     def forward(self, s_stats):
         # Load the necessary value from the cache.
@@ -406,37 +364,7 @@ class PLDASet(BayesianModelSet):
         if parent_msg is None:
             raise ValueError('"parent_msg" should not be None')
         resps = parent_msg
-        return torch.sum(resps * self.cache['l_kl_divs'].t(), dim=-1)
-
-    def expected_natural_params_from_resps(self, resps):
-        means = self.cache['means']
-        prec = self.cache['prec']
-        log_prec = self.cache['log_prec']
-        lnorm = self.cache['lnorm']
-
-        broadcasting_array = torch.ones(len(resps), self._data_dim,
-                                        dtype=means.dtype, device=means.device)
-        np1 = -.5 * prec * broadcasting_array
-        np2 = prec * (resps.t()[:, :, None] * means).sum(dim=0)
-        np3 = -.5 * prec * (lnorm.t() * resps).sum(dim=-1).view(-1, 1) * \
-            broadcasting_array / self._data_dim
-        np4 = .5 * log_prec * broadcasting_array
-
-        return torch.cat([np1, np2, np3, np4], dim=-1)
-
-    ####################################################################
-    # VAELatentPrior interface.
-    ####################################################################
-
-    def sufficient_statistics_from_mean_var(self, mean, var):
-        stats = torch.cat([torch.sum(mean ** 2 + var, dim=1).view(-1, 1), mean],
-                          dim=1)
-
-        # To avoid repeating many computation we compute and store in
-        # the cache all the necessary intermediate results.
-        self._precompute(stats)
-
-        return stats
+        return torch.sum(resps * self.cache['l_kl_divs'].t(), dim=-1).detach()
 
 
 def create(model_conf, mean, variance, create_model_handle):
@@ -472,7 +400,7 @@ def create(model_conf, mean, variance, create_model_handle):
     posterior_noise_subspace = MatrixNormalPrior(rand_init, cov)
 
     # Class subspace.
-    class_subspace = torch.zeros(dim_class_subspace, len(mean), dtype=dtype,
+    class_subspace = torch.eye(dim_class_subspace, len(mean), dtype=dtype,
                                  device=device)
     cov = torch.eye(class_subspace.size(0), dtype=dtype, device=device)
     cov /= prior_strength
@@ -484,7 +412,7 @@ def create(model_conf, mean, variance, create_model_handle):
 
     # cov = same as class subspace.
     class_mean_priors, class_mean_posteriors = [], []
-    class_means_p = torch.zeros(n_classes, dim_class_subspace, dtype=dtype,
+    class_means_p = torch.eye(n_classes, dim_class_subspace, dtype=dtype,
                                 device=device)
     for mean_i in class_means_p:
         class_mean_priors.append(NormalFullCovariancePrior(mean_i, cov))

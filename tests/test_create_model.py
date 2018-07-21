@@ -39,7 +39,9 @@ class TestCreateModel(BaseTest):
                 # that the creation does not crash and return a valid
                 # object.
                 with open(conf_file, 'r') as fid:
-                    conf = yaml.load(fid)
+                    data = fid.read()
+                    data = data.replace('<feadim>', str(self.dim))
+                    conf = yaml.load(data)
                     model = beer.create_model(conf, self.mean, self.variance)
                 self.assertTrue(isinstance(model, beer.BayesianModel))
 

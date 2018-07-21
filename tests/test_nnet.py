@@ -16,49 +16,69 @@ class TestNeuralNetwork(BaseTest):
 
     def setUp(self):
         self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.dim2 = int(1 + torch.randint(100, (1, 1)).item())
         self.npoints = int(1 + torch.randint(100, (1, 1)).item())
         self.data = torch.randn(self.npoints, self.dim).type(self.type)
+        self.data2 = torch.randn(self.npoints, self.dim2).type(self.type)
+
+        self.conf_files = []
+        for path in glob.glob('./tests/nnets/*yml'):
+            self.conf_files.append(path)
+        assert len(self.conf_files) > 0
 
     def test_load_value(self):
-        self.assertEqual(1, beer.models.nnet.load_value('1'))
-        self.assertTrue(beer.models.nnet.load_value('True'))
-        self.assertAlmostEqual(1.3, beer.models.nnet.load_value('1.3'))
-        self.assertEqual(2, beer.models.nnet.load_value('%var1 + %var2',
-                                                        {'%var1': 1,
-                                                         '%var2': 1}))
+        self.assertEqual(1, beer.nnet.neuralnetwork.load_value('1'))
+        self.assertTrue(beer.nnet.neuralnetwork.load_value('True'))
+        self.assertAlmostEqual(1.3, beer.nnet.neuralnetwork.load_value('1.3'))
+        self.assertEqual(2, beer.nnet.neuralnetwork.load_value('1 +1 '))
 
     def test_parse_nnet_element(self):
         strval = 'Linear:in_features=10;out_features=20'
-        fn_name, str_kwargs = beer.models.nnet.parse_nnet_element(strval)
+        fn_name, str_kwargs = beer.nnet.neuralnetwork.parse_nnet_element(strval)
         self.assertEqual(fn_name, 'Linear')
         self.assertEqual(str_kwargs['in_features'], '10')
         self.assertEqual(str_kwargs['out_features'], '20')
 
         strval = 'Tanh'
-        fn_name, str_kwargs = beer.models.nnet.parse_nnet_element(strval)
+        fn_name, str_kwargs = beer.nnet.neuralnetwork.parse_nnet_element(strval)
         self.assertEqual(fn_name, 'Tanh')
 
     def test_create_nnet_element(self):
         strval = 'Linear:in_features=10;out_features=20'
-        linear_layer = beer.models.nnet.create_nnet_element(strval)
+        linear_layer = beer.nnet.neuralnetwork.create_nnet_element(strval)
         self.assertTrue(isinstance(linear_layer, torch.nn.Linear))
         self.assertEqual(linear_layer.in_features, 10)
         self.assertEqual(linear_layer.out_features, 20)
 
         strval = 'Tanh'
-        tanh = beer.models.nnet.create_nnet_element(strval)
+        tanh = beer.nnet.neuralnetwork.create_nnet_element(strval)
         self.assertTrue(isinstance(tanh, torch.nn.Tanh))
 
         strval = 'ELU:alpha=.5;inplace=True'
-        elu = beer.models.nnet.create_nnet_element(strval)
+        elu = beer.nnet.neuralnetwork.create_nnet_element(strval)
         self.assertTrue(isinstance(elu, torch.nn.ELU))
         self.assertTrue(elu.inplace)
         self.assertAlmostEqual(elu.alpha, .5)
 
+    def test_create_nnet_elements(self):
+        variables = {'feadim1': self.dim, 'feadim2': self.dim2}
+        strval = 'Linear:in_features={feadim1};out_features=20 | Linear:in_features={feadim2};out_features=20'
+        strval = strval.format(**variables)
+        merge_layer = beer.nnet.neuralnetwork.create_nnet_element(strval).type(self.type)
+        self.assertTrue(isinstance(merge_layer.transforms[0], torch.nn.Linear))
+        self.assertTrue(isinstance(merge_layer.transforms[1], torch.nn.Linear))
+        self.assertEqual(merge_layer.transforms[0].in_features, self.dim)
+        self.assertEqual(merge_layer.transforms[1].in_features, self.dim2)
+        self.assertEqual(merge_layer.transforms[0].out_features, 20)
+        self.assertEqual(merge_layer.transforms[1].out_features, 20)
+        out = merge_layer(self.data, self.data2)
+        self.assertEqual(out.shape[0], self.npoints)
+        self.assertEqual(out.shape[1], 20)
+
     def test_ReshapeLayer(self):
         strval = 'ReshapeLayer:shape=(-1,10,20)'
-        reshape_layer = beer.models.nnet.create_nnet_element(strval)
-        self.assertTrue(isinstance(reshape_layer, beer.models.nnet.ReshapeLayer))
+        reshape_layer = beer.nnet.neuralnetwork.create_nnet_element(strval)
+        self.assertTrue(isinstance(reshape_layer, beer.nnet.neuralnetwork.ReshapeLayer))
         self.assertEqual(reshape_layer.shape[0], -1)
         self.assertEqual(reshape_layer.shape[1], 10)
         self.assertEqual(reshape_layer.shape[2], 20)
@@ -69,136 +89,17 @@ class TestNeuralNetwork(BaseTest):
         self.assertEqual(output_data.shape[1], 10)
         self.assertEqual(output_data.shape[2], 20)
 
-    def test_create_nnet_block(self):
-        variables = {'<feadim>': self.dim}
-        block_conf = {
-            'structure': [
-                'Linear:in_features=<feadim>;out_features=20',
-                'Tanh',
-                'Linear:in_features=20;out_features=<feadim>',
-                'Sigmoid'
-            ],
-            'residual_connection': 'none'
-        }
-        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
-        nnet_block = nnet_block.type(self.type)
-        nnet_block(self.data)
-
-        block_conf['residual_connection'] = 'none'
-        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
-        nnet_block = nnet_block.type(self.type)
-        nnet_block(self.data)
-
-        block_conf['residual_connection'] = 'identity'
-        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
-        nnet_block = nnet_block.type(self.type)
-        nnet_block(self.data)
-
-        block_conf = {
-            'structure': [
-                'Linear:in_features=<feadim>;out_features=20',
-                'Tanh',
-                'Linear:in_features=20;out_features=20',
-                'Sigmoid'
-            ],
-            'residual_connection': 'Linear:in_features=<feadim>;out_features=20'
-        }
-        nnet_block = beer.models.nnet.create_nnet_block(block_conf, variables)
-        nnet_block = nnet_block.type(self.type)
-        nnet_block(self.data)
-
-    def test_create_encoder_nnet(self):
-        variables = {'<feadim>': self.dim}
-        conf = {
-            'blocks': [
-                {
-                    'structure': [
-                        'Linear:in_features=<feadim>;out_features=20',
-                        'Tanh',
-                        'Linear:in_features=20;out_features=<feadim>',
-                        'Sigmoid'
-                    ],
-                    'residual_connection': 'identity'
-                },
-                {
-                    'structure': [
-                        'Linear:in_features=<feadim>;out_features=20',
-                        'Sigmoid',
-                        'Linear:in_features=20;out_features=<feadim>',
-                        'Sigmoid'
-                    ],
-                    'residual_connection': 'none'
-                }
-            ],
-            'dim_input_normal_layer': '<feadim>',
-            'dim_output_normal_layer': '30',
-            'covariance': 'diagonal'
-        }
-        encoder = beer.models.nnet.create_encoder(conf, self.data.dtype,
-                                                  self.data.device, variables)
-        encoder = encoder.type(self.type)
-        outputs = encoder(self.data)
-        self.assertEqual(len(outputs), 2)
-        self.assertEqual(outputs[0].shape[1], 30)
-        self.assertEqual(outputs[1].shape[1], 30)
-
-        conf['covariance'] = 'isotropic'
-        encoder = beer.models.nnet.create_encoder(conf, self.data.dtype,
-                                                  self.data.device, variables)
-        outputs = encoder(self.data)
-        self.assertEqual(len(outputs), 2)
-        self.assertEqual(outputs[0].shape[1], 30)
-        self.assertEqual(outputs[1].shape[1], 30)
-
-
-    def test_create_normal_decoder(self):
-        variables = {'<feadim>': self.dim}
-        conf = {
-            'blocks': [
-                {
-                    'structure': [
-                        'Linear:in_features=<feadim>;out_features=20',
-                        'Tanh',
-                        'Linear:in_features=20;out_features=30',
-                        'Sigmoid'
-                    ],
-                    'residual_connection': 'none'
-                },
-                {
-                    'structure': [
-                        'Linear:in_features=30;out_features=20',
-                        'Sigmoid',
-                        'Linear:in_features=20;out_features=30',
-                        'Sigmoid'
-                    ],
-                    'residual_connection': 'none'
-                }
-            ],
-            'dim_input_model_layer': '30',
-            'dim_output_model_layer': '<feadim>',
-        }
-        decoder = beer.models.nnet.create_normal_decoder(conf,
-                                                         self.data.dtype,
-                                                         self.data.device,
-                                                         variables)
-        outputs = decoder(self.data)
-        self.assertEqual(outputs.shape[1], self.dim)
-
-        decoder = beer.models.nnet.create_bernoulli_decoder(conf,
-                                                            self.data.dtype,
-                                                            self.data.device,
-                                                            variables)
-        outputs = decoder(self.data)
-        self.assertEqual(outputs.shape[1], self.dim)
-
-        decoder = beer.models.nnet.create_beta_decoder(conf,
-                                                       self.data.dtype,
-                                                       self.data.device,
-                                                       variables)
-        alphas, betas = decoder(self.data)
-        self.assertEqual(alphas.shape[1], self.dim)
-        self.assertEqual(betas.shape[1], self.dim)
-
+    def test_nnet_forward(self):
+        dtype, device = self.data.dtype, self.data.device
+        for conf_file in self.conf_files:
+            with self.subTest(conf_file=conf_file):
+                # Doesn't test the content of the object, just make sure
+                # that the creation does not crash.
+                with open(conf_file, 'r') as fid:
+                    data = fid.read().replace('<feadim>', str(self.dim))
+                    conf = yaml.load(data)
+                    nnet = beer.nnet.neuralnetwork.create(conf, dtype, device)
+                    nnet(self.data)
 
 __all__ = [
     'TestNeuralNetwork',

@@ -14,7 +14,7 @@ from basetest import BaseTest
 # increase, it may happen in practice due to floating point precision
 # issue that it decreases a little bit at one step. Settings TOLERANCE
 # to 0 will make the test fails if one of such update occurs.
-TOLERANCE = 1e-6
+TOLERANCE = 1e-2
 
 # Number of iteration to run while testing the VBI algorithm.
 N_EPOCHS = 2
@@ -33,14 +33,17 @@ class TestEvidenceLowerbound(BaseTest):
 
         self.conf_files = []
         for path in glob.glob('./tests/models/*yml'):
-            if not os.path.basename(path).startswith('normalset'):
+            if not os.path.basename(path).startswith('normalset') and \
+               not os.path.basename(path).startswith('bernoulli'):
                 self.conf_files.append(path)
         assert len(self.conf_files) > 0
 
         self.models = []
         for conf_file in self.conf_files:
             with open(conf_file, 'r') as fid:
-                conf = yaml.load(fid)
+                data = fid.read()
+                data = data.replace('<feadim>', str(self.dim))
+                conf = yaml.load(data)
             model = beer.create_model(conf, self.mean, self.variance)
             self.models.append(model)
 
@@ -67,9 +70,9 @@ class TestEvidenceLowerbound(BaseTest):
 
     def test_sum(self):
         for i, model in enumerate(self.models):
-            with self.subTest(model=model):
+            with self.subTest(model=self.conf_files[i]):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                        *model.grouped_parameters, lrate=1.)
+                        model.mean_field_groups, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_EPOCHS):
                     self.seed(1)
@@ -85,9 +88,9 @@ class TestEvidenceLowerbound(BaseTest):
 
     def test_optim(self):
         for i, model in enumerate(self.models):
-            with self.subTest(model=model):
+            with self.subTest(model=self.conf_files[i]):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                        *model.grouped_parameters, lrate=1.)
+                        model.mean_field_groups, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     self.seed(1)
@@ -102,9 +105,9 @@ class TestEvidenceLowerbound(BaseTest):
     def test_type_switch_float(self):
         for i, orig_model in enumerate(self.models):
             model = orig_model.float()
-            with self.subTest(model=model):
+            with self.subTest(model=self.conf_files[i]):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                        *model.grouped_parameters, lrate=1.)
+                        model.mean_field_groups, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     self.seed(1)
@@ -119,9 +122,9 @@ class TestEvidenceLowerbound(BaseTest):
     def test_type_switch_double(self):
         for i, orig_model in enumerate(self.models):
             model = orig_model.double()
-            with self.subTest(model=model):
+            with self.subTest(model=self.conf_files[i]):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                        *model.grouped_parameters, lrate=1.)
+                        model.mean_field_groups, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     self.seed(1)
@@ -134,11 +137,11 @@ class TestEvidenceLowerbound(BaseTest):
                     previous = elbo
 
     def test_change_device(self):
-        for orig_model in self.models:
+        for i, orig_model in enumerate(self.models):
             model = orig_model.to(self.device)
-            with self.subTest(model=model):
+            with self.subTest(model=self.conf_files[i]):
                 optim = beer.BayesianModelCoordinateAscentOptimizer(
-                        *model.grouped_parameters, lrate=1.)
+                        model.mean_field_groups, lrate=1.)
                 previous = -float('inf')
                 for _ in range(N_ITER):
                     self.seed(1)

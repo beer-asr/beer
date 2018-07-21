@@ -104,6 +104,9 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
 
         self.natural_hparams = natural_hparams
 
+    def __repr__(self):
+        return self.__class__.__name__.replace('Prior', '')
+
     @property
     def expected_sufficient_statistics(self):
         '''``torch.Tensor``: Expected value of the sufficient statistics.
