@@ -62,8 +62,13 @@ class InverseAutoRegressiveFlow(torch.nn.Module):
         super().__init__()
         self.nnet_flow = torch.nn.Sequential(*nnet_flow)
 
-    def forward(self, mean, variance, flow_params, stop_level=-1):
-        noise = torch.randn(*mean.shape, dtype=mean.dtype, device=mean.device)
+    def forward(self, mean, variance, flow_params, use_mean=False,
+                stop_level=-1):
+        if use_mean:
+            noise = torch.zeros_like(mean)
+        else:
+            noise = torch.randn(*mean.shape, dtype=mean.dtype,
+                                device=mean.device)
 
         # Initialize the flow
         feadim = mean.shape[1]
@@ -118,7 +123,7 @@ class VAE(BayesianModel):
     def sufficient_statistics(data):
         return data
 
-    def forward(self, s_stats, kl_weight=1., nsamples=1, **kwargs):
+    def forward(self, s_stats, kl_weight=1., use_mean=False, **kwargs):
         # For the case of the VAE, the sufficient statistics is just
         # the data itself. We just rename s_stats to avoid
         # confusion with the sufficient statistics of the latent model.
@@ -126,7 +131,8 @@ class VAE(BayesianModel):
 
         # Sample states from the posterior distribution.
         mean, variance, flow_params = self.encoder(data)
-        nflow_llh, nflow_samples = self.nflow(mean, variance, flow_params)
+        nflow_llh, nflow_samples = self.nflow(mean, variance, flow_params,
+                                             use_mean)
 
         # Expected log-likelihood of the states given the prior model.
         latent_stats = self.latent_model.sufficient_statistics(nflow_samples)
