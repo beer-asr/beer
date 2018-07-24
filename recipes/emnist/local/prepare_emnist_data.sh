@@ -3,7 +3,7 @@
 # Prepare the EMNIST dataset.
 
 url=http://www.itl.nist.gov/iaui/vip/cs_links/EMNIST/gzip.zip
-batch_size=1000
+batch_size=500
 outdir=data
 
 # Download the data

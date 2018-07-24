@@ -257,31 +257,32 @@ class PLDASet(BayesianModelSet):
     def accumulate(self, s_stats, parent_msg=None):
         if parent_msg is None:
             raise ValueError('"parent_msg" should not be None')
-        resps = parent_msg
+        resps = parent_msg.detach()
 
         dtype = s_stats.dtype
         device = s_stats.device
 
         # Separate the s. statistics.
-        _, data = s_stats[:, 0], s_stats[:, 1:]
+        _, data = s_stats[:, 0].detach(), s_stats[:, 1:].detach()
 
         # Load cached values and clear the cache.
-        deltas = self.cache['deltas']
-        l_means = self.cache['l_means']
-        l_quads = self.cache['l_quads']
-        prec = self.cache['prec']
-        noise_means = self.cache['noise_means']
-        m_mean = self.cache['m_mean']
-        class_s_mean = self.cache['class_s_mean']
-        class_s_quad = self.cache['class_s_quad']
-        class_mean_mean = self.cache['class_mean_mean']
-        class_mean_quad = self.cache['class_mean_quad']
+        deltas = self.cache['deltas'].detach()
+        l_means = self.cache['l_means'].detach()
+        l_quads = self.cache['l_quads'].detach()
+        prec = self.cache['prec'].detach()
+        noise_means = self.cache['noise_means'].detach()
+        m_mean = self.cache['m_mean'].detach()
+        class_s_mean = self.cache['class_s_mean'].detach()
+        class_s_quad = self.cache['class_s_quad'].detach()
+        class_mean_mean = self.cache['class_mean_mean'].detach()
+        class_mean_quad = self.cache['class_mean_quad'].detach()
         class_means = class_mean_mean @ class_s_mean
         self.clear_cache()
 
         data_noise_class_mean = data - (noise_means + class_means[:, None, :])
         data_noise_class_mean = (resps.t()[:, :, None] * data_noise_class_mean).sum(dim=0)
         acc_mean = torch.sum(data_noise_class_mean, dim=0)
+        del data_noise_class_mean
 
         acc_noise_s_stats1 = (resps.t()[:, :, None] * l_quads).sum(dim=0)
         acc_noise_s_stats1 = acc_noise_s_stats1.sum(dim=0)
@@ -295,6 +296,7 @@ class PLDASet(BayesianModelSet):
             l_means[:, i, :].t() @ data_class_means[i]
             for i in range(len(self))
         ]).sum(dim=0).view(-1)
+        del data_class_means
 
         acc_class_s_stats1 = \
             (resps @ class_mean_quad.view(len(self), -1)).sum(dim=0)
@@ -305,6 +307,7 @@ class PLDASet(BayesianModelSet):
         acc_means = (resps.t()[:, :, None] * data_noise_means).sum(dim=1)
         acc_class_s_stats2 = acc_means[:, :, None] * class_mean_mean[:, None, :]
         acc_class_s_stats2 = acc_class_s_stats2.sum(dim=0).t().contiguous().view(-1)
+
         acc_stats = {
             self.precision_param: torch.cat([
                 .5 * torch.tensor(len(s_stats) * self._data_dim, dtype=dtype,

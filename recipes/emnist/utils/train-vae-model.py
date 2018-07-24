@@ -92,14 +92,12 @@ def run():
     model = model.to(device)
 
     # Build the optimizer.
-    nnet_parameters = list(model.encoder.parameters()) + \
-        list(model.decoder.parameters())
-    params = model.grouped_parameters
+    nnet_parameters = list(model.modules_parameters())
+    params = model.mean_field_groups
     std_optim = torch.optim.Adam(nnet_parameters, lr=args.lrate_nnet,
                                  weight_decay=args.weight_decay)
-    optimizer = beer.BayesianModelCoordinateAscentOptimizer(*params,
-                                                            lrate=args.lrate,
-                                                            std_optim=std_optim)
+    optimizer = beer.BayesianModelCoordinateAscentOptimizer(
+        params, lrate=args.lrate, std_optim=std_optim)
 
     # Batch size for the stochastic training.
     if args.batch_size > 0:
@@ -113,10 +111,10 @@ def run():
 
             features = data.to(device)
             optimizer.zero_grad()
-            elbo = beer.evidence_lower_bound(model, features,
-                                             datasize=float(db_stats['counts']),
-                                             kl_weight=args.kl_weight,
-                                             nsamples=args.nsamples)
+            elbo = beer.evidence_lower_bound(
+                model, features, datasize=float(db_stats['counts']),
+                kl_weight=args.kl_weight
+            )
             elbo.backward()
             elbo.natural_backward()
             optimizer.step()

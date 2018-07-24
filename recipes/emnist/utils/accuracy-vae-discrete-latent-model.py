@@ -44,9 +44,6 @@ def run():
                         help='size of the mini-batch. If set to a '
                              'negative value, the whole database '
                              'will be used for each update')
-    parser.add_argument('--nsamples', type=int, default=1,
-                        help='number of samples to estimate the '
-                             'expectation')
     parser.add_argument('--use-gpu', action='store_true', help='use GPU')
     parser.add_argument('fealist', help='list of npz archives')
     parser.add_argument('model', help='model to train')
@@ -71,12 +68,11 @@ def run():
     counts = 0
     for batch_no, data in enumerate(batches(archives, args.batch_size,
                                             to_torch_dataset)):
-        features, labels = data[0].to(device), data[1].to(device)
-        means, variances = model.encoder(features)
-        samples = beer.sample_from_normals(means, variances, args.nsamples)
-        samples = samples.view(args.nsamples * len(features), -1)
+        features, labels = data[0].to(device).detach(), \
+            data[1].to(device).detach()
+        means, variances, nflow_params = model.encoder(features)
+        _, samples = model.nflow(means, variances, nflow_params, use_mean=True)
         posts = model.latent_model.posteriors(samples)
-        posts = posts.view(args.nsamples, len(features), -1).mean(dim=0)
         predictions = posts.argmax(dim=1)
         hits += int((predictions == labels).sum())
         counts += len(labels)

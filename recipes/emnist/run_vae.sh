@@ -14,13 +14,8 @@ local/prepare_emnist_data.sh || exit 1
 # Database to use ("digits" or "letters").
 dbname=digits
 
-
-######################
-# Standard VAE model #
-######################
-
 # Model configuration file.
-modelname=vae_convnet_beta_ldim20
+modelname=vae_convnet_bernoulli_ldim20_gmm
 modelconf="conf/${modelname}.yml"
 
 # Output directory of the experiment.
@@ -45,14 +40,12 @@ steps/create-model.sh \
 steps/train-vae-model.sh \
     --use-gpu \
     --lograte=10 \
-    --pt-epochs=10 \
+    --pt-epochs=5 \
     --pt-lrate=.1 \
     --pt-lrate-nnet=1e-3 \
     --epochs=30 \
     --lrate=.1 \
     --lrate-nnet=1e-3 \
-    --nsamples=5 \
-    --unsupervised \
     -- \
     "${sge_opts}" \
     "${outdir}/init.mdl" \
@@ -60,60 +53,12 @@ steps/train-vae-model.sh \
     "data/${dbname}/train/archives" \
     "${outdir}" || exit  1
 
-
-##################
-# PLDA-VAE model #
-##################
-
-# Keep a pointer to the previous VAE model and the statistics of the
-# database.
-previous_model="${outdir}/final.mdl"
-dbstats="${outdir}/dbstats.npz"
-
-echo previous model: ${previous_model}
-
-# Model configuration file.
-modelname="${modelname}_plda"
-modelconf="conf/${modelname}.yml"
-
-# Output directory of the experiment.
-outdir="exp/${dbname}/${modelname}"
-
-# Create the output directory
-mkdir -p "${outdir}"
-
-# Create the VAE with the PLDA latent model based on the current VAE
-# model.
-steps/build-vae-from-vae.sh \
-    "${modelconf}" \
-    "${dbstats}" \
-    "${previous_model}" \
-    "${outdir}/init.mdl" || exit 1
-
-# Training the model.
-steps/train-vae-model.sh \
-    --use-gpu \
-    --lograte=10 \
-    --pt-epochs=1 \
-    --pt-lrate=.1 \
-    --pt-lrate-nnet=0. \
-    --epochs=30 \
-    --lrate=.1 \
-    --lrate-nnet=1e-3 \
-    --nsamples=5 \
-    -- \
-    "${sge_opts}" \
-    "${outdir}/init.mdl" \
-    "${dbstats}" \
-    "data/${dbname}/train/archives" \
-    "${outdir}" || exit  1
-
 # Compute the accuracy of the model.
 steps/accuracy-vae-discrete-latent-model.sh \
     --use-gpu \
-    --nsamples=5 \
     -- \
     "-l gpu=1,mem_free=1G,ram_free=1G" \
     "${outdir}/final.mdl" \
     "data/${dbname}/test/archives" \
     "${outdir}/results"
+
