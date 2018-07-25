@@ -292,7 +292,7 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
 
     @staticmethod
     def sufficient_statistics(data):
-        s_stats1 = torch.cat([data**2, torch.ones_like(data)], dim=1)
+        s_stats1 = torch.cat([data ** 2, torch.ones_like(data)], dim=1)
         s_stats2 = torch.cat([data, torch.ones_like(data)], dim=1)
         return s_stats1, s_stats2
 
@@ -309,8 +309,13 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
             raise ValueError('"parent_msg" should not be None')
         s_stats1, s_stats2, weights = *s_stats, parent_msg
         feadim = s_stats1.size(1) // 2
+
+        acc_stats1 = s_stats1[:, :feadim].sum(dim=0)
+        epsilon = torch.tensor(1e-3, dtype=s_stats1.dtype,
+                               device=s_stats1.device)
+        acc_stats1 = torch.where(acc_stats1 > epsilon, acc_stats1, epsilon)
         acc_stats = torch.cat([
-            s_stats1[:, :feadim].sum(dim=0),
+            acc_stats1,
             (weights.t() @ s_stats2[:, :feadim]).view(-1),
             (weights.t() @ s_stats2[:, feadim:]).view(-1),
             len(s_stats1) * torch.ones(feadim, dtype=s_stats1.dtype,
