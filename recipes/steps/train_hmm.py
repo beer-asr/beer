@@ -27,6 +27,7 @@ def main():
         help='Utterance number in each batch')
     parser.add_argument('--epochs', type=int)
     parser.add_argument('--use-gpu', action='store_true')
+    parser.add_argument('--fast-eval', action='store_true')
     args = parser.parse_args()
 
 
@@ -41,6 +42,7 @@ def main():
     batch_size = args.batch_size
     epochs = args.epochs
     use_gpu = args.use_gpu
+    fast_eval = args.fast_eval
 
     if use_gpu:
         device = torch.device('cuda')
@@ -49,7 +51,7 @@ def main():
 
     with open(args.emissions, 'rb') as pickle_file:
         emissions = pickle.load(pickle_file)
-    emissions.to(device)
+    emissions = emissions.to(device)
 
     tot_counts = int(stats['nframes'])
 
@@ -59,8 +61,8 @@ def main():
 
 
     # Training
-    params = emissions.grouped_parameters
-    optimizer = beer.BayesianModelCoordinateAscentOptimizer(*params, lrate=lrate)
+    params = emissions.mean_field_groups
+    optimizer = beer.BayesianModelCoordinateAscentOptimizer(params, lrate=lrate)
 
     for epoch in range(epochs):
         logging.info("Epoch: %d", epoch)
@@ -73,7 +75,8 @@ def main():
         hmm_epoch = hmm_mdl_dir + '/' + str(epoch) + '.mdl'
         for batch_keys in batches:
             optimizer.zero_grad()
-            elbo = beer.evidence_lower_bound(datasize=tot_counts)
+            elbo = beer.evidence_lower_bound(datasize=tot_counts,
+                fast_eval=fast_eval)
             batch_nutt = len(batch_keys)
             for utt in batch_keys:
                 logging.info("Training with utterance %s", utt)
@@ -88,7 +91,7 @@ def main():
                 #hmm_ali = beer.HMM.create(init_state, final_state,
                 #          trans_mat_ali, ali_sets, training_type).to(device)
                 elbo += beer.evidence_lower_bound(hmm_ali, ft,
-                        datasize=tot_counts)
+                        datasize=tot_counts, fast_eval=fast_eval)
             elbo.natural_backward()
             logging.info("Elbo value is %f", float(elbo) / (tot_counts *
                          batch_nutt))

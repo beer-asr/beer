@@ -51,7 +51,7 @@ class HMM(BayesianModel):
         self.final_states = final_states
         self.trans_mat = trans_mat
         self.modelset = modelset
-        self._resps = None
+        #self._resps = None
         self.training_type = training_type
 
     @classmethod
@@ -71,6 +71,9 @@ class HMM(BayesianModel):
 
         '''
         return cls(init_states, final_states, trans_mat, modelset, training_type)
+    
+    def mean_field_factorization(self):
+        return self.model_set.mean_field_factorization()
 
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
@@ -182,7 +185,8 @@ class HMM(BayesianModel):
                                    dtype=pc_exp_llh.dtype,
                                    device=pc_exp_llh.device)
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
-            self._resps = onehot_labels
+            #self._resps = onehot_labels
+            self.cache['resps'] = onehot_labels
         elif self.training_type == 'viterbi':
             onehot_labels = onehot(HMM.viterbi(self.init_states,
                                   self.final_states, self.trans_mat,
@@ -190,14 +194,16 @@ class HMM(BayesianModel):
                                   len(self.modelset), dtype=pc_exp_llh.dtype,
                                   device=pc_exp_llh.device)
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
-            self._resps = onehot_labels
+            #self._resps = onehot_labels
+            self.cache['resps'] = onehot_labels
         else:
             log_alphas = HMM.baum_welch_forward(self.init_states,
                                                 self.trans_mat, pc_exp_llh.detach())
             log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat,
                                                 pc_exp_llh.detach())
             exp_llh = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
-            resps = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))
+            #resps = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))
+            self.cache['resps'] = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))
         return exp_llh
 
     def accumulate(self, s_stats, parent_msg=None):
@@ -223,6 +229,8 @@ class AlignModelSet(BayesianModelSet):
     ####################################################################
     # BayesianModel interface.
     ####################################################################
+    def mean_field_factorization(self):
+        return self.model_set.mean_field_factorization()
 
     def sufficient_statistics(self, data):
         return len(data), self.model_set.sufficient_statistics(data)
