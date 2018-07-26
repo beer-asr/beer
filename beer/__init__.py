@@ -5,3 +5,4 @@ from .expfamilyprior import *
 from .vbi import *
 from .utils import *
 from . import features
+from . import nnet

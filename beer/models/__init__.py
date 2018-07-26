@@ -1,4 +1,5 @@
 
+from .parameters import *
 from .bayesmodel import *
 from .normal import *
 from .normalset import *
@@ -18,9 +19,8 @@ _model_types = {
     'HMM': None,
     'PPCA': ppca.create,
     'PLDASet': pldaset.create,
-    'NonLinearSubspaceModel': vae.create_normal_vae,
-    'BernoulliNonLinearSubspaceModel': vae.create_bernoulli_vae,
-    'BetaNonLinearSubspaceModel': vae.create_beta_vae,
+    'VAE': vae.create_vae,
+    'NonLinearSubspaceModel': vae.create_non_linear_subspace_model,
 }
 
 

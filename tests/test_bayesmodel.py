@@ -219,7 +219,8 @@ class TestBayesianModel(BaseTest):
         self.models1 = []
         for conf_file in self.conf_files:
             with open(conf_file, 'r') as fid:
-                conf = yaml.load(fid)
+                data = fid.read().replace('<feadim>', str(self.dim))
+                conf = yaml.load(data)
             model = beer.create_model(conf, self.mean, self.variance)
             self.models1.append(model)
 
@@ -228,40 +229,13 @@ class TestBayesianModel(BaseTest):
         self.models2 = []
         for conf_file in self.conf_files:
             with open(conf_file, 'r') as fid:
-                conf = yaml.load(fid)
+                data = fid.read().replace('<feadim>', str(self.dim))
+                conf = yaml.load(data)
             model = beer.create_model(conf, self.mean, self.variance)
             self.models2.append(model)
 
         self.weights = (1 + torch.randn(2)**2).type(self.type)
         self.weights /= self.weights.sum()
-
-    def test_average_models(self):
-        for i, model1, model2 in zip(range(len(self.models1)), self.models1,
-                            self.models2):
-            with self.subTest(model=model1):
-                new_model = beer.average_models([model1, model2], self.weights)
-                for param1, param2, new_param in zip(model1.parameters,
-                                                     model2.parameters,
-                                                     new_model.parameters):
-                    p1 = param1.prior.natural_hparams.numpy()
-                    nparam = new_param.prior.natural_hparams.numpy()
-                    self.assertArraysAlmostEqual(p1, nparam)
-
-                    p1 = param1.posterior.natural_hparams.numpy()
-                    p2 = param2.posterior.natural_hparams.numpy()
-                    np = new_param.posterior.natural_hparams.numpy()
-                    w1, w2 = self.weights.numpy()
-                    self.assertArraysAlmostEqual(w1 * p1 + w2 * p2, np)
-
-                for param1, param2, new_param in zip(model1.non_bayesian_parameters(),
-                                                     model2.non_bayesian_parameters(),
-                                                     new_model.non_bayesian_parameters()):
-                    w1, w2 = self.weights.numpy()
-                    p1 = param1.data.numpy()
-                    p2 = param2.data.numpy()
-                    avg_p = w1 * p1 + w2 * p2
-                    nparam = new_param.data.numpy()
-                    self.assertArraysAlmostEqual(avg_p, nparam)
 
 
 __all__ = [

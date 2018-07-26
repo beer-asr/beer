@@ -1,5 +1,9 @@
-type: VAE
-llh_type: normal
+type: NonLinearSubspaceModel
+normal_model:
+  type: Normal
+  covariance: isotropic
+  prior_strength: 1.
+  noise_std: 0
 normalizing_flow:
   type: InverseAutoRegressive
   depth: 1
@@ -35,7 +39,7 @@ decoder:
     - Linear:in_features=10;out_features=5
   prob_layer:
     type: NormalLayer
-    covariance: isotropic
+    covariance: unity
     dim_in: 5
     dim_out: <feadim>
 latent_model:
