@@ -143,11 +143,11 @@ def create_nnet_block(block_conf):
     return NeuralNetworkBlock(structure, res_connection)
 
 
-def create(nnet_blocks_conf, dtype, device):
+def create(conf, dtype, device):
     '''Create a neural network.
 
     Args:
-        nnet_blocks_conf (list of dict): Configuration dictionaries.
+        conf (dif): Configuration data.
         dtype (``torch.dtype``): Type of the returned network.
         device (``torch.device``): Device of the returned network.
 
@@ -155,10 +155,11 @@ def create(nnet_blocks_conf, dtype, device):
         list of :any:`NeuralNetworkBlock`
 
     '''
+    nnet_blocks_conf = conf['nnet_structure']
     network = torch.nn.Sequential(*[create_nnet_block(block_conf)
                                   for block_conf in nnet_blocks_conf])
     return network.type(dtype).to(device)
 
 
-# This module does not have a public interface.
+# This module has no public interface.
 __all__ = []

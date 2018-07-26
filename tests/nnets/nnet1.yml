@@ -1,19 +1,21 @@
-- residual: false
-  block_structure:
-  - Linear:in_features=<feadim>;out_features=20
-  - Tanh
-  - ReshapeLayer:shape=(-1, 10, 2)
-  - ReshapeLayer:shape=(-1, 20)
-- residual: true
-  block_structure:
-  - Linear:in_features=20;out_features=20
-  - Tanh
-  - Linear:in_features=20;out_features=20
-  - Sigmoid
-- residual: false
-  block_structure:
-  - Linear:in_features=20;out_features=20
-  - ReLU
-  - Linear:in_features=20;out_features=10
-  - Tanh
+type: NeuralNetwork
+nnet_structure:
+  - residual: false
+    block_structure:
+    - Linear:in_features=<feadim>;out_features=20
+    - Tanh
+    - ReshapeLayer:shape=(-1, 10, 2)
+    - ReshapeLayer:shape=(-1, 20)
+  - residual: true
+    block_structure:
+    - Linear:in_features=20;out_features=20
+    - Tanh
+    - Linear:in_features=20;out_features=20
+    - Sigmoid
+  - residual: false
+    block_structure:
+    - Linear:in_features=20;out_features=20
+    - ReLU
+    - Linear:in_features=20;out_features=10
+    - Tanh
 
