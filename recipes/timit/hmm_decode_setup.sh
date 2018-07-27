@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Required
-modeldir="/export/b07/jyang/beer/recipes/timit/exp_feat_transformed/"
+modeldir="/export/b07/jyang/beer/recipes/timit/exp_feat_transformed_hmm_gmm_1/"
 decode_data_dir="/export/b07/jyang/beer/recipes/timit/data/test"
 feats=$decode_data_dir/feats_transformed.npz
 trans=$decode_data_dir/phones.text

@@ -27,6 +27,7 @@ def main():
         help='Utterance number in each batch')
     parser.add_argument('--epochs', type=int)
     parser.add_argument('--use-gpu', action='store_true')
+    parser.add_argument('--fast-eval', action='store_true')
     args = parser.parse_args()
 
 
@@ -41,6 +42,7 @@ def main():
     batch_size = args.batch_size
     epochs = args.epochs
     use_gpu = args.use_gpu
+    fast_eval = args.fast_eval
 
     if use_gpu:
         device = torch.device('cuda')
@@ -49,30 +51,32 @@ def main():
 
     with open(args.emissions, 'rb') as pickle_file:
         emissions = pickle.load(pickle_file)
-    emissions.to(device)
+    emissions = emissions.to(device)
 
     tot_counts = int(stats['nframes'])
 
     log_format = "%(asctime)s :%(lineno)d %(levelname)s:%(message)s"
     logging.basicConfig(level=logging.INFO, format=log_format)
 
-    # Prepare data
-    keys = list(feats.keys())
-    random.shuffle(keys)
-    batches = [keys[i: i+batch_size] for i in range(0, len(keys), batch_size)]
-    logging.info("Data shuffled into %d batches", len(batches))
+
 
     # Training
-    elbo_fn = beer.EvidenceLowerBound(tot_counts)
-    params = emissions.parameters
-    optimizer = beer.BayesianModelOptimizer(params, lrate)
+    params = emissions.mean_field_groups
+    optimizer = beer.BayesianModelCoordinateAscentOptimizer(params, lrate=lrate)
 
     for epoch in range(epochs):
         logging.info("Epoch: %d", epoch)
+        # Prepare data
+        keys = list(feats.keys())
+        random.shuffle(keys)
+        batches = [keys[i: i+batch_size] for i in range(0, len(keys), batch_size)]
+        logging.info("Data shuffled into %d batches", len(batches))
+ 
         hmm_epoch = hmm_mdl_dir + '/' + str(epoch) + '.mdl'
         for batch_keys in batches:
             optimizer.zero_grad()
-            elbo = elbo_fn.zero()
+            elbo = beer.evidence_lower_bound(datasize=tot_counts,
+                fast_eval=fast_eval)
             batch_nutt = len(batch_keys)
             for utt in batch_keys:
                 logging.info("Training with utterance %s", utt)
@@ -86,7 +90,8 @@ def main():
                           trans_mat_ali, ali_sets, training_type)
                 #hmm_ali = beer.HMM.create(init_state, final_state,
                 #          trans_mat_ali, ali_sets, training_type).to(device)
-                elbo += elbo_fn(hmm_ali, ft)
+                elbo += beer.evidence_lower_bound(hmm_ali, ft,
+                        datasize=tot_counts, fast_eval=fast_eval)
             elbo.natural_backward()
             logging.info("Elbo value is %f", float(elbo) / (tot_counts *
                          batch_nutt))
