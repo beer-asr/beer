@@ -21,19 +21,26 @@ class ReshapeLayer(torch.nn.Module):
         return data.view(*self.shape)
 
 
+class IdentityLayer(torch.nn.Module):
+    '''Convenience module implementing an idenity mapping.'''
+
+    def forward(self, data):
+        return data
+
+
 class NeuralNetworkBlock(torch.nn.Module):
     '''Generic Neural Network block with (optional) residual connection.
 
     '''
-    def __init__(self, structure, residual_connection=False):
+    def __init__(self, structure, residual_connection=None):
         super().__init__()
         self.structure = structure
         self.residual_connection = residual_connection
 
     def forward(self, data):
         h = self.structure(data)
-        if self.residual_connection:
-            h += data
+        if self.residual_connection is not None:
+            h += self.residual_connection(data)
         return h
 
 
@@ -113,6 +120,8 @@ def create_nnet_element(strval):
         # for the beer extensions or raise an error.
         elif function_name == 'ReshapeLayer':
             function = ReshapeLayer
+        elif function_name == 'IdentityLayer':
+            function = IdentityLayer
         else:
             raise ValueError('Unknown nnet element type: {}'.format(function_name))
         kwargs = {
@@ -139,7 +148,9 @@ def create_nnet_block(block_conf):
     structure_list = [create_nnet_element(strval)
                       for strval in block_conf['block_structure']]
     structure = torch.nn.Sequential(*structure_list)
-    res_connection = block_conf['residual']
+    res_connection = block_conf.get('residual', None)
+    if res_connection is not None:
+        res_connection = create_nnet_element(res_connection)
     return NeuralNetworkBlock(structure, res_connection)
 
 

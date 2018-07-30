@@ -11,11 +11,10 @@ normalizing_flow:
     width: 20
 encoder:
   nnet_structure:
-  - residual: false
-    block_structure:
+  - block_structure:
     - Linear:in_features=<feadim>;out_features=10
     - Tanh
-  - residual: true
+  - residual: IdentityLayer
     block_structure:
     - Linear:in_features=10;out_features=20
     - Tanh
@@ -28,7 +27,7 @@ encoder:
     dim_out: 5
 decoder:
   nnet_structure:
-  - residual: true
+  - residual: IdentityLayer
     block_structure:
     - Linear:in_features=5;out_features=10
     - Tanh

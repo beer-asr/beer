@@ -1,16 +1,15 @@
-- residual: false
-  block_structure:
+- block_structure:
   - Linear:in_features=<feadim>;out_features=20
   - Tanh
   - ReshapeLayer:shape=(-1, 10, 2)
   - ReshapeLayer:shape=(-1, 20)
-- residual: true
+- residual: IdentityLayer
   block_structure:
   - Linear:in_features=20;out_features=20
   - Tanh
   - Linear:in_features=20;out_features=20
   - Sigmoid
-- residual: false
+- residual: Linear:in_features=20;out_features=10
   block_structure:
   - Linear:in_features=20;out_features=20
   - ReLU
