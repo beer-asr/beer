@@ -37,16 +37,36 @@ class BayesianModel(metaclass=abc.ABCMeta):
         self._cache = {}
 
     def _register_submodel(self, name, submodel):
+        if hasattr(self, name):
+            self._unregister_submodel(name)
         self._submodels[name] = submodel
 
+    def _unregister_submodel(self, name):
+        del self._submodels[name]
+
     def _register_parameter(self, name, param):
+        if hasattr(self, name):
+            self._unregister_parameter(name)
         self._bayesian_parameters[name] = param
 
+    def _unregister_parameter(self, name):
+        del self._bayesian_parameters[name]
+
     def _register_parameterset(self, name, paramset):
+        if hasattr(self, name):
+            self._unregister_parameterset(name)
         self._bayesian_parameters[name] = paramset
 
+    def _unregister_parameterset(self, name):
+        del self._bayesian_parameters[name]
+
     def _register_module(self, name, module):
+        if hasattr(self, name):
+            self._unregister_module(name)
         self._modules[name] = module
+
+    def _unregister_module(self, name):
+        del self._modules[name]
 
     def __setattr__(self, name, value):
         if isinstance(value, BayesianModel):
