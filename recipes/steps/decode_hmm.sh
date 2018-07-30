@@ -20,4 +20,6 @@ python3 steps/decode_hmm.py $model $decode_dir $feats \
                             --phone_39 $phone_39 \
                             --remove_sys $remove_sys \
                             --score \
+                            > $decode_dir/decode.log 2>&1
 #                            --use-gpu
+

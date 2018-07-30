@@ -370,6 +370,69 @@ class PLDASet(BayesianModelSet):
         return torch.sum(resps * self.cache['l_kl_divs'].t(), dim=-1).detach()
 
 
+def _init_params_from_gmm(gmm, dim_noise_subspace, dim_class_subspace, dtype,
+                          device):
+    # Get the data dimension.
+    comp_mean = gmm.modelset[0].mean
+    feadim = len(comp_mean)
+
+    # Weights of the mixture.
+    weights = gmm.weights
+
+    # Global mean of the model.
+    global_mean = torch.zeros(feadim, dtype=dtype, device=device)
+    for normal, weight in zip(gmm.modelset, weights):
+        global_mean += weight * normal.mean
+
+    # Within class covariance matrix.
+    cov_w = torch.zeros(feadim, feadim, dtype=dtype, device=device)
+    for normal, weight in zip(gmm.modelset, weights):
+        cov_w += weight * normal.cov
+
+    # Between class covariance matrix.
+    cov_b = torch.zeros(feadim, feadim, dtype=dtype, device=device)
+    for normal, weight in zip(gmm.modelset, weights):
+        mean = normal.mean
+        dist = global_mean - mean
+        cov_b += weight * torch.ger(dist, dist)
+
+    # Noise subspace.
+    evals, evecs = torch.eig(cov_w, eigenvectors=True)
+    evals, idxs = evals[:, 0].sort(descending=True)
+    evecs = evecs[:, idxs]
+    init_noise_s = evecs[:,:dim_noise_subspace].t()
+
+    # Class subspace.
+    matrix = torch.inverse(cov_w) @ cov_b
+    evals, evecs = torch.eig(matrix, eigenvectors=True)
+    evals, idxs = evals[:, 0].sort(descending=True)
+    evecs = evecs[:, idxs]
+    init_class_s = evecs[:,:dim_class_subspace]
+
+    means = []
+    for normal in gmm.modelset:
+        means.append(init_class_s @ (normal.mean - global_mean))
+
+    return global_mean, init_noise_s, init_class_s, means
+
+
+def _init_params_random(global_mean, noise_std, class_means, m_noise_subspace,
+                        m_class_subspace, dtype, device):
+    noise = torch.randn(*m_noise_subspace.size(), dtype=dtype, device=device)
+    init_noise_s = m_noise_subspace + noise_std * noise
+
+    noise = torch.randn(*m_class_subspace.size(), dtype=dtype, device=device)
+    init_class_s = m_class_subspace + noise_std * noise
+
+    means = []
+    for p_mean in range(class_means):
+        r_mean = p_mean + noise_std * torch.randn(m_class_subspace.shape[0],
+                                                  dtype=dtype, device=device)
+        means.append(r_mean)
+
+    return global_mean, init_noise_s, init_class_s, means
+
+
 def create(model_conf, mean, variance, create_model_handle):
     dtype, device = mean.dtype, mean.device
     n_classes = model_conf['size']
@@ -377,6 +440,7 @@ def create(model_conf, mean, variance, create_model_handle):
     dim_class_subspace = model_conf['dim_class_subspace']
     noise_std = model_conf['noise_std']
     prior_strength = model_conf['prior_strength']
+    gmm = model_conf.get('gmm', None)
 
     # Precision.
     shape = torch.tensor([prior_strength], dtype=dtype, device=device)
@@ -385,22 +449,13 @@ def create(model_conf, mean, variance, create_model_handle):
     prior_prec = GammaPrior(shape, rate)
     posterior_prec = GammaPrior(shape, rate)
 
-    # Global mean.
-    mean_variance = torch.tensor([1. / float(prior_strength)], dtype=dtype,
-                                 device=device)
-    prior_mean = NormalIsotropicCovariancePrior(mean, mean_variance)
-    posterior_mean = NormalIsotropicCovariancePrior(mean, mean_variance)
-
     # Noise subspace.
     noise_subspace = torch.eye(dim_noise_subspace, len(mean), dtype=dtype,
                                device=device)
     cov = torch.eye(noise_subspace.size(0), dtype=dtype, device=device)
     cov /= prior_strength
     prior_noise_subspace = MatrixNormalPrior(noise_subspace, cov)
-    rand_init = noise_subspace + noise_std * torch.randn(*noise_subspace.size(),
-                                                         dtype=dtype,
-                                                         device=device)
-    posterior_noise_subspace = MatrixNormalPrior(rand_init, cov)
+    cov_noise_subspace = cov
 
     # Class subspace.
     class_subspace = torch.eye(dim_class_subspace, len(mean), dtype=dtype,
@@ -408,27 +463,48 @@ def create(model_conf, mean, variance, create_model_handle):
     cov = torch.eye(class_subspace.size(0), dtype=dtype, device=device)
     cov /= prior_strength
     prior_class_subspace = MatrixNormalPrior(class_subspace, cov)
-    rand_init = class_subspace + noise_std * torch.randn(*class_subspace.size(),
-                                                         dtype=dtype,
-                                                         device=device)
-    posterior_class_subspace = MatrixNormalPrior(rand_init, cov)
+    cov_class_subspace = cov
 
-    # cov = same as class subspace.
-    class_mean_priors, class_mean_posteriors = [], []
-    class_means_p = torch.eye(n_classes, dim_class_subspace, dtype=dtype,
-                                device=device)
-    for mean_i in class_means_p:
-        class_mean_priors.append(NormalFullCovariancePrior(mean_i, cov))
-        class_mean_posteriors.append(NormalFullCovariancePrior(
-            mean_i + noise_std * torch.randn(mean_i.shape[0], dtype=dtype,
-                                             device=device),
-            cov)
+    # Class means
+    class_means = torch.zeros(n_classes, dim_class_subspace, dtype=dtype,
+                              device=device)
+
+    # Initialize the posterior of the global mean, class means,
+    # class/noise subpace. parameters
+    if gmm is None:
+        g_mean, init_noise_s, init_class_s, init_means = _init_params_random(
+            mean, noise_std, n_classes, noise_subspace, class_subspace, dtype,
+            device
+        )
+    else:
+        g_mean, init_noise_s, init_class_s, init_means = _init_params_from_gmm(
+            gmm, dim_noise_subspace, dim_class_subspace, dtype, device
         )
 
-    return PLDASet(prior_mean, posterior_mean, prior_prec, posterior_prec,
-                   prior_noise_subspace, posterior_noise_subspace,
-                   prior_class_subspace, posterior_class_subspace,
-                   class_mean_priors, class_mean_posteriors)
+    # Global mean.
+    mean_variance = torch.tensor([1. / float(prior_strength)], dtype=dtype,
+                                 device=device)
+    prior_global_mean = NormalIsotropicCovariancePrior(g_mean, mean_variance)
+    posterior_global_mean = NormalIsotropicCovariancePrior(g_mean, mean_variance)
+
+    posterior_noise_subspace = MatrixNormalPrior(init_noise_s,
+                                                 cov_noise_subspace)
+    posterior_class_subspace = MatrixNormalPrior(init_class_s,
+                                                 cov_class_subspace)
+    class_mean_priors, class_mean_posteriors = [], []
+    for prior_mean, post_mean in zip(class_means, init_means):
+        class_mean_priors.append(NormalFullCovariancePrior(prior_mean,
+                                                           cov_class_subspace))
+        class_mean_posteriors.append(NormalFullCovariancePrior(post_mean,
+                                                               cov_class_subspace))
+
+    return PLDASet(
+        prior_global_mean, posterior_global_mean,
+        prior_prec, posterior_prec,
+        prior_noise_subspace, posterior_noise_subspace,
+        prior_class_subspace, posterior_class_subspace,
+        class_mean_priors, class_mean_posteriors
+    )
 
 
 __all__ = ['PLDASet']

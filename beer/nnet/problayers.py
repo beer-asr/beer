@@ -126,7 +126,7 @@ def create(layer_conf):
             return NormalIsotropicCovarianceLayer(in_dim, out_dim)
         elif cov_type == 'diagonal':
             return NormalDiagonalCovarianceLayer(in_dim, out_dim)
-        elif cov_type == 'unity':
+        elif cov_type == 'identity':
             return NormalUnityCovarianceLayer(in_dim, out_dim)
         else:
             raise ValueError('Unsupported covariance type: {}'.format(cov_type))
