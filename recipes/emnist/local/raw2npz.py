@@ -44,7 +44,7 @@ def run():
         batch_images = batch_images.reshape(len(batch_images), -1)
         batch_images /= norm_const
         batch_images = np.random.binomial(1, batch_images)
-        batch_labels = labels[idx: idx + bsize].astype(np.int32) - 1
+        batch_labels = labels[idx: idx + bsize].astype(np.int32)
         outpath = os.path.join(args.outdir, 'batch' + str(batchno))
         np.savez(outpath, features=batch_images, labels=batch_labels)
         idx += bsize

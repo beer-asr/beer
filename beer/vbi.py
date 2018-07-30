@@ -102,7 +102,7 @@ class EvidenceLowerBoundInstance:
             acc_stats = self._acc_stats[parameter]
             natural_grad = parameter.prior.natural_hparams + \
                 scale * acc_stats - parameter.posterior.natural_hparams
-            parameter.natural_grad += natural_grad
+            parameter.natural_grad += natural_grad.detach()
 
 
 def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,

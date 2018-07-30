@@ -6,7 +6,7 @@ normalizing_flow:
   iaf_block:
     activation: Tanh
     context_dim: 30
-    data_dim: 10
+    data_dim: 20
     depth: 2
     width: 100
 encoder:
@@ -27,12 +27,12 @@ encoder:
     covariance: isotropic
     flow_params_dim: 30
     dim_in: 300
-    dim_out: 10
+    dim_out: 20
 decoder:
   nnet_structure:
   - residual: no
     block_structure:
-    - Linear:in_features=10;out_features=300
+    - Linear:in_features=20;out_features=300
     - Softplus
     - Linear:in_features=300;out_features=32
     - Softplus
