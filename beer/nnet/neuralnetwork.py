@@ -40,7 +40,7 @@ class NeuralNetworkBlock(torch.nn.Module):
     def forward(self, data):
         h = self.structure(data)
         if self.residual_connection is not None:
-            h += self.residual_connection(data)
+            h = h + self.residual_connection(data)
         return h
 
 

@@ -106,7 +106,7 @@ class EvidenceLowerBoundInstance:
 
 
 def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
-                         kl_weight=1., fast_eval=False, **kwargs):
+                         fast_eval=False, **kwargs):
     '''Evidence Lower Bound objective function of Variational Bayes
     Inference.
 
@@ -124,10 +124,6 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
         datasize (int): Number of data points of the total training
             data. If set to 0 or negative values, the size of the
             provided `minibatch_data` will be used instead.
-        kl_weights (float): Scaling of the kl divergence. Note that the
-            scaling will not affect the standard Bayesian model
-            learning. This parameters is only affecting models like VAE
-            that uses standard backpropagation.
         fast_eval (boolean): If true, skip computing KL-divergence for the
             global parameters.
         kwargs (object): Model specific extra parameters to evalute the
@@ -190,7 +186,6 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
     model.clear_cache()
 
     return EvidenceLowerBoundInstance(elbo_value, acc_stats,
-
                                       model.bayesian_parameters(),
                                       mb_datasize, datasize)
 

@@ -1,3 +1,5 @@
+type: NeuralNetwork
+nnet_structure:
 - block_structure:
   - Linear:in_features=<feadim>;out_features=20
   - Tanh

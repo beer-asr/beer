@@ -15,7 +15,7 @@ local/prepare_emnist_data.sh || exit 1
 dbname=digits
 
 # Model configuration file.
-modelname=vae_convnet_elu_bernoulli_fldim450_ldim50_nflowdepth15_gmm_scov
+modelname=vae_convnet_elu_bernoulli_ldim64_gmm_scov
 modelconf="conf/${modelname}.yml"
 
 # Output directory of the experiment.
@@ -39,7 +39,7 @@ steps/create-model.sh \
 # Training the model.
 steps/train-vae-model.sh \
     --use-gpu \
-    --lograte=10 \
+    --lograte=100 \
     --pt-epochs=20 \
     --pt-lrate=.1 \
     --pt-lrate-nnet=1e-3 \
