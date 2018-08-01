@@ -60,8 +60,8 @@ class MixtureSet(BayesianModelSet):
         w_pc_exp_llhs = pc_exp_llhs + log_weights
 
         # Responsibilities.
-        log_norm = logsumexp(w_pc_exp_llhs, dim=-1)
-        log_resps = w_pc_exp_llhs - log_norm[:, :, None].detach()
+        log_norm = logsumexp(w_pc_exp_llhs.detach(), dim=-1)
+        log_resps = w_pc_exp_llhs.detach() - log_norm[:, :, None]
         resps = log_resps.exp()
         self.cache['resps'] = resps
 
@@ -88,39 +88,19 @@ class MixtureSet(BayesianModelSet):
                                                         self.num_comp)
         mdlset = [self.modelset[i] for i in range(key * self.num_comp,
                   (key+1) * self.num_comp)]
-        return MixtureSetElement(weights=weights[key] / weights.sum(),
+        return MixtureSetElement(weights=weights[key] / weights[key].sum(),
                                  modelset=mdlset)
 
     def __len__(self):
         return self.num_mix
-   
-    def double(self):
-        return self.__class__(
-            [weight_param.prior.double() for weight_param in self.mix_weights],
-            [weight_param.posterior.double() for weight_param in self.mix_weights],
-            self.modelset.double()
-        )
-    
-    def float(self):
-        return self.__class__(
-            [weight_param.prior.float() for weight_param in self.mix_weights],
-            [weight_param.posterior.float() for weight_param in self.mix_weights],
-            self.modelset.float()
-        )
-   
-    def to(self, device):
-        return self.__class__(
-            [weight_param.prior.to(device) for weight_param in self.mix_weights],
-            [weight_param.posterior.to(device) for weight_param in self.mix_weights],
-            self.modelset.to(device)
-        )
+
 
 def create(model_conf, mean, variance, create_model_handle):
     dtype, device = mean.dtype, mean.device
     n_mix = model_conf['size']
     model_conf['components']['size'] *= n_mix
     modelset = create_model_handle(model_conf['components'], mean, variance)
-    n_element = int(len(modelset) / n_mix) 
+    n_element = int(len(modelset) / n_mix)
     weights = torch.ones(n_element, dtype=dtype, device=device) / n_element
     weights = weights.repeat(n_mix, 1)
     prior_strength = model_conf['prior_strength']

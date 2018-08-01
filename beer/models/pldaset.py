@@ -407,7 +407,7 @@ def _init_params_from_gmm(gmm, dim_noise_subspace, dim_class_subspace, dtype,
     evals, evecs = torch.eig(matrix, eigenvectors=True)
     evals, idxs = evals[:, 0].sort(descending=True)
     evecs = evecs[:, idxs]
-    init_class_s = evecs[:,:dim_class_subspace]
+    init_class_s = evecs[:,:dim_class_subspace].t()
 
     means = []
     for normal in gmm.modelset:
