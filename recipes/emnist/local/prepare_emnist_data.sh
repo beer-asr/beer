@@ -17,8 +17,36 @@ fi
 # Extract and prepare the data.
 if [ ! -f "${outdir}/.done" ]; then
     mkdir -p "${outdir}"/rawdata
+    mkdir -p "${outdir}"/byclass/train "${outdir}"/byclass/test
     mkdir -p "${outdir}"/letters/train "${outdir}"/letters/test
     mkdir -p "${outdir}"/digits/train "${outdir}"/digits/test
+    mkdir -p "${outdir}"/digits/train_{50,100,500,1000}
+
+    # Extract the "by-class" data set.
+    unzip -p ${outdir}/gzip.zip gzip/emnist-byclass-train-images-idx3-ubyte.gz | \
+        gunzip > "${outdir}/rawdata/emnist-byclass-train-images.raw" || exit 1
+    unzip -p ${outdir}/gzip.zip gzip/emnist-byclass-train-labels-idx1-ubyte.gz | \
+        gunzip > "${outdir}/rawdata/emnist-byclass-train-labels.raw" || exit 1
+    unzip -p ${outdir}/gzip.zip gzip/emnist-byclass-test-images-idx3-ubyte.gz | \
+        gunzip > "${outdir}/rawdata/emnist-byclass-test-images.raw" || exit 1
+    unzip -p ${outdir}/gzip.zip gzip/emnist-byclass-test-labels-idx1-ubyte.gz | \
+        gunzip > "${outdir}/rawdata/emnist-byclass-test-labels.raw" || exit 1
+
+    python local/raw2npz_byclass.py \
+        --batch-size ${batch_size} \
+        "${outdir}/rawdata/emnist-byclass-train-images.raw" \
+        "${outdir}/rawdata/emnist-byclass-train-labels.raw" \
+        "${outdir}/byclass/train" || exit 1
+    find "${outdir}/byclass/train" \
+        -name 'batch*npz' | sort -V > "${outdir}/byclass/train/archives" || exit 1
+
+    python local/raw2npz_byclass.py \
+        --batch-size ${batch_size} \
+        "${outdir}/rawdata/emnist-byclass-train-images.raw" \
+        "${outdir}/rawdata/emnist-byclass-train-labels.raw" \
+        "${outdir}/byclass/test" || exit 1
+    find "${outdir}/byclass/test" \
+        -name 'batch*npz' | sort -V > "${outdir}/byclass/test/archives" || exit 1
 
     # Extract the letters data set.
     unzip -p ${outdir}/gzip.zip gzip/emnist-letters-train-images-idx3-ubyte.gz | \
@@ -32,6 +60,7 @@ if [ ! -f "${outdir}/.done" ]; then
 
     python local/raw2npz.py \
         --batch-size ${batch_size} \
+        --label-offset -1 \
         "${outdir}/rawdata/emnist-letters-train-images.raw" \
         "${outdir}/rawdata/emnist-letters-train-labels.raw" \
         "${outdir}/letters/train" || exit 1
@@ -40,6 +69,7 @@ if [ ! -f "${outdir}/.done" ]; then
 
     python local/raw2npz.py \
         --batch-size ${batch_size} \
+        --label-offset -1 \
         "${outdir}/rawdata/emnist-letters-train-images.raw" \
         "${outdir}/rawdata/emnist-letters-train-labels.raw" \
         "${outdir}/letters/test" || exit 1
@@ -71,6 +101,95 @@ if [ ! -f "${outdir}/.done" ]; then
         "${outdir}/digits/test" || exit 1
     find "${outdir}/digits/test" \
         -name 'batch*npz' | sort -V > "${outdir}/digits/test/archives" || exit 1
+
+    python local/raw2npz.py \
+        --batch-size ${batch_size} \
+        --no-sampling \
+        "${outdir}/rawdata/emnist-digits-train-images.raw" \
+        "${outdir}/rawdata/emnist-digits-train-labels.raw" \
+        "${outdir}/digits_nosampling/train" || exit 1
+    find "${outdir}/digits_nosampling/train" \
+        -name 'batch*npz' | sort -V > "${outdir}/digits_nosampling/train/archives" || exit 1
+
+    python local/raw2npz.py \
+        --batch-size ${batch_size} \
+        "${outdir}/rawdata/emnist-digits-test-images.raw" \
+        "${outdir}/rawdata/emnist-digits-test-labels.raw" \
+        "${outdir}/digits_nosampling/test" || exit 1
+    find "${outdir}/digits_nosampling/test" \
+        -name 'batch*npz' | sort -V > "${outdir}/digits_nosampling/test/archives" || exit 1
+
+    python local/raw2npz.py \
+        --batch-size ${batch_size} \
+        --train-samples 50 \
+        "${outdir}/rawdata/emnist-digits-train-images.raw" \
+        "${outdir}/rawdata/emnist-digits-train-labels.raw" \
+        "${outdir}/digits_50/train" || exit 1
+    find "${outdir}/digits_50/train" \
+        -name 'batch*npz' | sort -V > "${outdir}/digits_50/train/archives" || exit 1
+
+    python local/raw2npz.py \
+        --batch-size ${batch_size} \
+        --train-samples 50 \
+        "${outdir}/rawdata/emnist-digits-test-images.raw" \
+        "${outdir}/rawdata/emnist-digits-test-labels.raw" \
+        "${outdir}/digits_50/test" || exit 1
+    find "${outdir}/digits_50/test" \
+        -name 'batch*npz' | sort -V > "${outdir}/digits_50/test/archives" || exit 1
+
+    python local/raw2npz.py \
+        --batch-size ${batch_size} \
+        --train-samples 100 \
+        "${outdir}/rawdata/emnist-digits-train-images.raw" \
+        "${outdir}/rawdata/emnist-digits-train-labels.raw" \
+        "${outdir}/digits_100/train" || exit 1
+    find "${outdir}/digits_100/train" \
+        -name 'batch*npz' | sort -V > "${outdir}/digits_100/train/archives" || exit 1
+
+    python local/raw2npz.py \
+        --batch-size ${batch_size} \
+        --train-samples 100 \
+        "${outdir}/rawdata/emnist-digits-test-images.raw" \
+        "${outdir}/rawdata/emnist-digits-test-labels.raw" \
+        "${outdir}/digits_100/test" || exit 1
+    find "${outdir}/digits_100/test" \
+        -name 'batch*npz' | sort -V > "${outdir}/digits_100/test/archives" || exit 1
+
+    python local/raw2npz.py \
+        --batch-size ${batch_size} \
+        --train-samples 500 \
+        "${outdir}/rawdata/emnist-digits-train-images.raw" \
+        "${outdir}/rawdata/emnist-digits-train-labels.raw" \
+        "${outdir}/digits_500/train" || exit 1
+    find "${outdir}/digits_500/train" \
+        -name 'batch*npz' | sort -V > "${outdir}/digits_500/train/archives" || exit 1
+
+    python local/raw2npz.py \
+        --batch-size ${batch_size} \
+        --train-samples 500 \
+        "${outdir}/rawdata/emnist-digits-test-images.raw" \
+        "${outdir}/rawdata/emnist-digits-test-labels.raw" \
+        "${outdir}/digits_500/test" || exit 1
+    find "${outdir}/digits_500/test" \
+        -name 'batch*npz' | sort -V > "${outdir}/digits_500/test/archives" || exit 1
+
+    python local/raw2npz.py \
+        --batch-size ${batch_size} \
+        --train-samples 1000 \
+        "${outdir}/rawdata/emnist-digits-train-images.raw" \
+        "${outdir}/rawdata/emnist-digits-train-labels.raw" \
+        "${outdir}/digits_1000/train" || exit 1
+    find "${outdir}/digits_1000/train" \
+        -name 'batch*npz' | sort -V > "${outdir}/digits_1000/train/archives" || exit 1
+
+    python local/raw2npz.py \
+        --batch-size ${batch_size} \
+        --train-samples 1000 \
+        "${outdir}/rawdata/emnist-digits-test-images.raw" \
+        "${outdir}/rawdata/emnist-digits-test-labels.raw" \
+        "${outdir}/digits_1000/test" || exit 1
+    find "${outdir}/digits_1000/test" \
+        -name 'batch*npz' | sort -V > "${outdir}/digits_1000/test/archives" || exit 1
 
     rm -fr "${outdir}/rawdata" || exit 1
 

@@ -62,3 +62,40 @@ steps/accuracy-vae-discrete-latent-model.sh \
     "data/${dbname}/test/archives" \
     "${outdir}/results"
 
+
+if [ ! -f "${outdir}/vae_plda/.done" ]; then
+    mkdir -p "${outdir}/vae_plda"
+    python utils/create-plda-vae-from-gmm-vae.py \
+        --prior-strength 1. \
+        --dim-noise-subspace 63 \
+        --dim-class-subspace 52 \
+        "${outdir}/final.mdl" \
+        "${outdir}/vae_plda/init.mdl" || exit 1
+
+    date > "${outdir}/vae_plda/.done"
+else
+    echo "VAE-PLDA model already trained. Skipping."
+fi
+
+steps/train-vae-model.sh \
+    --use-gpu \
+    --lograte=100 \
+    --pt-epochs=0 \
+    --epochs=20 \
+    --lrate=.1 \
+    --lrate-nnet=1e-3 \
+    -- \
+    "${sge_opts}" \
+    "${outdir}/vae_plda/init.mdl" \
+    "${outdir}/dbstats.npz" \
+    "data/${dbname}/train/archives" \
+    "${outdir}/vae_plda" || exit  1
+
+# Compute the accuracy of the model.
+steps/accuracy-vae-discrete-latent-model.sh \
+    --use-gpu \
+    -- \
+    "-l gpu=1,mem_free=1G,ram_free=1G" \
+    "${outdir}/vae_plda/final.mdl" \
+    "data/${dbname}/test/archives" \
+    "${outdir}/vae_plda/results"
