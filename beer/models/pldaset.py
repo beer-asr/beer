@@ -109,6 +109,47 @@ class PLDASet(BayesianModelSet):
             means.append(mean)
         return torch.stack(means)
 
+    def reset_class_means(self, n_classes, noise_std=0.1, prior_strength=1.):
+        '''Create a new set of class means randomly initialized.
+
+        Args:
+            n_classes (int): number of components.
+            noise_std (float): Standard deviation of the noise for the
+                random initialization.
+            prior_strength (float): Strength of the class means' prior.
+
+        '''
+        dtype, device = self.mean.dtype, self.mean.device
+
+        # Covariance of the prior.
+        cov = torch.eye(self._subspace2_dim, dtype=dtype, device=device)
+        cov /= prior_strength
+
+        # Prior of the class_means.
+        class_means = torch.zeros(n_classes, self._subspace2_dim, dtype=dtype,
+                              device=device)
+
+        # Generate new random means for the initialization of the
+        # posteriors.
+        _, _, _, init_means = _init_params_random(
+            self.mean, noise_std, n_classes, self.noise_subspace,
+            self.class_subspace, dtype, device
+        )
+
+        class_mean_priors, class_mean_posteriors = [], []
+        for prior_mean, post_mean in zip(class_means, init_means):
+            class_mean_priors.append(NormalFullCovariancePrior(
+                prior_mean, cov))
+            class_mean_posteriors.append(NormalFullCovariancePrior(
+                post_mean, cov))
+
+        # Set the new parameter.
+        self.class_mean_params = BayesianParameterSet([
+            BayesianParameter(prior, posterior)
+            for prior, posterior in zip(class_mean_priors,
+                                        class_mean_posteriors)
+        ])
+
     def _get_expectation(self):
         log_prec, prec = self.precision_param.expected_value(concatenated=False)
         noise_s_quad, noise_s_mean = \
@@ -425,9 +466,9 @@ def _init_params_random(global_mean, noise_std, class_means, m_noise_subspace,
     init_class_s = m_class_subspace + noise_std * noise
 
     means = []
-    for p_mean in range(class_means):
-        r_mean = p_mean + noise_std * torch.randn(m_class_subspace.shape[0],
-                                                  dtype=dtype, device=device)
+    for i in range(class_means):
+        r_mean = noise_std * torch.randn(m_class_subspace.shape[0],
+                                         dtype=dtype, device=device)
         means.append(r_mean)
 
     return global_mean, init_noise_s, init_class_s, means

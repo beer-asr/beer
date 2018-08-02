@@ -37,6 +37,21 @@ class Mixture(DiscreteLatentBayesianModel):
         weights = torch.exp(self.weights_param.expected_value())
         return weights / weights.sum()
 
+    def reset_weights(self, prior_strength=1.):
+        '''Reset the prior/posterior over the weight to a flat
+        distribution
+
+        Args:
+            prior_strength (float): Strength of the prior.
+
+        '''
+        dtype, device = self.weights.dtype, self.weights.device
+        size = len(self.modelset)
+        weights = torch.ones(size, dtype=dtype, device=device) / size
+        prior_weights = DirichletPrior(prior_strength * weights)
+        posterior_weights = DirichletPrior(prior_strength * weights)
+        self.weights_param = BayesianParameter(prior_weights, posterior_weights)
+
     def _local_kl_divergence(self, log_resps):
         log_weights = self.weights_param.expected_value()
         retval = torch.sum(log_resps.exp() * (log_resps - log_weights), dim=-1)
