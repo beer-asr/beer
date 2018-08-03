@@ -109,6 +109,14 @@ class PLDASet(BayesianModelSet):
             means.append(mean)
         return torch.stack(means)
 
+    @property
+    def class_covs(self):
+        covs = []
+        for mean_param in self.class_mean_params:
+            cov, _ = mean_param.expected_value(concatenated=False)
+            covs.append(cov)
+        return torch.stack(covs)
+
     def reset_class_means(self, n_classes, noise_std=0.1, prior_strength=1.):
         '''Create a new set of class means randomly initialized.
 
@@ -411,6 +419,42 @@ class PLDASet(BayesianModelSet):
         return torch.sum(resps * self.cache['l_kl_divs'].t(), dim=-1).detach()
 
 
+class MarginalPLDASet(BayesianModel):
+    '''PLDA set where the noise/class subspace are marginalized.'''
+
+    def __init__(self, normal, prior_means, posterior_means):
+        self.normal = normal
+        self.class_mean_params = BayesianParameterSet([
+            BayesianParameter(prior, posterior)
+            for prior, posterior in zip(prior_means, posterior_means)
+        ])
+
+    @property
+    def mean(self):
+        return self.normal.mean
+
+    @property
+    def cov(self):
+        return self.normal.cov
+
+    @property
+    def class_means(self):
+        means = []
+        for mean_param in self.class_mean_params:
+            _, mean = mean_param.expected_value(concatenated=False)
+            means.append(mean)
+        return torch.stack(means)
+
+    @property
+    def class_covs(self):
+        covs = []
+        for mean_param in self.class_mean_params:
+            cov, _ = mean_param.expected_value(concatenated=False)
+            covs.append(cov)
+        return torch.stack(covs)
+
+
+
 def _init_params_from_gmm(gmm, dim_noise_subspace, dim_class_subspace, dtype,
                           device):
     # Get the data dimension.
@@ -441,6 +485,7 @@ def _init_params_from_gmm(gmm, dim_noise_subspace, dim_class_subspace, dtype,
     evals, evecs = torch.eig(cov_w, eigenvectors=True)
     evals, idxs = evals[:, 0].sort(descending=True)
     evecs = evecs[:, idxs]
+    print(evals)
     init_noise_s = evecs[:,:dim_noise_subspace].t()
 
     # Class subspace.

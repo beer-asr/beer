@@ -8,6 +8,7 @@ from .mixtureset import *
 from .hmm import *
 from .ppca import *
 from .pldaset import *
+from .marginalpldaset import *
 from .vae import *
 from .. import nnet
 
@@ -20,6 +21,7 @@ _model_types = {
     'HMM': None,
     'PPCA': ppca.create,
     'PLDASet': pldaset.create,
+    'MarginalPLDASet': marginalpldaset.create,
     'VAE': vae.create_vae,
     'NonLinearSubspaceModel': vae.create_non_linear_subspace_model,
     'NeuralNetwork': nnet.neuralnetwork.create
