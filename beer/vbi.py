@@ -100,9 +100,7 @@ class EvidenceLowerBoundInstance:
         scale = self._datasize / self._minibatchsize
         for parameter in self._model_parameters:
             acc_stats = self._acc_stats[parameter]
-            natural_grad = parameter.prior.natural_hparams + \
-                scale * acc_stats - parameter.posterior.natural_hparams
-            parameter.natural_grad += natural_grad.detach()
+            parameter.accumulate_natural_grad(scale * acc_stats)
 
 
 def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
@@ -235,18 +233,14 @@ class BayesianModelOptimizer:
         if self._std_optim is not None:
             self._std_optim.zero_grad()
         for parameter in self._parameters:
-            parameter.zero_natural_grad()
+            parameter.natural_grad.zero_()
 
     def step(self):
         'Update all the standard/Bayesian parameters.'
         if self._std_optim is not None:
             self._std_optim.step()
         for parameter in self._parameters:
-            parameter.posterior.natural_hparams = torch.tensor(
-                parameter.posterior.natural_hparams + \
-                self._lrate * parameter.natural_grad,
-                requires_grad=True
-            )
+            parameter.natural_grad_update(self._lrate)
 
 
 class BayesianModelCoordinateAscentOptimizer(BayesianModelOptimizer):
@@ -292,11 +286,8 @@ class BayesianModelCoordinateAscentOptimizer(BayesianModelOptimizer):
         if self._update_count >= len(self._groups):
             self._update_count = 0
         for parameter in self._groups[self._update_count]:
-            parameter.posterior.natural_hparams = torch.tensor(
-                parameter.posterior.natural_hparams + \
-                self._lrate * parameter.natural_grad,
-                requires_grad=True
-            )
+            parameter.natural_grad_update(self._lrate)
+
         self._update_count += 1
 
 

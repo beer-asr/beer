@@ -311,9 +311,6 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
         feadim = s_stats1.size(1) // 2
 
         acc_stats1 = s_stats1[:, :feadim].sum(dim=0)
-        epsilon = torch.tensor(1e-2, dtype=s_stats1.dtype,
-                               device=s_stats1.device)
-        acc_stats1 = torch.where(acc_stats1 > epsilon, acc_stats1, epsilon)
         acc_stats = torch.cat([
             acc_stats1,
             (weights.t() @ s_stats2[:, :feadim]).view(-1),
