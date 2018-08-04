@@ -1110,6 +1110,7 @@ class WishartPrior(ExpFamilyPrior):
             ``torch.Tensor``: tuple of sufficient statistics.
 
         '''
+        dtype, device = natural_hparams.dtype, natural_hparams.device
         hnp1, hnp2 = self.split_sufficient_statistics(natural_hparams)
         dim = len(hnp1)
 
@@ -1121,7 +1122,7 @@ class WishartPrior(ExpFamilyPrior):
         lognorm = -.5 * dof * _logdet(W)
         lognorm += .5 * dof * dim * math.log(2)
         lognorm += .25 * dim * (dim - 1) * math.log(math.pi)
-        seq = torch.arange(1, dim + 1, 1).type(natural_hparams.dtype)
+        seq = torch.arange(1, dim + 1, 1, dtype=dtype, device=device)
         lognorm += torch.lgamma(.5 * (dof + 1 - seq)).sum()
 
         return lognorm
