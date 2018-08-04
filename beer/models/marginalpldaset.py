@@ -14,19 +14,30 @@ from .normalset import NormalSetElement
 from ..expfamilyprior import NormalWishartPrior
 from ..expfamilyprior import NormalIsotropicCovariancePrior
 from ..expfamilyprior import NormalFullCovariancePrior
+from ..expfamilyprior import WishartPrior
 from ..utils import make_symposdef
 
 
 class MarginalPLDASet(BayesianModelSet):
     '''PLDA set where the noise/class subspace are marginalized.'''
 
-    def __init__(self, normal, prior_means, posterior_means):
+    def __init__(self, normal, prior_means, posterior_means, prior_class_cov,
+                 posterior_class_cov):
         super().__init__()
         self.normal = normal
         self.class_mean_params = BayesianParameterSet([
             BayesianParameter(prior, posterior)
             for prior, posterior in zip(prior_means, posterior_means)
         ])
+        self.class_cov_param = BayesianParameter(prior_class_cov,
+                                                 posterior_class_cov)
+        self.class_cov_param.register_callback(self.on_class_cov_update)
+
+    def on_class_cov_update(self):
+        cov = self.class_cov
+        p_mean = torch.zeros_like(self.mean)
+        for param in self.class_mean_params:
+            param.prior = NormalFullCovariancePrior(p_mean, cov)
 
     @property
     def mean(self):
@@ -52,13 +63,21 @@ class MarginalPLDASet(BayesianModelSet):
             covs.append(quad - torch.ger(mean, mean))
         return torch.stack(covs)
 
+    @property
+    def class_cov(self):
+        np1, np2 = self.class_cov_param.expected_value(concatenated=False)
+        return torch.inverse(np1)
+
     ####################################################################
     # BayesianModel interface.
     ####################################################################
 
     def mean_field_factorization(self):
-        return self.normal.mean_field_factorization() + \
-            [list(self.class_mean_params)]
+        return [
+            *self.normal.mean_field_factorization(),
+            [*self.class_mean_params],
+            [self.class_cov_param]
+        ]
 
     def sufficient_statistics(self, data):
         # We need the raw data to accumualte the s. statistics.
@@ -97,11 +116,6 @@ class MarginalPLDASet(BayesianModelSet):
             (s_stats * resps[:, :, None]).sum(dim=1))
 
         # Accumulate the statistics for the class means.
-        #class_mean_acc_stats1 = class_s_quad
-        #class_mean_acc_stats1 = make_symposdef(class_mean_acc_stats1)
-        #w_data_noise_means = resps.t()[:, :, None] * data_noise_means
-        #class_mean_acc_stats2 = \
-        #    (class_s_mean @ w_data_noise_means.sum(dim=1).t()).t()
         acc_resps = resps.sum(dim=0)
         acc_prec_data_mean = (prec_data_mean[:, :, None] @ resps[:, None, :]).sum(dim=0).t()
         for i, mean_param in enumerate(self.class_mean_params):
@@ -112,6 +126,29 @@ class MarginalPLDASet(BayesianModelSet):
                 ])
             }
             acc_stats.update(class_mean_acc_stats)
+
+        # Accumulate statistics for the class cov (i.e. the between
+        # class covariance matrix).
+        _, prior_mean = self.class_mean_params[0].prior.split_sufficient_statistics(
+            self.class_mean_params[0].prior.expected_sufficient_statistics
+        )
+        class_means_quad, class_mean_mean = [], []
+        for mean_param in self.class_mean_params:
+            quad, mean = mean_param.expected_value(concatenated=False)
+            class_means_quad.append(quad)
+            mean_prior_mean = torch.ger(mean, prior_mean)
+            class_mean_mean.append(mean_prior_mean + mean_prior_mean.t())
+        class_means_quad = torch.stack(class_means_quad)
+        class_means_mean = torch.stack(class_mean_mean)
+        prior_mean_mean = torch.ger(prior_mean, prior_mean)
+        stats = class_means_quad - class_means_mean + prior_mean_mean
+        class_cov_acc_stats = {
+            self.class_cov_param: torch.cat([
+                -.5 * stats.sum(dim=0).view(-1),
+                .5 * torch.tensor(len(self), dtype=dtype, device=device).view(1)
+            ])
+        }
+        acc_stats.update(class_cov_acc_stats)
 
         return acc_stats
 
@@ -157,21 +194,29 @@ def create(model_conf, mean, variance, create_model_handle):
 
     # Class means
     class_means = torch.zeros(n_classes, len(mean), dtype=dtype,device=device)
-    inti_class_means = []
+    init_class_means = []
     for i in range(n_classes):
         r_mean = noise_std * torch.randn(len(mean), dtype=dtype, device=device)
-        inti_class_means.append(r_mean)
+        init_class_means.append(r_mean)
 
     cov = torch.eye(len(mean), dtype=dtype, device=device) / prior_strength
     class_mean_priors, class_mean_posteriors = [], []
-    for prior_mean, post_mean in zip(class_means, inti_class_means):
-        class_mean_priors.append(NormalFullCovariancePrior(prior_mean, cov))
+    class_mean_prior = NormalFullCovariancePrior(torch.zeros_like(mean), cov)
+    for post_mean in init_class_means:
+        class_mean_priors.append(class_mean_prior)
         class_mean_posteriors.append(NormalFullCovariancePrior(post_mean, cov))
+
+    class_cov = torch.eye(len(mean), dtype=dtype, device=device)
+    dof = torch.tensor(prior_strength + len(mean) - 1, dtype=dtype, device=device)
+    class_cov_prior = WishartPrior(class_cov, dof)
+    class_cov_posterior = WishartPrior(class_cov, dof)
 
     return MarginalPLDASet(
         normal,
         class_mean_priors,
-        class_mean_posteriors
+        class_mean_posteriors,
+        class_cov_prior,
+        class_cov_posterior
     )
 
 
