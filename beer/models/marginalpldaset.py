@@ -83,7 +83,7 @@ class MarginalPLDASet(BayesianModelSet):
         dim = len(mean)
         dtype, device = mean.dtype, mean.device
         class_cov = self.class_cov
-        cov = self[0].cov
+        cov = self[0].cov / prior_strength
         lower_cholesky = torch.potrf(class_cov, upper=False)
 
         # Random initialization of the new class means.
