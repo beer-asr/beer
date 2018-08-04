@@ -68,6 +68,41 @@ class MarginalPLDASet(BayesianModelSet):
         np1, np2 = self.class_cov_param.expected_value(concatenated=False)
         return torch.inverse(np1)
 
+    def reset_class_means(self, n_classes, noise_std=1, prior_strength=1.):
+        '''Sample a new set of class means while keeping the prior
+        over the the class mean covariance matrix..
+
+        Args:
+            n_classes (int): new number of components.
+            noise_std (float): Standard deviation of the noise for the
+                random initialization.
+            prior_strength (float): Strength of the class means' prior.
+
+        '''
+        mean = self.mean
+        dim = len(mean)
+        dtype, device = mean.dtype, mean.device
+        class_cov = self.class_cov
+        cov = self[0].cov
+        lower_cholesky = torch.potrf(class_cov, upper=False)
+
+        # Random initialization of the new class means.
+        noise = torch.randn(n_classes, dim, dtype=dtype, device=device)
+        init_c_means = (noise_std * noise @ lower_cholesky.t())
+
+        # Create the new priors/posteriors
+        class_mean_prior = NormalFullCovariancePrior(torch.zeros_like(mean), cov)
+        class_mean_priors = [class_mean_prior] * n_classes
+        class_mean_posteriors = []
+        for post_mean in init_c_means:
+            class_mean_posteriors.append(NormalFullCovariancePrior(post_mean, cov))
+
+        # Set the new parameters
+        self.class_mean_params = BayesianParameterSet([
+            BayesianParameter(prior, posterior)
+            for prior, posterior in zip(class_mean_priors, class_mean_posteriors)
+        ])
+
     ####################################################################
     # BayesianModel interface.
     ####################################################################
