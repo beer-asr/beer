@@ -61,7 +61,7 @@ def symmetrize_matrix(mat):
     return .5 * (mat + mat.t())
 
 
-def make_symposdef(mat, eval_threshold=1e-3):
+def make_symposdef(mat, eval_threshold=1e-1):
     '''Enforce a matrix to be symmetric and positive definite.
 
     Args:
@@ -78,7 +78,11 @@ def make_symposdef(mat, eval_threshold=1e-3):
 
     threshold = torch.tensor(eval_threshold, dtype=sym_mat.dtype,
                              device=sym_mat.device)
-    new_evals = torch.where(evals < threshold, threshold, evals)
+    new_evals = torch.where(
+        evals < threshold * evals[-1],
+        threshold * evals[-1],
+        evals
+    )
     return (evecs @ torch.diag(new_evals) @ evecs.t()).view(*mat.shape)
 
 

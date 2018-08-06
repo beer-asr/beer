@@ -34,10 +34,11 @@ class MarginalPLDASet(BayesianModelSet):
         self.class_cov_param.register_callback(self.on_class_cov_update)
 
     def on_class_cov_update(self):
-        cov = self.class_cov
+        cov = make_symposdef(self.class_cov)
         p_mean = torch.zeros_like(self.mean)
+        prior = NormalFullCovariancePrior(p_mean, cov)
         for param in self.class_mean_params:
-            param.prior = NormalFullCovariancePrior(p_mean, cov)
+            param.prior = prior
 
     @property
     def mean(self):
@@ -82,9 +83,16 @@ class MarginalPLDASet(BayesianModelSet):
         mean = self.mean
         dim = len(mean)
         dtype, device = mean.dtype, mean.device
-        class_cov = self.class_cov
+        class_cov = make_symposdef(self.class_cov)
         cov = self[0].cov / prior_strength
         lower_cholesky = torch.potrf(class_cov, upper=False)
+
+        # Set the prior of the class covariance matrix to the current
+        # posterior.
+        new_prior = self.class_cov_param.posterior.copy_with_new_params(
+            self.class_cov_param.posterior.natural_hparams
+        )
+        self.class_cov_param.prior = new_prior
 
         # Random initialization of the new class means.
         noise = torch.randn(n_classes, dim, dtype=dtype, device=device)
@@ -144,7 +152,7 @@ class MarginalPLDASet(BayesianModelSet):
         device = resps.device
         data = self.cache['data']
         np1, _, _, _ = self.normal.mean_precision.expected_value(concatenated=False)
-        prec = -2 * np1
+        prec = make_symposdef(-2 * np1)
         prec_data_mean = (data - self.normal.mean) @ prec
 
         acc_stats = self.normal.accumulate(
@@ -177,9 +185,10 @@ class MarginalPLDASet(BayesianModelSet):
         class_means_mean = torch.stack(class_mean_mean)
         prior_mean_mean = torch.ger(prior_mean, prior_mean)
         stats = class_means_quad - class_means_mean + prior_mean_mean
+        stats = make_symposdef(stats.sum(dim=0))
         class_cov_acc_stats = {
             self.class_cov_param: torch.cat([
-                -.5 * stats.sum(dim=0).view(-1),
+                -.5 * stats.view(-1),
                 .5 * torch.tensor(len(self), dtype=dtype, device=device).view(1)
             ])
         }

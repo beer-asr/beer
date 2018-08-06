@@ -12,10 +12,10 @@ sge_opts="-l gpu=1,mem_free=1G,ram_free=1G"  # Brno/FIT cluster
 local/prepare_emnist_data.sh || exit 1
 
 # Database to use ("digits" or "letters").
-dbname=digits
+dbname=byclass
 
 # Model configuration file.
-modelname=vae_convnet_elu_bernoulli_ldim64_gmm_scov
+modelname=vae_convnet_elu_bernoulli_l1s500_ldim64_gmm_scov_class52
 modelconf="conf/${modelname}.yml"
 
 # Output directory of the experiment.
@@ -61,41 +61,3 @@ steps/accuracy-vae-discrete-latent-model.sh \
     "${outdir}/final.mdl" \
     "data/${dbname}/test/archives" \
     "${outdir}/results"
-
-
-if [ ! -f "${outdir}/vae_plda/.done" ]; then
-    mkdir -p "${outdir}/vae_plda"
-    python utils/create-plda-vae-from-gmm-vae.py \
-        --prior-strength 1. \
-        --dim-noise-subspace 63 \
-        --dim-class-subspace 52 \
-        "${outdir}/final.mdl" \
-        "${outdir}/vae_plda/init.mdl" || exit 1
-
-    date > "${outdir}/vae_plda/.done"
-else
-    echo "VAE-PLDA model already trained. Skipping."
-fi
-
-steps/train-vae-model.sh \
-    --use-gpu \
-    --lograte=100 \
-    --pt-epochs=0 \
-    --epochs=20 \
-    --lrate=.1 \
-    --lrate-nnet=1e-3 \
-    -- \
-    "${sge_opts}" \
-    "${outdir}/vae_plda/init.mdl" \
-    "${outdir}/dbstats.npz" \
-    "data/${dbname}/train/archives" \
-    "${outdir}/vae_plda" || exit  1
-
-# Compute the accuracy of the model.
-steps/accuracy-vae-discrete-latent-model.sh \
-    --use-gpu \
-    -- \
-    "-l gpu=1,mem_free=1G,ram_free=1G" \
-    "${outdir}/vae_plda/final.mdl" \
-    "data/${dbname}/test/archives" \
-    "${outdir}/vae_plda/results"

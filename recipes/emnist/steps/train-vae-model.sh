@@ -142,7 +142,7 @@ ${gpu}  \
 if [ ! -f "${outdir}/pretraining/.done" ]; then
     echo "Pre-training..."
     # Command to submit to the SGE.
-    cmd="python "${train_cmd}" \
+    cmd="python -m cProfile -s cumtime "${train_cmd}" \
         ${pretraining_options} \
         ${dbstats} \
         ${archives} \

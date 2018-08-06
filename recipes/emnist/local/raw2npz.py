@@ -31,9 +31,9 @@ def run():
         magic, num, rows, cols = struct.unpack(">IIII", fid.read(16))
         images = np.fromfile(fid, dtype=np.uint8).reshape(num, rows, cols)
 
-    if args.train_samples > 0:
-        labels = labels[:args.train_samples]
-        images = images[:args.train_samples]
+    if args.train_nsamples > 0:
+        labels = labels[:args.train_nsamples]
+        images = images[:args.train_nsamples]
 
     # For safety.
     assert len(labels) == len(images)
