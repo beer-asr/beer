@@ -94,6 +94,11 @@ class MarginalPLDASet(BayesianModelSet):
         )
         self.class_cov_param.prior = new_prior
 
+        new_prior = self.normal.mean_precision.posterior.copy_with_new_params(
+            self.normal.mean_precision.posterior.natural_hparams
+        )
+        self.normal.mean_precision.prior = new_prior
+
         # Random initialization of the new class means.
         noise = torch.randn(n_classes, dim, dtype=dtype, device=device)
         init_c_means = (noise_std * noise @ lower_cholesky.t())

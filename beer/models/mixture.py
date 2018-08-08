@@ -80,9 +80,9 @@ class Mixture(DiscreteLatentBayesianModel):
             self.cache['resps'] = resps
             local_kl_div = 0
         else:
-            w_per_component_exp_llh = per_component_exp_llh + log_weights
+            w_per_component_exp_llh = (per_component_exp_llh + log_weights).detach()
             exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
-            log_resps = w_per_component_exp_llh - exp_llh.view(-1, 1).detach()
+            log_resps = w_per_component_exp_llh - exp_llh.view(-1, 1)
             local_kl_div = self._local_kl_divergence(log_resps)
             resps = log_resps.exp()
             exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
