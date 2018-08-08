@@ -95,6 +95,65 @@ class MixtureSet(BayesianModelSet):
         return self.num_mix
 
 
+class SharedModelSet(BayesianModelSet):
+    '''Specific model where an internal model set is duplicated
+    K times. This model is used with MixtureSet model where all
+    the components of the mixtures are shared.
+
+    '''
+
+    def __init__(self, modelset, n_duplicate):
+        '''
+        Args:
+            modelset: (:any:`BayesianModelSet`): Set of densities.
+            n_duplicate (int): Number of times to duplicate the model.
+
+        '''
+        super().__init__()
+        self._modelset = modelset
+        self.n_duplicate = n_duplicate
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
+
+    def mean_field_factorization(self):
+        return self._modelset.mean_field_factorization()
+
+    def sufficient_statistics(self, data):
+        return self._modelset.sufficient_statistics(data)
+
+    def forward(self, s_stats):
+        pc_exp_llh = self._modelset(s_stats)
+        return torch.cat([pc_exp_llh] * self.n_duplicate, dim=-1)
+
+    def accumulate(self, s_stats, parent_msg=None):
+        s_stats = s_stats
+        if parent_msg is None:
+            raise ValueError('"parent_msg" should not be None')
+        weights = parent_msg
+        new_weights = weights.reshape(-1, self.n_duplicate, len(self._modelset))
+        new_weights = new_weights.sum(dim=1)
+        return self._modelset.accumulate(s_stats, parent_msg=new_weights)
+
+    ####################################################################
+    # BayesianModelSet interface.
+    ####################################################################
+
+    def __getitem__(self, key):
+        '''Args:
+        key (int): state index.
+
+        '''
+        new_key = key // self.n_duplicate
+        return self._modelset[new_key]
+
+    def __len__(self):
+        return len(self._modelset) * self.n_duplicate
+
+
+
+
 def create(model_conf, mean, variance, create_model_handle):
     dtype, device = mean.dtype, mean.device
     n_mix = model_conf['size']
@@ -109,4 +168,4 @@ def create(model_conf, mean, variance, create_model_handle):
     return MixtureSet(prior_weights, posterior_weights, modelset)
 
 
-__all__ = ['MixtureSet']
+__all__ = ['MixtureSet', 'SharedModelSet']
