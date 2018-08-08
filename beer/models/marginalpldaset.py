@@ -96,7 +96,7 @@ class MarginalPLDASet(BayesianModelSet):
 
         scale = torch.tensor(prior_strength, dtype=dtype, device=device)
         dof = self.normal.mean_precision.posterior.natural_hparams[-1] + len(mean)
-        scale_matrix = torch.inverse(cov *  prior_strength + len(mean) - 1)
+        scale_matrix = torch.inverse(cov * dof / prior_strength)
         prior = NormalWishartPrior(mean, scale, scale_matrix, dof)
         posterior = NormalWishartPrior(mean, scale, scale_matrix, dof)
         self.normal.mean_precision = BayesianParameter(prior, posterior)
