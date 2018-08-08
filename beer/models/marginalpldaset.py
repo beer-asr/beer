@@ -69,18 +69,18 @@ class MarginalPLDASet(BayesianModelSet):
         np1, np2 = self.class_cov_param.expected_value(concatenated=False)
         return torch.inverse(np1)
 
-    def reset_class_means(self, n_classes, noise_std=1, prior_strength=1.):
+    def reset_class_means(self, n_classes, mean, noise_std=1, prior_strength=1.):
         '''Sample a new set of class means while keeping the prior
         over the the class mean covariance matrix..
 
         Args:
             n_classes (int): new number of components.
+            mean (``torch.Tensor``): New global mean.
             noise_std (float): Standard deviation of the noise for the
                 random initialization.
             prior_strength (float): Strength of the class means' prior.
 
         '''
-        mean = self.mean
         dim = len(mean)
         dtype, device = mean.dtype, mean.device
         class_cov = make_symposdef(self.class_cov)
@@ -94,10 +94,12 @@ class MarginalPLDASet(BayesianModelSet):
         )
         self.class_cov_param.prior = new_prior
 
-        new_prior = self.normal.mean_precision.posterior.copy_with_new_params(
-            self.normal.mean_precision.posterior.natural_hparams
-        )
-        self.normal.mean_precision.prior = new_prior
+        scale = torch.tensor(prior_strength, dtype=dtype, device=device)
+        dof = self.normal.mean_precision.posterior.natural_hparams[-1] + len(mean)
+        scale_matrix = torch.inverse(cov *  prior_strength + len(mean) - 1)
+        prior = NormalWishartPrior(mean, scale, scale_matrix, dof)
+        posterior = NormalWishartPrior(mean, scale, scale_matrix, dof)
+        self.normal.mean_precision = BayesianParameter(prior, posterior)
 
         # Random initialization of the new class means.
         noise = torch.randn(n_classes, dim, dtype=dtype, device=device)

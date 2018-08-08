@@ -649,12 +649,13 @@ class NormalWishartPrior(ExpFamilyPrior):
             dof (float): Degree of freedom of the Wishart.
         '''
         self.dim = mean.size(0)
+        dtype, device = mean.dtype, mean.device
         inv_scale = torch.inverse(scale_matrix)
         natural_hparams = torch.tensor(torch.cat([
             (scale * torch.ger(mean, mean) + inv_scale).view(-1),
             scale * mean,
-            (torch.ones(1) * scale).type(mean.type()),
-            (torch.ones(1) * (dof - self.dim)).type(mean.type())
+            (torch.ones(1, dtype=dtype, device=device) * scale),
+            (torch.ones(1, dtype=dtype, device=device) * (dof - self.dim))
         ]), requires_grad=True)
         super().__init__(natural_hparams)
 
