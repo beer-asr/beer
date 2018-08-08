@@ -73,20 +73,28 @@ class Mixture(DiscreteLatentBayesianModel):
         log_weights = self.weights_param.expected_value().view(1, -1)
         per_component_exp_llh = self.modelset(s_stats)
 
+        # Responsibilities, (i.e. output of the softmax function).
+        w_per_component_exp_llh = (per_component_exp_llh + log_weights)
+        exp_llh = logsumexp(w_per_component_exp_llh.detach(), dim=1).view(-1)
+        log_resps = w_per_component_exp_llh.detach() - exp_llh.view(-1, 1)
+        local_kl_div = self._local_kl_divergence(log_resps)
+        resps = log_resps.exp()
+
+        # If some labels are provided, override the previous results.
         if labels is not None:
-            resps = onehot(labels, len(self.modelset),
-                           dtype=log_weights.dtype, device=log_weights.device)
-            exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
-            self.cache['resps'] = resps
-            local_kl_div = 0
+            idxs = labels > -1
+            if idxs.sum() > 0:
+                labels_resps = onehot(labels, len(self.modelset),
+                            dtype=log_weights.dtype, device=log_weights.device)
+                resps[idxs] = labels_resps[idxs]
+                local_kl_div[idxs] = 0.
+                exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
         else:
-            w_per_component_exp_llh = (per_component_exp_llh + log_weights).detach()
-            exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
-            log_resps = w_per_component_exp_llh - exp_llh.view(-1, 1)
-            local_kl_div = self._local_kl_divergence(log_resps)
-            resps = log_resps.exp()
-            exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
-            self.cache['resps'] = log_resps.exp()
+            # Expected log-likelihood.
+            exp_llh = (w_per_component_exp_llh * resps).sum(dim=-1)
+
+        # Store the responsibilites to accumulate the statistics.
+        self.cache['resps'] = resps
 
         return exp_llh - local_kl_div
 

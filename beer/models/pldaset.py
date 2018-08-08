@@ -301,7 +301,7 @@ class PLDASet(BayesianModelSet):
         exp_llhs = -.5 * (prec * deltas - self._data_dim * log_prec + \
             self._data_dim * math.log(2 * math.pi))
 
-        return exp_llhs.t()
+        return exp_llhs.t() - self.local_kl_div_posterior_prior()
 
     def accumulate(self, s_stats, parent_msg=None):
         if parent_msg is None:
@@ -412,11 +412,8 @@ class PLDASet(BayesianModelSet):
     def __len__(self):
         return len(self.class_mean_params)
 
-    def local_kl_div_posterior_prior(self, parent_msg=None):
-        if parent_msg is None:
-            raise ValueError('"parent_msg" should not be None')
-        resps = parent_msg
-        return torch.sum(resps * self.cache['l_kl_divs'].t(), dim=-1).detach()
+    def local_kl_div_posterior_prior(self):
+        return self.cache['l_kl_divs'].t()
 
 
 class MarginalPLDASet(BayesianModel):
