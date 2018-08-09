@@ -118,6 +118,15 @@ class MarginalPLDASet(BayesianModelSet):
             for prior, posterior in zip(class_mean_priors, class_mean_posteriors)
         ])
 
+    def set_class_means_prior_to_posterior(self):
+        class_mean_priors = []
+        for param in self.class_mean_params:
+            new_prior = param.posterior.copy_with_new_params(
+                param.posterior.natural_hparams
+            )
+            class_mean_priors.append(new_prior)
+            param.prior = new_prior
+
     ####################################################################
     # BayesianModel interface.
     ####################################################################
