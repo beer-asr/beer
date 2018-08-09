@@ -35,9 +35,12 @@ class MarginalPLDASet(BayesianModelSet):
 
     def on_class_cov_update(self):
         cov = make_symposdef(self.class_cov)
-        p_mean = torch.zeros_like(self.mean)
-        prior = NormalFullCovariancePrior(p_mean, cov)
-        for param in self.class_mean_params:
+
+        for i, param in self.class_mean_params:
+            _, mean = param.prior.split_sufficient_statistics(
+                param.prior.expected_sufficient_statistics
+            )
+            prior = NormalFullCovariancePrior(mean, cov)
             param.prior = prior
 
     @property
