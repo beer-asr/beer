@@ -89,7 +89,7 @@ class Mixture(DiscreteLatentBayesianModel):
                             dtype=log_weights.dtype, device=log_weights.device)
                 resps[idxs] = labels_resps[idxs]
                 local_kl_div[idxs] = 0.
-                exp_llh[idxs] = (per_component_exp_llh[idxs] * resps[idxs]).sum(dim=-1)
+                exp_llh = (w_per_component_exp_llh * resps).sum(dim=-1)
 
         # Store the responsibilites to accumulate the statistics.
         self.cache['resps'] = resps
