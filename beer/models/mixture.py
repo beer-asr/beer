@@ -121,10 +121,11 @@ class Mixture(DiscreteLatentBayesianModel):
         return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
 
 
-def create(model_conf, mean, variance, create_model_handle):
+def create(model_conf, mean, variance, create_model_handle, modelset=None):
     dtype, device = mean.dtype, mean.device
     prior_strength = model_conf['prior_strength']
-    modelset = create_model_handle(model_conf['components'], mean, variance)
+    if modelset is None:
+        modelset = create_model_handle(model_conf['components'], mean, variance)
     size = len(modelset)
     weights = torch.ones(size, dtype=dtype, device=device) / size
     return Mixture.create(weights, prior_strength, modelset)
