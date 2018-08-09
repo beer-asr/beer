@@ -154,11 +154,12 @@ class SharedModelSet(BayesianModelSet):
 
 
 
-def create(model_conf, mean, variance, create_model_handle):
+def create(model_conf, mean, variance, create_model_handle, modelset=None):
     dtype, device = mean.dtype, mean.device
     n_mix = model_conf['size']
     model_conf['components']['size'] *= n_mix
-    modelset = create_model_handle(model_conf['components'], mean, variance)
+    if modelset is None:
+        modelset = create_model_handle(model_conf['components'], mean, variance)
     n_element = int(len(modelset) / n_mix)
     weights = torch.ones(n_element, dtype=dtype, device=device) / n_element
     weights = weights.repeat(n_mix, 1)
