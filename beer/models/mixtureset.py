@@ -67,7 +67,7 @@ class MixtureSet(BayesianModelSet):
 
         # expected llh.
         local_kl_div = self._local_kl_divergence(log_weights, log_resps)
-        exp_llh = (pc_exp_llhs * resps).sum(dim=-1)
+        exp_llh = (w_pc_exp_llhs * resps).sum(dim=-1)
 
         return exp_llh - local_kl_div
 
@@ -75,6 +75,8 @@ class MixtureSet(BayesianModelSet):
         if parent_msg is None:
             raise ValueError('"parent_msg" should not be None')
         ret_val = {}
+        #import pdb
+        #pdb.set_trace()
         joint_resps = self.cache['resps'] * parent_msg[:,:, None]
         sum_joint_resps = joint_resps.sum(dim=0)
         ret_val = dict(zip(self.mix_weights, sum_joint_resps))
@@ -145,13 +147,11 @@ class SharedModelSet(BayesianModelSet):
         key (int): state index.
 
         '''
-        new_key = key // self.n_duplicate
+        new_key = int((key) % (len(self) / self.n_duplicate))
         return self._modelset[new_key]
 
     def __len__(self):
         return len(self._modelset) * self.n_duplicate
-
-
 
 
 def create(model_conf, mean, variance, create_model_handle, modelset=None):
