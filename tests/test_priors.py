@@ -21,6 +21,9 @@ class BaseTestPrior(BaseTest):
         stats2 = copied_tensor.grad
         self.assertArraysAlmostEqual(stats1.numpy(), stats2.numpy())
 
+    def test_prior_strength(self):
+        self.prior.strength = 5
+        self.assertAlmostEqual(self.prior.strength, 5)
 
 ########################################################################
 # Dirichlet.
@@ -71,8 +74,32 @@ class TestGammaPrior(BaseTestPrior):
                                      self.prior.natural_parameters.numpy())
 
 
+########################################################################
+# Wishart.
+########################################################################
+
+class TestWishartPrior(BaseTestPrior):
+
+    def setUp(self):
+        dim = 10
+        self.scale = torch.eye(dim).type(self.type)
+        self.dof = torch.tensor(dim + 2).type(self.type)
+        self.prior = beer.WishartPrior(self.scale, self.dof)
+
+    def test_natural2std(self):
+        scale, dof = self.prior.to_std_parameters(self.prior.natural_parameters)
+        self.assertArraysAlmostEqual(scale.numpy(), self.scale.numpy())
+        self.assertArraysAlmostEqual(dof.numpy(), self.dof.numpy())
+
+    def test_std2natural(self):
+        scale, dof = self.prior.to_std_parameters(self.prior.natural_parameters)
+        nparams = self.prior.to_natural_parameters(scale, dof)
+        self.assertArraysAlmostEqual(nparams.numpy(),
+                                     self.prior.natural_parameters.numpy())
+
 
 __all__ = [
     'TestDirichletPrior',
-    'TestGammaPrior'
+    'TestGammaPrior',
+    'TestWishartPrior'
 ]

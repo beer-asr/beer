@@ -23,7 +23,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         self._natural_params = natural_parameters.detach()
 
     def __repr__(self):
-        return ExpFamilyPrior.__repr_str.format(
+        return self.__repr_str.format(
             classname=self.__class__.__name__,
             nparams=self.natural_hparams
         )
@@ -34,7 +34,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         return self._natural_params
 
     @natural_parameters.setter
-    def natural_hparams(self, value):
+    def natural_parameters(self, value):
         self._natural_params = value
 
     @property
@@ -49,12 +49,12 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def to_std_parameters(self, natural_params):
+    def to_std_parameters(self, natural_parameters):
         'Convert the natural parameters to their standard form.'
         pass
 
     @abc.abstractmethod
-    def to_natural_parameters(self, std_params):
+    def to_natural_parameters(self, std_parameters):
         'Convert the standard parameters to their natural form.'
         pass
 

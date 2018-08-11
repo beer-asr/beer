@@ -20,14 +20,22 @@ class GammaPrior(ExpFamilyPrior):
         T_2(x) = ln x
 
     '''
+    __repr_str = '{classname}(shape={shape}, rate={rate})'
 
     def __init__(self, shape, rate):
         nparams = self.to_natural_parameters(shape, rate)
         super().__init__(nparams)
 
+    def __repr__(self):
+        shape, rate = self.to_std_parameters(self.natural_parameters)
+        return self.__repr_str.format(
+            classname=self.__class__.__name__,
+            shape=repr(shape), rate=repr(shape)
+        )
+
     @property
     def strength(self):
-        self.natural_parameters[-1] + 1
+        return self.natural_parameters[-1] + 1
 
     @strength.setter
     def strength(self, value):
@@ -36,7 +44,8 @@ class GammaPrior(ExpFamilyPrior):
         self.natural_parameters = nparams
 
     def to_std_parameters(self, natural_parameters):
-        return  natural_parameters[1] + 1, -natural_parameters[0]
+        shape, rate = natural_parameters[1] + 1, -natural_parameters[0]
+        return  shape, rate
 
     def to_natural_parameters(self, shape, rate):
         return torch.cat([-rate.view(1), (shape - 1).view(1)])

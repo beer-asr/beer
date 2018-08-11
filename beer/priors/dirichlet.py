@@ -18,13 +18,22 @@ class DirichletPrior(ExpFamilyPrior):
 
     '''
 
+    __repr_str = '{classname}(alphas={alphas})'
+
     def __init__(self, alphas):
         nparams = self.to_natural_parameters(alphas)
         super().__init__(nparams)
 
+    def __repr__(self):
+        alphas = self.to_std_parameters(self.natural_parameters)
+        return self.__repr_str.format(
+            classname=self.__class__.__name__,
+            alphas=alphas
+        )
+
     @property
     def strength(self):
-        alphas = self.to_std_parameters(self.natural_params)
+        alphas = self.to_std_parameters(self.natural_parameters)
         mean = alphas / alphas.sum()
         return alphas[0] / mean[0]
 
