@@ -1,10 +1,9 @@
 #!/bin/sh
 
 gpu=  # Empty variable means we don't use the GPU.
-nsamples=5
 
 usage() {
-echo "Usage: $0 [--use-gpu] [--nsamples=N] <sge-options> <model> <archives> <outdir>"
+echo "Usage: $0 [--use-gpu] <sge-options> <model> <archives> <outdir>"
 }
 
 help() {
@@ -16,11 +15,9 @@ echo "
 Options:
   -h --help        show this message
   --use-gpu        use the gpu
-  --nsamples       number of samples for the re-parameterization trick
 
 Example:
   \$ $0 \\
-        --nsamples=5 \\
         -- \\
         \"-l mem_free=1G,ram_free=1G\" \\
         /path/to/model.mdl \\
@@ -44,10 +41,6 @@ while [ $# -ge 0 ]; do
             ;;
         --use-gpu)
             gpu="--use-gpu"
-            shift
-            ;;
-        --nsamples)
-            eval ${optname}=${value}
             shift
             ;;
         --)
@@ -80,7 +73,6 @@ mkdir -p "${outdir}"
 
 options="\
 ${gpu}  \
---nsamples ${nsamples} \
 "
 
 if [ ! -f "${outdir}/.done" ]; then

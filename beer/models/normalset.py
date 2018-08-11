@@ -292,7 +292,7 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
 
     @staticmethod
     def sufficient_statistics(data):
-        s_stats1 = torch.cat([data**2, torch.ones_like(data)], dim=1)
+        s_stats1 = torch.cat([data ** 2, torch.ones_like(data)], dim=1)
         s_stats2 = torch.cat([data, torch.ones_like(data)], dim=1)
         return s_stats1, s_stats2
 
@@ -309,8 +309,10 @@ class NormalSetSharedDiagonalCovariance(BayesianModelSet):
             raise ValueError('"parent_msg" should not be None')
         s_stats1, s_stats2, weights = *s_stats, parent_msg
         feadim = s_stats1.size(1) // 2
+
+        acc_stats1 = s_stats1[:, :feadim].sum(dim=0)
         acc_stats = torch.cat([
-            s_stats1[:, :feadim].sum(dim=0),
+            acc_stats1,
             (weights.t() @ s_stats2[:, :feadim]).view(-1),
             (weights.t() @ s_stats2[:, feadim:]).view(-1),
             len(s_stats1) * torch.ones(feadim, dtype=s_stats1.dtype,
@@ -352,6 +354,50 @@ class NormalSetSharedFullCovariance(BayesianModelSet):
 
     def __len__(self):
         return self.means_precision.posterior.ncomp
+
+    def reset_class_means(self, n_classes, noise_std=0.1, prior_strength=1.):
+        '''Create a new set of class means randomly initialized.
+
+        Args:
+            n_classes (int): number of components.
+            noise_std (float): Standard deviation of the noise for the
+                random initialization.
+            prior_strength (float): Strength of the class means' prior.
+
+        '''
+        dtype, device = self[0].mean.dtype, self[0].mean.device
+
+        # Expected value of the mean/covariance matrix w.r.t. the prior
+        # distribution.
+        np1, np2, _, _ = \
+            self.means_precision.prior.split_sufficient_statistics(
+                self.means_precision.prior.expected_sufficient_statistics)
+        prior_cov = torch.inverse(-2 * np1)
+        prior_mean = prior_cov @ np2[0]
+        print(prior_mean)
+
+        # Dimension of the data.
+        dim = len(prior_mean)
+
+        # Expected value of the covariance matrix w.r.t. the posterior
+        # distribution.
+        cov = self[0].cov
+
+        # Degree of freedom of the posterior Wishart distribution.
+        dof = self.means_precision.posterior.natural_hparams[-1] + dim
+
+        # Generate new parameters for the prior/posterior distribution.
+        scales = torch.ones(n_classes, dtype=dtype, device=device)
+        scales *= prior_strength
+        scale_matrix = torch.inverse(cov *  dof)
+        p_means = prior_mean + torch.zeros(n_classes, dim, dtype=dtype,
+                                           device=device)
+        U = torch.potrf(cov)
+        means = prior_mean + noise_std *  torch.randn(n_classes, dim, dtype=dtype,
+                                                     device=device) @ U
+        prior = JointNormalWishartPrior(p_means, scales, scale_matrix, dof)
+        posterior = JointNormalWishartPrior(means, scales, scale_matrix, dof)
+        self.means_precision = BayesianParameter(prior, posterior)
 
     def _expected_nparams(self):
         np1, np2, np3, np4 = \

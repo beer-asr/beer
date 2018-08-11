@@ -122,18 +122,6 @@ class TestBayesianParameter(BaseTest):
                     posterior.expected_sufficient_statistics.numpy()
                 )
 
-    def test_zero_natural_grad(self):
-        for i, pdfs in enumerate(zip(self.priors, self.posteriors)):
-            prior, posterior = pdfs
-            with self.subTest(i=i):
-                bayesparam = beer.BayesianParameter(prior, posterior)
-                bayesparam.natural_grad += 1
-                bayesparam.zero_natural_grad()
-                self.assertArraysAlmostEqual(
-                    bayesparam.natural_grad.numpy(),
-                    np.zeros(len(bayesparam.natural_grad))
-                )
-
 
 class TestBayesianParameterSet(BaseTest):
 
@@ -185,21 +173,6 @@ class TestBayesianParameterSet(BaseTest):
                     self.assertArraysAlmostEqual(
                         param.expected_value().numpy(),
                         posterior.expected_sufficient_statistics.numpy()
-                    )
-
-    def test_zero_natural_grad(self):
-        for i in range(self.nparams):
-            with self.subTest(i=i):
-                pdfs = zip(self.priors[i], self.posteriors[i])
-                params = [beer.BayesianParameter(prior, posterior)
-                          for prior, posterior in pdfs]
-                param_set = beer.BayesianParameterSet(params)
-                for param in param_set:
-                    param.natural_grad += 1
-                    param.zero_natural_grad()
-                    self.assertArraysAlmostEqual(
-                        param.natural_grad.numpy(),
-                        np.zeros(len(param.natural_grad))
                     )
 
 

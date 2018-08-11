@@ -126,6 +126,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
     def clear_cache(self):
         '''Clear the cache.'''
         self._cache = {}
+        for submodel in self._submodels.values():
+            submodel.clear_cache()
 
     def kl_div_posterior_prior(self):
         '''Kullback-Leibler divergence between the posterior/prior

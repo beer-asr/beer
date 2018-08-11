@@ -66,9 +66,6 @@ def run():
                         help='learning rate for the encoder/decoder')
     group.add_argument('--weight-decay', type=float, default=1e-2,
                         help='L2 regularizer')
-    group.add_argument('--nsamples', type=int, default=1,
-                        help='number of sample of the '
-                             'reparameterization trick')
     group.add_argument('--kl-weight', type=float, default=1.,
                         help='weight for the KL term')
     parser.add_argument('dbstats', help='statistics of the database')
@@ -95,14 +92,12 @@ def run():
     model = model.to(device)
 
     # Build the optimizer.
-    nnet_parameters = list(model.encoder.parameters()) + \
-        list(model.decoder.parameters())
-    params = model.grouped_parameters
+    nnet_parameters = list(model.modules_parameters())
+    params = model.mean_field_groups
     std_optim = torch.optim.Adam(nnet_parameters, lr=args.lrate_nnet,
                                  weight_decay=args.weight_decay)
-    optimizer = beer.BayesianModelCoordinateAscentOptimizer(*params,
-                                                            lrate=args.lrate,
-                                                            std_optim=std_optim)
+    optimizer = beer.BayesianModelCoordinateAscentOptimizer(
+        params, lrate=args.lrate, std_optim=std_optim)
 
     # Batch size for the stochastic training.
     if args.batch_size > 0:
@@ -115,10 +110,11 @@ def run():
                                                 to_torch_dataset)):
             features, labels = data[0].to(device), data[1].to(device)
             optimizer.zero_grad()
-            elbo = beer.evidence_lower_bound(model, features, labels=labels,
-                                             datasize=float(db_stats['counts']),
-                                             kl_weight=args.kl_weight,
-                                             nsamples=args.nsamples)
+            elbo = beer.evidence_lower_bound(
+                model, features, labels=labels,
+                datasize=float(db_stats['counts']),
+                kl_weight=args.kl_weight)
+
             elbo.backward()
             elbo.natural_backward()
             optimizer.step()

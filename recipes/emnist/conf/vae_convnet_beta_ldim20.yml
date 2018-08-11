@@ -1,8 +1,18 @@
-type: BetaNonLinearSubspaceModel
+type: VAE
+llh_type: beta
+normalizing_flow:
+  type: InverseAutoRegressive
+  depth: 1
+  iaf_block:
+    activation: Tanh
+    context_dim: 30
+    data_dim: 30
+    depth: 2
+    width: 100
 encoder:
-  blocks:
-  - residual_connection: 'none'
-    structure:
+  nnet_structure:
+  - residual: no
+    block_structure:
     - ReshapeLayer:shape=(-1,1,28,28)
     - Conv2d:in_channels=1;out_channels=16;kernel_size=(5,5);padding=1;stride=2
     - Softplus
@@ -12,14 +22,17 @@ encoder:
     - Softplus
     - ReshapeLayer:shape=(-1,32)
     - Linear:in_features=32;out_features=300
-  dim_input_normal_layer: 300
-  dim_output_normal_layer: 20
-  covariance: diagonal
+  prob_layer:
+    type: NormalizingFlowLayer
+    covariance: isotropic
+    flow_params_dim: 30
+    dim_in: 300
+    dim_out: 30
 decoder:
-  blocks:
-  - residual_connection: 'none'
-    structure:
-    - Linear:in_features=20;out_features=300
+  nnet_structure:
+  - residual: no
+    block_structure:
+    - Linear:in_features=30;out_features=300
     - Softplus
     - Linear:in_features=300;out_features=32
     - Softplus
@@ -31,8 +44,10 @@ decoder:
     - ConvTranspose2d:in_channels=16;out_channels=1;kernel_size=(5,5);padding=1;stride=2;output_padding=1
     - Softplus
     - ReshapeLayer:shape=(-1,<feadim>)
-  dim_input_model_layer: <feadim>
-  dim_output_model_layer: <feadim>
+  prob_layer:
+    type: BetaLayer
+    dim_in: <feadim>
+    dim_out: <feadim>
 latent_model:
   type: Normal
   covariance: diagonal

@@ -722,10 +722,77 @@ class TestGammaPrior(BaseTest):
         self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
 
 
+########################################################################
+# Wishart prior.
+########################################################################
+
+def wishart_std_params(natural_params):
+    dim = int(np.sqrt(len(natural_params) - 1))
+    W = -.5 * np.linalg.inv(natural_params[:-1].reshape((dim, dim)))
+    dof = 2 * natural_params[-1] + dim + 1
+    return W, dof, dim
+
+def wishart_log_norm(natural_params):
+    W, dof, dim = wishart_std_params(natural_params)
+    sign, ldet = np.linalg.slogdet(W)
+    lognorm = sign * .5 * dof * ldet
+    lognorm += .5 * dof * dim * np.log(2)
+    lognorm += .25 * dim * (dim - 1) * np.log(np.pi)
+    seq = np.arange(1, dim + 1, 1)
+    lognorm += gammaln(.5 * (dof + 1 - seq)).sum()
+    return float(lognorm)
+
+
+def wishart_grad_log_norm(natural_params):
+    W, dof, dim = wishart_std_params(natural_params)
+    sign, ldet = np.linalg.slogdet(W)
+    seq = np.arange(1, dim + 1, 1)
+    gammaln(.5 * (dof + 1 - seq)).sum()
+    return np.hstack([
+        dof * W.reshape(-1),
+        psi(.5 * (dof + 1 - seq)).sum() + dim * np.log(2) + sign * ldet
+    ])
+
+
+class TestWishartPrior(BaseTest):
+
+    def setUp(self):
+        self.dim = int(1 + torch.randint(100, (1, 1)).item())
+        self.cov = (torch.eye(self.dim) + torch.randn(self.dim).diag() ** 2).type(self.type)
+        self.dof = (self.dim - 1 + torch.randn(1) ** 2).type(self.type)
+        self.model = beer.WishartPrior(self.cov, self.dof)
+
+    def test_init(self):
+        cov, dof = self.cov.numpy(), self.dof.numpy()
+        natural_hparams = np.vstack([
+            -.5 * cov.reshape(-1),
+            .5 * (dof - self.dim - 1)
+        ]).reshape(-1)
+        self.assertArraysAlmostEqual(self.model.natural_hparams.numpy(),
+                                     natural_hparams)
+
+    def test_kl_div(self):
+        self.assertAlmostEqual(float(beer.ExpFamilyPrior.kl_div(
+            self.model, self.model)), 0.)
+
+    def test_exp_sufficient_statistics(self):
+        s_stats1 = self.model.expected_sufficient_statistics.numpy()
+        natural_hparams = self.model.natural_hparams.numpy()
+        s_stats2 = wishart_grad_log_norm(natural_hparams)
+        self.assertArraysAlmostEqual(s_stats1, s_stats2)
+
+    def test_log_norm(self):
+        log_norm1 = float(self.model.log_norm(self.model.natural_hparams).numpy())
+        natural_hparams = self.model.natural_hparams.numpy()
+        log_norm2 = wishart_log_norm(natural_hparams)
+        self.assertAlmostEqual(log_norm1, log_norm2, places=self.tolplaces)
+
+
 __all__ = [
     'TestDirichletPrior', 'TestNormalGammaPrior', 'TestJointNormalGammaPrior',
     'TestNormalWishartPrior', 'TestJointNormalWishartPrior',
     'TestNormalFullCovariancePrior', 'TestNormalIsotropicCovariancePrior',
     'TestMatrixNormalPrior', 'TestGammaPrior', 'TestJointExpFamilyPrior',
-    'TestIsotropicNormalGammaPrior', 'TestJointIsotropicNormalGammaPrior'
+    'TestIsotropicNormalGammaPrior', 'TestJointIsotropicNormalGammaPrior',
+    'TestWishartPrior'
 ]

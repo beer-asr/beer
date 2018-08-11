@@ -28,15 +28,30 @@ class BayesianParameter:
     '''
 
     def __init__(self, prior, posterior):
+        self._callbacks = set()
         self.prior, self.posterior = prior, posterior
         dtype = self.prior.natural_hparams.dtype
         device = self.prior.natural_hparams.device
         self.natural_grad = \
             torch.zeros_like(self.prior.natural_hparams, dtype=dtype,
-                            device=device)
+                            device=device, requires_grad=False)
 
     def __hash__(self):
         return hash(repr(self))
+
+    def _dispatch(self):
+        for callback in self._callbacks:
+            callback()
+
+    def register_callback(self, callback):
+        '''Register a callback function that will be called every time
+        the parameters if updated.
+
+        Args:
+            callback (fucntion): Function to call.
+
+        '''
+        self._callbacks.add(callback)
 
     def expected_value(self, concatenated=True):
         '''Expected value of the sufficient statistics of the parameter
@@ -56,9 +71,26 @@ class BayesianParameter:
             self.posterior.expected_sufficient_statistics
         )
 
-    def zero_natural_grad(self):
-        '''Reset the natural gradient to zero.'''
-        self.natural_grad.zero_()
+    def accumulate_natural_grad(self, acc_stats):
+        '''Accumulate the natural gradient from the accumulated
+        statistics.
+
+        Args:
+            acc_stats (``torch.Tensor[dim]``): Accumulated statistics
+                of the parameter.
+
+        '''
+        natural_grad = self.prior.natural_hparams + acc_stats - self.posterior.natural_hparams
+        self.natural_grad += natural_grad.detach()
+
+    def natural_grad_update(self, lrate):
+        self.posterior.natural_hparams = torch.tensor(
+            self.posterior.natural_hparams + \
+            lrate * self.natural_grad,
+            requires_grad=True
+        )
+        # Notify the observers the parameters has changed.
+        self._dispatch()
 
     def kl_div(self):
         '''KL divergence posterior/prior.'''

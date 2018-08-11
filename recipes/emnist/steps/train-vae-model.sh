@@ -8,7 +8,6 @@ pt_lrate_nnet=1e-3
 epochs=10
 lrate=.1
 lrate_nnet=1e-3
-nsamples=5
 train_cmd=utils/train-vae-discrete-latent-model.py
 
 usage() {
@@ -45,8 +44,6 @@ Options:
                    training
   --lrate-nnet     learning for the encoder/decoder networks during
                    the training
-  --nsamples       number of samples for the re-parameterization
-                   trick
 
 Example:
   \$ $0 \\
@@ -54,7 +51,6 @@ Example:
             --epochs=10 \\
             --lrate=.1 \\
             --lrate-nnet=1e-3 \\
-            --nsamples=5 \\
             -- \\
             \"-l mem_free=1G,ram_free=1G\" \\
              /path/to/init.mdl \\
@@ -92,8 +88,7 @@ while [ $# -ge 0 ]; do
         --pt-lrate-nnet | \
         --epochs | \
         --lrate | \
-        --lrate-nnet | \
-        --nsamples)
+        --lrate-nnet)
             eval ${optname}=${value}
             shift
             ;;
@@ -126,7 +121,7 @@ archives=$4
 root=$5
 
 # Build the output directory followin the parameters.
-outdir="${root}/ptepochs${pt_epochs}_epochs${epochs}_lrate${lrate}_lratennet${lrate_nnet}_nsamples${nsamples}"
+outdir="${root}/ptepochs${pt_epochs}_epochs${epochs}_lrate${lrate}_lratennet${lrate_nnet}"
 mkdir -p ${outdir}/pretraining ${outdir}/training
 
 ################
@@ -141,7 +136,6 @@ ${gpu}  \
 --lrate-nnet ${pt_lrate_nnet} \
 --logging-rate ${lograte}  \
 --dir-tmp-models ${outdir}/pretraining \
---nsamples ${nsamples} \
 --kl-weight 0. \
 "
 
@@ -185,7 +179,6 @@ ${gpu}  \
 --lrate-nnet ${lrate_nnet} \
 --logging-rate ${lograte}  \
 --dir-tmp-models ${outdir}/training \
---nsamples ${nsamples} \
 --kl-weight 1. \
 "
 

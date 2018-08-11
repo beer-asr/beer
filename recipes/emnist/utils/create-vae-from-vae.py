@@ -27,7 +27,8 @@ def run():
 
     # Load the model configuration file.
     with open(args.conf, 'r') as fid:
-        conf = yaml.load(fid)
+        data_str = fid.read().replace('<feadim>', str(len(mean)))
+        conf = yaml.load(data_str)
 
     # Create the model.
     model = beer.create_model(conf, mean, variance)
@@ -37,6 +38,7 @@ def run():
     with open(args.init_model, 'rb') as fid:
         init_model = pickle.load(fid)
     model.encoder = init_model.encoder
+    model.nflow
     model.decoder = init_model.decoder
 
     # Save the model.

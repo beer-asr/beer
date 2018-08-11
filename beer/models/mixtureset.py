@@ -60,14 +60,14 @@ class MixtureSet(BayesianModelSet):
         w_pc_exp_llhs = pc_exp_llhs + log_weights
 
         # Responsibilities.
-        log_norm = logsumexp(w_pc_exp_llhs, dim=-1)
-        log_resps = w_pc_exp_llhs - log_norm[:, :, None].detach()
+        log_norm = logsumexp(w_pc_exp_llhs.detach(), dim=-1)
+        log_resps = w_pc_exp_llhs.detach() - log_norm[:, :, None]
         resps = log_resps.exp()
         self.cache['resps'] = resps
 
         # expected llh.
         local_kl_div = self._local_kl_divergence(log_weights, log_resps)
-        exp_llh = (pc_exp_llhs * resps).sum(dim=-1)
+        exp_llh = (w_pc_exp_llhs * resps).sum(dim=-1)
 
         return exp_llh - local_kl_div
 
@@ -75,6 +75,8 @@ class MixtureSet(BayesianModelSet):
         if parent_msg is None:
             raise ValueError('"parent_msg" should not be None')
         ret_val = {}
+        #import pdb
+        #pdb.set_trace()
         joint_resps = self.cache['resps'] * parent_msg[:,:, None]
         sum_joint_resps = joint_resps.sum(dim=0)
         ret_val = dict(zip(self.mix_weights, sum_joint_resps))
@@ -88,39 +90,77 @@ class MixtureSet(BayesianModelSet):
                                                         self.num_comp)
         mdlset = [self.modelset[i] for i in range(key * self.num_comp,
                   (key+1) * self.num_comp)]
-        return MixtureSetElement(weights=weights[key] / weights.sum(),
+        return MixtureSetElement(weights=weights[key] / weights[key].sum(),
                                  modelset=mdlset)
 
     def __len__(self):
         return self.num_mix
-   
-    def double(self):
-        return self.__class__(
-            [weight_param.prior.double() for weight_param in self.mix_weights],
-            [weight_param.posterior.double() for weight_param in self.mix_weights],
-            self.modelset.double()
-        )
-    
-    def float(self):
-        return self.__class__(
-            [weight_param.prior.float() for weight_param in self.mix_weights],
-            [weight_param.posterior.float() for weight_param in self.mix_weights],
-            self.modelset.float()
-        )
-   
-    def to(self, device):
-        return self.__class__(
-            [weight_param.prior.to(device) for weight_param in self.mix_weights],
-            [weight_param.posterior.to(device) for weight_param in self.mix_weights],
-            self.modelset.to(device)
-        )
 
-def create(model_conf, mean, variance, create_model_handle):
+
+class SharedModelSet(BayesianModelSet):
+    '''Specific model where an internal model set is duplicated
+    K times. This model is used with MixtureSet model where all
+    the components of the mixtures are shared.
+
+    '''
+
+    def __init__(self, modelset, n_duplicate):
+        '''
+        Args:
+            modelset: (:any:`BayesianModelSet`): Set of densities.
+            n_duplicate (int): Number of times to duplicate the model.
+
+        '''
+        super().__init__()
+        self._modelset = modelset
+        self.n_duplicate = n_duplicate
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
+
+    def mean_field_factorization(self):
+        return self._modelset.mean_field_factorization()
+
+    def sufficient_statistics(self, data):
+        return self._modelset.sufficient_statistics(data)
+
+    def forward(self, s_stats):
+        pc_exp_llh = self._modelset(s_stats)
+        return torch.cat([pc_exp_llh] * self.n_duplicate, dim=-1)
+
+    def accumulate(self, s_stats, parent_msg=None):
+        s_stats = s_stats
+        if parent_msg is None:
+            raise ValueError('"parent_msg" should not be None')
+        weights = parent_msg
+        new_weights = weights.reshape(-1, self.n_duplicate, len(self._modelset))
+        new_weights = new_weights.sum(dim=1)
+        return self._modelset.accumulate(s_stats, parent_msg=new_weights)
+
+    ####################################################################
+    # BayesianModelSet interface.
+    ####################################################################
+
+    def __getitem__(self, key):
+        '''Args:
+        key (int): state index.
+
+        '''
+        new_key = int((key) % (len(self) / self.n_duplicate))
+        return self._modelset[new_key]
+
+    def __len__(self):
+        return len(self._modelset) * self.n_duplicate
+
+
+def create(model_conf, mean, variance, create_model_handle, modelset=None):
     dtype, device = mean.dtype, mean.device
     n_mix = model_conf['size']
-    model_conf['components']['size'] *= n_mix
-    modelset = create_model_handle(model_conf['components'], mean, variance)
-    n_element = int(len(modelset) / n_mix) 
+    if modelset is None:
+        model_conf['components']['size'] *= n_mix
+        modelset = create_model_handle(model_conf['components'], mean, variance)
+    n_element = len(modelset) // n_mix
     weights = torch.ones(n_element, dtype=dtype, device=device) / n_element
     weights = weights.repeat(n_mix, 1)
     prior_strength = model_conf['prior_strength']
@@ -129,4 +169,4 @@ def create(model_conf, mean, variance, create_model_handle):
     return MixtureSet(prior_weights, posterior_weights, modelset)
 
 
-__all__ = ['MixtureSet']
+__all__ = ['MixtureSet', 'SharedModelSet']

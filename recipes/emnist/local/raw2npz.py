@@ -10,6 +10,12 @@ def run():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--batch-size', type=int, default=-1,
                         help='batch size to split the data.')
+    parser.add_argument('--label-offset', type=int, default=0,
+                        help='offset for the labels values')
+    parser.add_argument('--train-nsamples', type=int, default=-1,
+                        help='number of training samples')
+    parser.add_argument('--no-sampling', action='store_true',
+                        help='no bernoulli sampling')
     parser.add_argument('images', help='path to the raw images')
     parser.add_argument('labels', help='path to the raw labels')
     parser.add_argument('outdir', help='output directory')
@@ -24,6 +30,10 @@ def run():
     with open(args.images, 'rb') as fid:
         magic, num, rows, cols = struct.unpack(">IIII", fid.read(16))
         images = np.fromfile(fid, dtype=np.uint8).reshape(num, rows, cols)
+
+    if args.train_nsamples > 0:
+        labels = labels[:args.train_nsamples]
+        images = images[:args.train_nsamples]
 
     # For safety.
     assert len(labels) == len(images)
@@ -43,7 +53,10 @@ def run():
         batch_images = images[idx: idx + bsize].astype(np.float32)
         batch_images = batch_images.reshape(len(batch_images), -1)
         batch_images /= norm_const
-        batch_labels = labels[idx: idx + bsize].astype(np.int32) - 1
+        if not args.no_sampling:
+            batch_images = np.random.binomial(1, batch_images)
+        batch_labels = labels[idx: idx + bsize].astype(np.int32) + \
+            args.label_offset
         outpath = os.path.join(args.outdir, 'batch' + str(batchno))
         np.savez(outpath, features=batch_images, labels=batch_labels)
         idx += bsize
