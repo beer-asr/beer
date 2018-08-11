@@ -43,7 +43,9 @@ class TestCreateModel(BaseTest):
                     data = data.replace('<feadim>', str(self.dim))
                     conf = yaml.load(data)
                     model = beer.create_model(conf, self.mean, self.variance)
-                self.assertTrue(isinstance(model, beer.BayesianModel))
+
+                self.assertTrue(isinstance(model, beer.BayesianModel) or
+                                isinstance(model, torch.nn.Module))
 
 
 __all__ = ['TestCreateModel']

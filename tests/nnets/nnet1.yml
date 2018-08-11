@@ -1,3 +1,5 @@
+type: NeuralNetwork
+nnet_structure:
 - block_structure:
   - Linear:in_features=<feadim>;out_features=20
   - Tanh
@@ -15,4 +17,3 @@
   - ReLU
   - Linear:in_features=20;out_features=10
   - Tanh
-

@@ -109,6 +109,55 @@ class PLDASet(BayesianModelSet):
             means.append(mean)
         return torch.stack(means)
 
+    @property
+    def class_covs(self):
+        covs = []
+        for mean_param in self.class_mean_params:
+            cov, _ = mean_param.expected_value(concatenated=False)
+            covs.append(cov)
+        return torch.stack(covs)
+
+    def reset_class_means(self, n_classes, noise_std=0.1, prior_strength=1.):
+        '''Create a new set of class means randomly initialized.
+
+        Args:
+            n_classes (int): number of components.
+            noise_std (float): Standard deviation of the noise for the
+                random initialization.
+            prior_strength (float): Strength of the class means' prior.
+
+        '''
+        dtype, device = self.mean.dtype, self.mean.device
+
+        # Covariance of the prior.
+        cov = torch.eye(self._subspace2_dim, dtype=dtype, device=device)
+        cov /= prior_strength
+
+        # Prior of the class_means.
+        class_means = torch.zeros(n_classes, self._subspace2_dim, dtype=dtype,
+                              device=device)
+
+        # Generate new random means for the initialization of the
+        # posteriors.
+        _, _, _, init_means = _init_params_random(
+            self.mean, noise_std, n_classes, self.noise_subspace,
+            self.class_subspace, dtype, device
+        )
+
+        class_mean_priors, class_mean_posteriors = [], []
+        for prior_mean, post_mean in zip(class_means, init_means):
+            class_mean_priors.append(NormalFullCovariancePrior(
+                prior_mean, cov))
+            class_mean_posteriors.append(NormalFullCovariancePrior(
+                post_mean, cov))
+
+        # Set the new parameter.
+        self.class_mean_params = BayesianParameterSet([
+            BayesianParameter(prior, posterior)
+            for prior, posterior in zip(class_mean_priors,
+                                        class_mean_posteriors)
+        ])
+
     def _get_expectation(self):
         log_prec, prec = self.precision_param.expected_value(concatenated=False)
         noise_s_quad, noise_s_mean = \
@@ -252,36 +301,37 @@ class PLDASet(BayesianModelSet):
         exp_llhs = -.5 * (prec * deltas - self._data_dim * log_prec + \
             self._data_dim * math.log(2 * math.pi))
 
-        return exp_llhs.t()
+        return exp_llhs.t() - self.local_kl_div_posterior_prior()
 
     def accumulate(self, s_stats, parent_msg=None):
         if parent_msg is None:
             raise ValueError('"parent_msg" should not be None')
-        resps = parent_msg
+        resps = parent_msg.detach()
 
         dtype = s_stats.dtype
         device = s_stats.device
 
         # Separate the s. statistics.
-        _, data = s_stats[:, 0], s_stats[:, 1:]
+        _, data = s_stats[:, 0].detach(), s_stats[:, 1:].detach()
 
         # Load cached values and clear the cache.
-        deltas = self.cache['deltas']
-        l_means = self.cache['l_means']
-        l_quads = self.cache['l_quads']
-        prec = self.cache['prec']
-        noise_means = self.cache['noise_means']
-        m_mean = self.cache['m_mean']
-        class_s_mean = self.cache['class_s_mean']
-        class_s_quad = self.cache['class_s_quad']
-        class_mean_mean = self.cache['class_mean_mean']
-        class_mean_quad = self.cache['class_mean_quad']
+        deltas = self.cache['deltas'].detach()
+        l_means = self.cache['l_means'].detach()
+        l_quads = self.cache['l_quads'].detach()
+        prec = self.cache['prec'].detach()
+        noise_means = self.cache['noise_means'].detach()
+        m_mean = self.cache['m_mean'].detach()
+        class_s_mean = self.cache['class_s_mean'].detach()
+        class_s_quad = self.cache['class_s_quad'].detach()
+        class_mean_mean = self.cache['class_mean_mean'].detach()
+        class_mean_quad = self.cache['class_mean_quad'].detach()
         class_means = class_mean_mean @ class_s_mean
         self.clear_cache()
 
         data_noise_class_mean = data - (noise_means + class_means[:, None, :])
         data_noise_class_mean = (resps.t()[:, :, None] * data_noise_class_mean).sum(dim=0)
         acc_mean = torch.sum(data_noise_class_mean, dim=0)
+        del data_noise_class_mean
 
         acc_noise_s_stats1 = (resps.t()[:, :, None] * l_quads).sum(dim=0)
         acc_noise_s_stats1 = acc_noise_s_stats1.sum(dim=0)
@@ -295,6 +345,7 @@ class PLDASet(BayesianModelSet):
             l_means[:, i, :].t() @ data_class_means[i]
             for i in range(len(self))
         ]).sum(dim=0).view(-1)
+        del data_class_means
 
         acc_class_s_stats1 = \
             (resps @ class_mean_quad.view(len(self), -1)).sum(dim=0)
@@ -305,6 +356,7 @@ class PLDASet(BayesianModelSet):
         acc_means = (resps.t()[:, :, None] * data_noise_means).sum(dim=1)
         acc_class_s_stats2 = acc_means[:, :, None] * class_mean_mean[:, None, :]
         acc_class_s_stats2 = acc_class_s_stats2.sum(dim=0).t().contiguous().view(-1)
+
         acc_stats = {
             self.precision_param: torch.cat([
                 .5 * torch.tensor(len(s_stats) * self._data_dim, dtype=dtype,
@@ -360,11 +412,44 @@ class PLDASet(BayesianModelSet):
     def __len__(self):
         return len(self.class_mean_params)
 
-    def local_kl_div_posterior_prior(self, parent_msg=None):
-        if parent_msg is None:
-            raise ValueError('"parent_msg" should not be None')
-        resps = parent_msg
-        return torch.sum(resps * self.cache['l_kl_divs'].t(), dim=-1).detach()
+    def local_kl_div_posterior_prior(self):
+        return self.cache['l_kl_divs'].t()
+
+
+class MarginalPLDASet(BayesianModel):
+    '''PLDA set where the noise/class subspace are marginalized.'''
+
+    def __init__(self, normal, prior_means, posterior_means):
+        self.normal = normal
+        self.class_mean_params = BayesianParameterSet([
+            BayesianParameter(prior, posterior)
+            for prior, posterior in zip(prior_means, posterior_means)
+        ])
+
+    @property
+    def mean(self):
+        return self.normal.mean
+
+    @property
+    def cov(self):
+        return self.normal.cov
+
+    @property
+    def class_means(self):
+        means = []
+        for mean_param in self.class_mean_params:
+            _, mean = mean_param.expected_value(concatenated=False)
+            means.append(mean)
+        return torch.stack(means)
+
+    @property
+    def class_covs(self):
+        covs = []
+        for mean_param in self.class_mean_params:
+            cov, _ = mean_param.expected_value(concatenated=False)
+            covs.append(cov)
+        return torch.stack(covs)
+
 
 
 def _init_params_from_gmm(gmm, dim_noise_subspace, dim_class_subspace, dtype,
@@ -397,6 +482,7 @@ def _init_params_from_gmm(gmm, dim_noise_subspace, dim_class_subspace, dtype,
     evals, evecs = torch.eig(cov_w, eigenvectors=True)
     evals, idxs = evals[:, 0].sort(descending=True)
     evecs = evecs[:, idxs]
+    print(evals)
     init_noise_s = evecs[:,:dim_noise_subspace].t()
 
     # Class subspace.
@@ -404,7 +490,7 @@ def _init_params_from_gmm(gmm, dim_noise_subspace, dim_class_subspace, dtype,
     evals, evecs = torch.eig(matrix, eigenvectors=True)
     evals, idxs = evals[:, 0].sort(descending=True)
     evecs = evecs[:, idxs]
-    init_class_s = evecs[:,:dim_class_subspace]
+    init_class_s = evecs[:,:dim_class_subspace].t()
 
     means = []
     for normal in gmm.modelset:
@@ -422,9 +508,9 @@ def _init_params_random(global_mean, noise_std, class_means, m_noise_subspace,
     init_class_s = m_class_subspace + noise_std * noise
 
     means = []
-    for p_mean in range(class_means):
-        r_mean = p_mean + noise_std * torch.randn(m_class_subspace.shape[0],
-                                                  dtype=dtype, device=device)
+    for i in range(class_means):
+        r_mean = noise_std * torch.randn(m_class_subspace.shape[0],
+                                         dtype=dtype, device=device)
         means.append(r_mean)
 
     return global_mean, init_noise_s, init_class_s, means
@@ -447,8 +533,8 @@ def create(model_conf, mean, variance, create_model_handle):
     posterior_prec = GammaPrior(shape, rate)
 
     # Noise subspace.
-    noise_subspace = torch.zeros(dim_noise_subspace, len(mean), dtype=dtype,
-                                 device=device)
+    noise_subspace = torch.eye(dim_noise_subspace, len(mean), dtype=dtype,
+                               device=device)
     cov = torch.eye(noise_subspace.size(0), dtype=dtype, device=device)
     cov /= prior_strength
     prior_noise_subspace = MatrixNormalPrior(noise_subspace, cov)
@@ -456,7 +542,7 @@ def create(model_conf, mean, variance, create_model_handle):
 
     # Class subspace.
     class_subspace = torch.eye(dim_class_subspace, len(mean), dtype=dtype,
-                                 device=device)
+                               device=device)
     cov = torch.eye(class_subspace.size(0), dtype=dtype, device=device)
     cov /= prior_strength
     prior_class_subspace = MatrixNormalPrior(class_subspace, cov)

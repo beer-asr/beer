@@ -12,6 +12,7 @@ from .bayesmodel import BayesianModel
 from ..expfamilyprior import IsotropicNormalGammaPrior
 from ..expfamilyprior import NormalGammaPrior
 from ..expfamilyprior import NormalWishartPrior
+from ..utils import make_symposdef
 
 
 class Normal(BayesianModel):
@@ -161,6 +162,16 @@ class NormalFullCovariance(Normal):
                              device=data.device),
             torch.ones(data.size(0), 1, dtype=data.dtype, device=data.device)
         ], dim=-1)
+
+    def accumulate(self, s_stats, parent_msg=None):
+        feadim = len(self.mean)
+        acc_stats1 = s_stats[:, :int(feadim)**2].sum(dim=0)
+        acc_stats1 = make_symposdef(acc_stats1.view(feadim, -1))
+        acc_stats2 = s_stats[:, int(feadim)**2:].sum(dim=0)
+        acc_stats = torch.cat([
+            acc_stats1.view(-1), acc_stats2
+        ])
+        return {self.mean_precision: s_stats.sum(dim=0)}
 
 
 def create(model_conf, mean, variance, create_model_handle):

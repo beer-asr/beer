@@ -193,8 +193,7 @@ class VAEGlobalMeanVariance(VAE):
 #################
 
 def create_probabbilistic_nnet(conf, dtype, device):
-    nnet_blocks = list(nnet.neuralnetwork.create(conf['nnet_structure'],
-                                                 dtype, device))
+    nnet_blocks = list(nnet.neuralnetwork.create(conf, dtype, device))
     nnet_blocks.append(nnet.problayers.create(conf['prob_layer']))
     return torch.nn.Sequential(*nnet_blocks).type(dtype).to(device)
 

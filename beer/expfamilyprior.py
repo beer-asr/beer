@@ -649,12 +649,13 @@ class NormalWishartPrior(ExpFamilyPrior):
             dof (float): Degree of freedom of the Wishart.
         '''
         self.dim = mean.size(0)
+        dtype, device = mean.dtype, mean.device
         inv_scale = torch.inverse(scale_matrix)
         natural_hparams = torch.tensor(torch.cat([
             (scale * torch.ger(mean, mean) + inv_scale).view(-1),
             scale * mean,
-            (torch.ones(1) * scale).type(mean.type()),
-            (torch.ones(1) * (dof - self.dim)).type(mean.type())
+            (torch.ones(1, dtype=dtype, device=device) * scale),
+            (torch.ones(1, dtype=dtype, device=device) * (dof - self.dim))
         ]), requires_grad=True)
         super().__init__(natural_hparams)
 
@@ -1063,10 +1064,75 @@ class GammaPrior(ExpFamilyPrior):
         return torch.lgamma(hnp1 + 1) - (hnp1 + 1) * torch.log(-hnp2)
 
 
+class WishartPrior(ExpFamilyPrior):
+    'Wishart density prior.'
+
+    def __init__(self, cov, dof):
+        '''
+        Args:
+            inv_mean (float): Mean of the covariance matrix.
+            dof (float): degree of freedom.
+        '''
+        natural_hparams = torch.tensor(torch.cat([
+            -.5 * cov.view(-1),
+            .5 * (dof - cov.shape[0] - 1).view(1),
+        ]), requires_grad=True)
+        super().__init__(natural_hparams)
+
+    def copy_with_new_params(self, params):
+        new_instance = self.__class__.__new__(self.__class__)
+        super(type(new_instance), new_instance).__init__(params)
+        return new_instance
+
+    def split_sufficient_statistics(self, s_stats):
+        '''Split the sufficient statistics into 2 groups.
+
+        Args:
+            s_stats (``torch.Tensor``): Sufficients statistics to
+                split.
+
+        Returns:
+            ``torch.Tensor``: ``s_stats`` unchanged.
+
+        '''
+        dim = int(math.sqrt(len(s_stats) - 1))
+        stats1 = s_stats[:-1].view(dim, dim)
+        stats2 = s_stats[-1]
+        return stats1, stats2
+
+    def log_norm(self, natural_hparams):
+        '''Log-normalizing function
+
+        Args:
+            s_stats (``torch.Tensor``): Sufficients statistics to
+                split
+
+        Returns:
+            ``torch.Tensor``: tuple of sufficient statistics.
+
+        '''
+        dtype, device = natural_hparams.dtype, natural_hparams.device
+        hnp1, hnp2 = self.split_sufficient_statistics(natural_hparams)
+        dim = len(hnp1)
+
+        # Get the standard parameters.
+        W = -2 * hnp1
+        dof = 2 * hnp2 + dim + 1
+
+        # Log normalizer.
+        lognorm = -.5 * dof * _logdet(W)
+        lognorm += .5 * dof * dim * math.log(2)
+        lognorm += .25 * dim * (dim - 1) * math.log(math.pi)
+        seq = torch.arange(1, dim + 1, 1, dtype=dtype, device=device)
+        lognorm += torch.lgamma(.5 * (dof + 1 - seq)).sum()
+
+        return lognorm
+
+
 __all__ = [
     'ExpFamilyPrior', 'JointExpFamilyPrior', 'DirichletPrior', 'NormalGammaPrior',
     'JointNormalGammaPrior', 'NormalWishartPrior', 'JointNormalWishartPrior',
     'NormalFullCovariancePrior', 'NormalIsotropicCovariancePrior', 'GammaPrior',
     'MatrixNormalPrior', 'IsotropicNormalGammaPrior',
-    'JointIsotropicNormalGammaPrior'
+    'JointIsotropicNormalGammaPrior', 'WishartPrior'
 ]

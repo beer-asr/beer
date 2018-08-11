@@ -37,6 +37,21 @@ class Mixture(DiscreteLatentBayesianModel):
         weights = torch.exp(self.weights_param.expected_value())
         return weights / weights.sum()
 
+    def reset_weights(self, prior_strength=1.):
+        '''Reset the prior/posterior over the weight to a flat
+        distribution
+
+        Args:
+            prior_strength (float): Strength of the prior.
+
+        '''
+        dtype, device = self.weights.dtype, self.weights.device
+        size = len(self.modelset)
+        weights = torch.ones(size, dtype=dtype, device=device) / size
+        prior_weights = DirichletPrior(prior_strength * weights)
+        posterior_weights = DirichletPrior(prior_strength * weights)
+        self.weights_param = BayesianParameter(prior_weights, posterior_weights)
+
     def _local_kl_divergence(self, log_resps):
         log_weights = self.weights_param.expected_value()
         retval = torch.sum(log_resps.exp() * (log_resps - log_weights), dim=-1)
@@ -58,20 +73,26 @@ class Mixture(DiscreteLatentBayesianModel):
         log_weights = self.weights_param.expected_value().view(1, -1)
         per_component_exp_llh = self.modelset(s_stats)
 
+        # Responsibilities, (i.e. output of the softmax function).
+        w_per_component_exp_llh = (per_component_exp_llh + log_weights)
+        exp_llh = logsumexp(w_per_component_exp_llh.detach(), dim=1).view(-1)
+        log_resps = w_per_component_exp_llh.detach() - exp_llh.view(-1, 1)
+        local_kl_div = self._local_kl_divergence(log_resps)
+        resps = log_resps.exp()
+        exp_llh = (w_per_component_exp_llh * resps).sum(dim=-1)
+
+        # If some labels are provided, override the previous results.
         if labels is not None:
-            resps = onehot(labels, len(self.modelset),
-                           dtype=log_weights.dtype, device=log_weights.device)
-            exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
-            self.cache['resps'] = resps
-            local_kl_div = 0
-        else:
-            w_per_component_exp_llh = per_component_exp_llh + log_weights
-            exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
-            log_resps = w_per_component_exp_llh - exp_llh.view(-1, 1).detach()
-            local_kl_div = self._local_kl_divergence(log_resps)
-            resps = log_resps.exp()
-            exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
-            self.cache['resps'] = log_resps.exp()
+            idxs = labels > -1
+            if idxs.sum() > 0:
+                labels_resps = onehot(labels, len(self.modelset),
+                            dtype=log_weights.dtype, device=log_weights.device)
+                resps[idxs] = labels_resps[idxs]
+                local_kl_div[idxs] = 0.
+                exp_llh = (w_per_component_exp_llh * resps).sum(dim=-1)
+
+        # Store the responsibilites to accumulate the statistics.
+        self.cache['resps'] = resps
 
         return exp_llh - local_kl_div
 
@@ -98,10 +119,11 @@ class Mixture(DiscreteLatentBayesianModel):
         return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
 
 
-def create(model_conf, mean, variance, create_model_handle):
+def create(model_conf, mean, variance, create_model_handle, modelset=None):
     dtype, device = mean.dtype, mean.device
     prior_strength = model_conf['prior_strength']
-    modelset = create_model_handle(model_conf['components'], mean, variance)
+    if modelset is None:
+        modelset = create_model_handle(model_conf['components'], mean, variance)
     size = len(modelset)
     weights = torch.ones(size, dtype=dtype, device=device) / size
     return Mixture.create(weights, prior_strength, modelset)

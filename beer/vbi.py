@@ -100,13 +100,11 @@ class EvidenceLowerBoundInstance:
         scale = self._datasize / self._minibatchsize
         for parameter in self._model_parameters:
             acc_stats = self._acc_stats[parameter]
-            natural_grad = parameter.prior.natural_hparams + \
-                scale * acc_stats - parameter.posterior.natural_hparams
-            parameter.natural_grad += natural_grad
+            parameter.accumulate_natural_grad(scale * acc_stats)
 
 
 def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
-                         kl_weight=1., fast_eval=False, **kwargs):
+                         fast_eval=False, **kwargs):
     '''Evidence Lower Bound objective function of Variational Bayes
     Inference.
 
@@ -124,10 +122,6 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
         datasize (int): Number of data points of the total training
             data. If set to 0 or negative values, the size of the
             provided `minibatch_data` will be used instead.
-        kl_weights (float): Scaling of the kl divergence. Note that the
-            scaling will not affect the standard Bayesian model
-            learning. This parameters is only affecting models like VAE
-            that uses standard backpropagation.
         fast_eval (boolean): If true, skip computing KL-divergence for the
             global parameters.
         kwargs (object): Model specific extra parameters to evalute the
@@ -190,7 +184,6 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
     model.clear_cache()
 
     return EvidenceLowerBoundInstance(elbo_value, acc_stats,
-
                                       model.bayesian_parameters(),
                                       mb_datasize, datasize)
 
@@ -240,18 +233,14 @@ class BayesianModelOptimizer:
         if self._std_optim is not None:
             self._std_optim.zero_grad()
         for parameter in self._parameters:
-            parameter.zero_natural_grad()
+            parameter.natural_grad.zero_()
 
     def step(self):
         'Update all the standard/Bayesian parameters.'
         if self._std_optim is not None:
             self._std_optim.step()
         for parameter in self._parameters:
-            parameter.posterior.natural_hparams = torch.tensor(
-                parameter.posterior.natural_hparams + \
-                self._lrate * parameter.natural_grad,
-                requires_grad=True
-            )
+            parameter.natural_grad_update(self._lrate)
 
 
 class BayesianModelCoordinateAscentOptimizer(BayesianModelOptimizer):
@@ -297,11 +286,8 @@ class BayesianModelCoordinateAscentOptimizer(BayesianModelOptimizer):
         if self._update_count >= len(self._groups):
             self._update_count = 0
         for parameter in self._groups[self._update_count]:
-            parameter.posterior.natural_hparams = torch.tensor(
-                parameter.posterior.natural_hparams + \
-                self._lrate * parameter.natural_grad,
-                requires_grad=True
-            )
+            parameter.natural_grad_update(self._lrate)
+
         self._update_count += 1
 
 
