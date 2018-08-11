@@ -23,7 +23,7 @@ class BaseTestPrior(BaseTest):
 
     def test_prior_strength(self):
         self.prior.strength = 5
-        self.assertAlmostEqual(self.prior.strength, 5)
+        self.assertAlmostEqual(float(self.prior.strength), 5)
 
 ########################################################################
 # Dirichlet.
@@ -98,8 +98,37 @@ class TestWishartPrior(BaseTestPrior):
                                      self.prior.natural_parameters.numpy())
 
 
+########################################################################
+# Normal Full covariance.
+########################################################################
+
+class TestNormalFullCovariancePrior(BaseTestPrior):
+
+    def setUp(self):
+        dim = 10
+        self.scale = torch.eye(dim).type(self.type)
+        self.dof = torch.tensor(dim + 2).type(self.type)
+        self.prior_precision = beer.WishartPrior(self.scale, self.dof)
+        self.mean = 3 * torch.ones(dim).type(self.type)
+        self.scale = torch.tensor(1.5).type(self.type)
+        self.prior = beer.NormalFullCovariancePrior(self.mean, self.scale,
+                                                    self.prior_precision)
+
+    def test_natural2std(self):
+        mean, scale = self.prior.to_std_parameters(self.prior.natural_parameters)
+        self.assertArraysAlmostEqual(mean.numpy(), self.mean.numpy())
+        self.assertArraysAlmostEqual(scale.numpy(), self.scale.numpy())
+
+    def test_std2natural(self):
+        mean, scale = self.prior.to_std_parameters(self.prior.natural_parameters)
+        nparams = self.prior.to_natural_parameters(mean, scale)
+        self.assertArraysAlmostEqual(nparams.numpy(),
+                                     self.prior.natural_parameters.numpy())
+
+
 __all__ = [
     'TestDirichletPrior',
     'TestGammaPrior',
+    'TestNormalFullCovariancePrior',
     'TestWishartPrior'
 ]

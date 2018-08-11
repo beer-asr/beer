@@ -30,10 +30,10 @@ class BayesianParameter:
     def __init__(self, prior, posterior):
         self._callbacks = set()
         self.prior, self.posterior = prior, posterior
-        dtype = self.prior.natural_hparams.dtype
-        device = self.prior.natural_hparams.device
+        dtype = self.prior.natural_parameters.dtype
+        device = self.prior.natural_parameters.device
         self.natural_grad = \
-            torch.zeros_like(self.prior.natural_hparams, dtype=dtype,
+            torch.zeros_like(self.prior.natural_parameters, dtype=dtype,
                             device=device, requires_grad=False)
 
     def __hash__(self):
@@ -53,23 +53,23 @@ class BayesianParameter:
         '''
         self._callbacks.add(callback)
 
-    def expected_value(self, concatenated=True):
-        '''Expected value of the sufficient statistics of the parameter
-        w.r.t. the posterior distribution.
-
-        Args:
-            concatenated (boolean): If true, concatenate the sufficient
-                statistics into a single ``torch.Tensor``. If false,
-                the statistics are returned in a tuple.
+    def expected_value(self):
+        '''Expected value of the parameter w.r.t. the posterior
+        distribution of the parameter.
 
         Returns:
-            ``torch.Tensor`` or a ``tuple``
+            ``torch.Tensor``
         '''
-        if concatenated:
-            return self.posterior.expected_sufficient_statistics
-        return self.posterior.split_sufficient_statistics(
-            self.posterior.expected_sufficient_statistics
-        )
+        return self.posterior.expected_value()
+
+    def expected_natural_parameters(self):
+        '''Expected value of the natural form of the parameter w.r.t.
+        the posterior distribution of the parameter.
+
+        Returns:
+            ``torch.Tensor``
+        '''
+        return self.posterior.expected_sufficient_statistics()
 
     def accumulate_natural_grad(self, acc_stats):
         '''Accumulate the natural gradient from the accumulated
