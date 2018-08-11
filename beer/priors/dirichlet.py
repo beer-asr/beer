@@ -13,7 +13,14 @@ class DirichletPrior(ExpFamilyPrior):
     natural parameters:
         eta[k] = alphas[k] - 1
 
+    sufficient statistics:
+        T(x) = ln x
+
     '''
+
+    def __init__(self, alphas):
+        nparams = self.to_natural_parameters(alphas)
+        super().__init__(nparams)
 
     @property
     def strength(self):
@@ -23,7 +30,10 @@ class DirichletPrior(ExpFamilyPrior):
 
     @strength.setter
     def strength(self, value):
-        pass
+        alphas = self.to_std_parameters(self.natural_parameters)
+        mean = alphas / alphas.sum()
+        new_alphas = value * mean
+        self.natural_parameters = self.to_natural_parameters(new_alphas)
 
     def to_std_parameters(self, natural_params):
         return natural_params + 1
@@ -32,15 +42,15 @@ class DirichletPrior(ExpFamilyPrior):
         return std_params - 1
 
     def expected_sufficient_statistics(self):
-        alphas = self.to_std_parameters(self.natural_params)
-        return torch.digamma(alphas) - torch.digamma(alphas.sum())
+        alphas = self.to_std_parameters(self.natural_parameters)
+        return (torch.digamma(alphas) - torch.digamma(alphas.sum())).detach()
 
     def expected_value(self):
-        alphas = self.to_std_parameters(self.natural_params)
+        alphas = self.to_std_parameters(self.natural_parameters)
         return alphas / alphas.sum()
 
-    def log_norm(self, natural_hparams):
-        alphas = self.to_std_parameters(self.natural_params)
+    def log_norm(self, natural_parameters):
+        alphas = self.to_std_parameters(natural_parameters)
         return torch.lgamma(alphas).sum() - torch.lgamma(alphas.sum())
 
 

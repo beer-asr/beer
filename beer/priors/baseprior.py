@@ -13,15 +13,14 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
     '''
     __repr_str = '{classname}(natural_params={nparams})'
 
-    def __init__(self, std_parameters):
+    def __init__(self, natural_parameters):
         '''Initialize the base class.
 
         Args:
-            std_parameters (``torch.Tensor``): Standard parameters of
+            natural_parameters (``torch.Tensor``): Natural parameters of
                 the distribution.
         '''
-        nparams = self.to_natural_parameters(std_parameters)
-        self._natural_params = nparams.detach()
+        self._natural_params = natural_parameters.detach()
 
     def __repr__(self):
         return ExpFamilyPrior.__repr_str.format(
@@ -55,7 +54,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def to_natural_parameters(self, *std_params):
+    def to_natural_parameters(self, std_params):
         'Convert the standard parameters to their natural form.'
         pass
 
@@ -84,14 +83,14 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         return copied_tensor.grad.detach()
 
     @abc.abstractmethod
-    def log_norm(self, natural_hparams):
+    def log_norm(self, natural_parameters):
         '''Abstract method to be implemented by subclasses of
         ``beer.ExpFamilyPrior``.
 
         Log-normalizing function of the density.
 
         Args:
-            natural_hparams (``torch.Tensor``): Natural hyper-parameters
+            natural_parameters (``torch.Tensor``): Natural parameters
                 of the distribution.
 
         Returns:
