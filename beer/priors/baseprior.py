@@ -83,18 +83,20 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         return copied_tensor.grad.detach()
 
     @abc.abstractmethod
-    def log_norm(self, natural_parameters):
+    def log_norm(self, natural_parameters=None):
         '''Abstract method to be implemented by subclasses of
         ``beer.ExpFamilyPrior``.
 
-        Log-normalizing function of the density.
+        Log-normalizing function of the density given the current
+        parameters.
 
         Args:
-            natural_parameters (``torch.Tensor``): Natural parameters
-                of the distribution.
+            natural_parameters (``torch.Tensor``): If provided,
+             compute the log-normalizer of the distribution with
+             the given natural parameters.
 
         Returns:
-            ``torch.Tensor`` of size 1: Log-normalization value.
+            ``torch.Tensor[1]`` : Log-normalization value.
 
         '''
         pass

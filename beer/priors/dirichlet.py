@@ -49,7 +49,9 @@ class DirichletPrior(ExpFamilyPrior):
         alphas = self.to_std_parameters(self.natural_parameters)
         return alphas / alphas.sum()
 
-    def log_norm(self, natural_parameters):
+    def log_norm(self, natural_parameters=None):
+        if natural_parameters is None:
+            natural_parameters = self.natural_parameters
         alphas = self.to_std_parameters(natural_parameters)
         return torch.lgamma(alphas).sum() - torch.lgamma(alphas.sum())
 
