@@ -12,22 +12,6 @@ from .marginalpldaset import *
 from .vae import *
 from .. import nnet
 
-
-_model_types = {
-    'Normal': normal.create,
-    'NormalSet': normalset.create,
-    'Mixture': mixture.create,
-    'MixtureSet': mixtureset.create,
-    'HMM': None,
-    'PPCA': ppca.create,
-    'PLDASet': pldaset.create,
-    'MarginalPLDASet': marginalpldaset.create,
-    'VAE': vae.create_vae,
-    'NonLinearSubspaceModel': vae.create_non_linear_subspace_model,
-    'NeuralNetwork': nnet.neuralnetwork.create
-}
-
-
 def create_model(conf, mean, variance, create_model_handle=None):
     '''Create one or several models from a YAML configuration string.
 
