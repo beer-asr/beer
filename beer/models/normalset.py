@@ -12,14 +12,15 @@ import torch
 from .bayesmodel import BayesianParameter
 from .bayesmodel import BayesianParameterSet
 from .bayesmodel import BayesianModelSet
+from .normal import Normal
 from .normal import NormalIsotropicCovariance
 from .normal import NormalDiagonalCovariance
 from .normal import NormalFullCovariance
+from ..priors import IsotropicNormalGammaPrior
 from ..expfamilyprior import JointIsotropicNormalGammaPrior
-from ..expfamilyprior import IsotropicNormalGammaPrior
-from ..expfamilyprior import NormalGammaPrior
+from ..priors import NormalGammaPrior
 from ..expfamilyprior import JointNormalGammaPrior
-from ..expfamilyprior import NormalWishartPrior
+from ..priors import NormalWishartPrior
 from ..expfamilyprior import JointNormalWishartPrior
 
 
@@ -29,81 +30,67 @@ NormalSetElement = namedtuple('NormalSetElement', ['mean', 'cov'])
 class NormalSet(BayesianModelSet):
     '''Set of Normal models.'''
 
+    @staticmethod
+    def create(mean, cov, size, prior_strength=1, noise_std=1.,
+               cov_type='full'):
+        normal = Normal.create(mean, cov, prior_strength, cov_type)
+        prior = normal.mean_precision.prior
+        posteriors = []
+        dtype, device = mean.dtype, mean.device
+        for i in range(size):
+            noise = noise_std * torch.randn(len(mean), dtype=dtype, device=device)
+            normal = Normal.create(mean + noise, cov, prior_strength, cov_type)
+            posteriors.append(normal.mean_precision.posterior)
+
+        # At this point, we are sure that the cov_type is valid.
+        if cov_type == 'full':
+            cls = NormalSetFullCovariance
+        elif cov_type == 'diagonal':
+            cls = NormalSetDiagonalCovariance
+        else:
+            cls = NormalSetIsotropicCovariance
+        return cls(prior, posteriors)
+
     def __init__(self, prior, posteriors):
         super().__init__()
-        self.normals = BayesianParameterSet([
+        self.means_precisions = BayesianParameterSet([
             BayesianParameter(prior, post)
             for post in posteriors
         ])
-        self._feadim = len(self[0].mean)
+
+    @property
+    def dim(self):
+        return len(self.means_precisions[0].expected_value()[0])
+
+    @abc.abstractmethod
+    def _full_cov(self, precision):
+        pass
 
     def __getitem__(self, key):
-        param = self.normals[key]
-        mean = self._get_mean(param)
-        cov =  self._get_cov(param)
+        mean, precision = self.means_precisions[key].expected_value()
+        cov =  self._full_cov(precision)
         return NormalSetElement(mean=mean, cov=cov)
 
     def __len__(self):
-        return len(self.normals)
-
-    def expected_natural_params_as_matrix(self):
-        return torch.cat([param.expected_value()[None]
-                          for param in self.normals], dim=0)
+        return len(self.means_precisions)
 
     def mean_field_factorization(self):
-        return [[*self.normals]]
+        return [[*self.means_precisions]]
 
-    def forward(self, s_stats):
-        retval = s_stats @ self.expected_natural_params_as_matrix().t()
-        retval -= .5 * self._feadim * math.log(2 * math.pi)
-        return retval
+    def expected_log_likelihood(self, stats):
+        nparams = self.means_precisions.expected_natural_parameters()
+        return stats @ nparams.t() - .5 * self.dim * math.log(2 * math.pi)
 
-    def accumulate(self, s_stats, parent_msg=None):
-        if parent_msg is None:
-            raise ValueError('"parent_msg" should not be None')
-        weights = parent_msg
+    def accumulate(self, stats, weights):
         return dict(zip(self.normals, weights.t() @ s_stats))
-
-    @staticmethod
-    @abc.abstractmethod
-    def _get_mean(param):
-        pass
-    @staticmethod
-    @abc.abstractmethod
-    def _get_cov(param):
-        pass
-
-    @staticmethod
-    @abc.abstractmethod
-    def sufficient_statistics(data):
-        pass
 
 
 class NormalSetIsotropicCovariance(NormalSet):
     '''Set of Normal models with isotropic covariance matrix.'''
 
-    @classmethod
-    def create(cls, mean, variance, size, prior_strength, noise_std):
-        dtype, device = mean.dtype, mean.device
-        scale = torch.tensor(prior_strength, dtype=dtype, device=device)
-        shape = torch.tensor(prior_strength, dtype=dtype, device=device)
-        rate = torch.tensor(prior_strength * variance.sum(), dtype=dtype,
-                            device=device)
-        prior = IsotropicNormalGammaPrior(mean, scale, shape, rate)
-        rand_means = noise_std * torch.randn(size, len(mean), dtype=dtype,
-                                             device=device) + mean
-        posteriors = [IsotropicNormalGammaPrior(rand_means[i], scale, shape,
-                                                rate)
-                        for i in range(size)]
-        return cls(prior, posteriors)
-
-    @staticmethod
-    def _get_mean(param):
-        return NormalIsotropicCovariance._get_mean(param)
-
-    @staticmethod
-    def _get_cov(param):
-        return NormalIsotropicCovariance._get_cov(param)
+    def _full_cov(self, precision):
+        dtype, device = precision.dtype, precision.device
+        return torch.eye(self.dim, dtype=dtype, device=device) / precision
 
     @staticmethod
     def sufficient_statistics(data):
@@ -126,13 +113,8 @@ class NormalSetDiagonalCovariance(NormalSet):
                         for i in range(size)]
         return cls(prior, posteriors)
 
-    @staticmethod
-    def _get_mean(param):
-        return NormalDiagonalCovariance._get_mean(param)
-
-    @staticmethod
-    def _get_cov(param):
-        return NormalDiagonalCovariance._get_cov(param)
+    def _full_cov(self, precision):
+        return (1. / precision).diag()
 
     @staticmethod
     def sufficient_statistics(data):
@@ -159,13 +141,8 @@ class NormalSetFullCovariance(NormalSet):
         ]
         return cls(prior, posteriors)
 
-    @staticmethod
-    def _get_mean(param):
-        return NormalFullCovariance._get_mean(param)
-
-    @staticmethod
-    def _get_cov(param):
-        return NormalFullCovariance._get_cov(param)
+    def _full_cov(self, precision):
+        return precision.inverse()
 
     @staticmethod
     def sufficient_statistics(data):
@@ -471,6 +448,7 @@ def create(model_conf, mean, variance, create_model_handle):
 
 
 __all__ = [
+    'NormalSet',
     'NormalSetIsotropicCovariance',
     'NormalSetDiagonalCovariance',
     'NormalSetFullCovariance',

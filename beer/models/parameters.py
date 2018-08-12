@@ -134,6 +134,17 @@ class BayesianParameterSet:
     def __getitem__(self, key):
         return self.__parameters[key]
 
+    def expected_natural_parameters(self):
+        '''Expected value of the natural form of the parameters w.r.t.
+        their posterior distribution.
+
+        Returns:
+            ``torch.Tensor[k,dim`` where k is the number of elements of
+                the set.
+        '''
+        return torch.cat([param.expected_natural_parameters().view(1, -1)
+                          for param in self.__parameters], dim=0)
+
     def float_(self):
         '''Convert value of the parameter to float precision in-place.'''
         for param in self.__parameters:

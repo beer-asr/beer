@@ -24,7 +24,7 @@ class Normal(BayesianModel):
     '''
 
     @staticmethod
-    def create(mean, cov, prior_strength=1., covariance='full'):
+    def create(mean, cov, prior_strength=1., cov_type='full'):
         '''Create a Normal model.
 
         Args:
@@ -33,7 +33,7 @@ class Normal(BayesianModel):
                 scalar):
                 Initial covariance matrix. Can be specified as a
                 dense/diagonal matrix or a scalar.
-            covariance (str): Type of the covariance matrix. Can be
+            cov_type (str): Type of the covariance matrix. Can be
                 "full", "diagonal", or "isotropic".
 
         Returns:
@@ -51,10 +51,10 @@ class Normal(BayesianModel):
             full_cov = cov
 
         try:
-            normal = cov_types[covariance](mean, full_cov, prior_strength)
+            normal = cov_types[cov_type](mean, full_cov, prior_strength)
         except KeyError:
-            raise ValueError('Unknown covariance type:{cov_type}'.format(
-                cov_type=covariance))
+            raise ValueError('Unknown covariance type: "{cov_type}"'.format(
+                cov_type=cov_type))
         return normal
 
     def __init__(self, prior, posterior):
@@ -106,7 +106,8 @@ class NormalIsotropicCovariance(Normal):
         dtype, device = precision.dtype, precision.device
         return torch.eye(self.dim, dtype=dtype, device=device) / precision
 
-    def sufficient_statistics(self, data):
+    @staticmethod
+    def sufficient_statistics(data):
         dim, dtype, device = data.shape[1], data.dtype, data.device
         return torch.cat([
             -.5 * torch.sum(data**2, dim=-1).reshape(-1, 1),
@@ -135,7 +136,8 @@ class NormalDiagonalCovariance(Normal):
         _, precision = self.mean_precision.expected_value()
         return (1. / precision).diag()
 
-    def sufficient_statistics(self, data):
+    @staticmethod
+    def sufficient_statistics(data):
         dtype, device = data.dtype, data.device
         return torch.cat([
             -.5 * data**2,
@@ -163,7 +165,8 @@ class NormalFullCovariance(Normal):
         _, precision = self.mean_precision.expected_value()
         return precision.inverse()
 
-    def sufficient_statistics(self, data):
+    @staticmethod
+    def sufficient_statistics(data):
         dtype, device = data.dtype, data.device
         return torch.cat([
             (-.5 * data[:, :, None] * data[:, None, :]).view(len(data), -1),
