@@ -7,3 +7,4 @@ from .wishart import *
 from .normal import *
 from .normalwishart import *
 from .normalgamma import *
+from .isonormalgamma import *

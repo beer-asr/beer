@@ -167,7 +167,7 @@ class TestNormalGammaPrior(BaseTestPrior):
         self.mean = 3 + torch.zeros(dim).type(self.type)
         self.scale = torch.tensor(2.5).type(self.type)
         self.shape = torch.tensor(3).type(self.type)
-        self.rates = torch.tensor(dim + 2).type(self.type)
+        self.rates = 2* torch.ones(dim).type(self.type)
         self.prior = beer.NormalGammaPrior(self.mean, self.scale,
                                            self.shape, self.rates)
 
@@ -186,10 +186,41 @@ class TestNormalGammaPrior(BaseTestPrior):
                                      self.prior.natural_parameters.numpy())
 
 
+########################################################################
+# Isotropic Normal Gamma.
+########################################################################
+
+class TestIsotropicNormalGammaPrior(BaseTestPrior):
+
+    def setUp(self):
+        dim = 10
+        self.mean = 3 + torch.zeros(dim).type(self.type)
+        self.scale = torch.tensor(2.5).type(self.type)
+        self.shape = torch.tensor(3).type(self.type)
+        self.rate = torch.tensor(2).type(self.type)
+        self.prior = beer.IsotropicNormalGammaPrior(self.mean, self.scale,
+                                                    self.shape, self.rate)
+
+    def test_natural2std(self):
+        mean, scale, shape, rate = \
+            self.prior.to_std_parameters(self.prior.natural_parameters)
+        self.assertArraysAlmostEqual(mean.numpy(), self.mean.numpy())
+        self.assertArraysAlmostEqual(scale.numpy(), self.scale.numpy())
+        self.assertArraysAlmostEqual(shape.numpy(), self.shape.numpy())
+        self.assertArraysAlmostEqual(rate.numpy(), self.rate.numpy())
+
+    def test_std2natural(self):
+        mean, scale, shape, rate = self.prior.to_std_parameters()
+        nparams = self.prior.to_natural_parameters(mean, scale, shape, rate)
+        self.assertArraysAlmostEqual(nparams.numpy(),
+                                     self.prior.natural_parameters.numpy())
+
+
 __all__ = [
     'TestDirichletPrior',
     'TestGammaPrior',
     'TestNormalFullCovariancePrior',
+    'TestIsotropicNormalGammaPrior',
     'TestNormalGammaPrior',
     'TestWishartPrior'
 ]

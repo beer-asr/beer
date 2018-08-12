@@ -1,4 +1,4 @@
-'''Implementation of the Normal-Wishart distribution.'''
+'''Implementation of the Normal-Gamma distribution.'''
 
 import torch
 from .baseprior import ExpFamilyPrior
@@ -17,7 +17,7 @@ class NormalGammaPrior(ExpFamilyPrior):
         eta1_i = - 0.5 * scale * mean_i * mean_i - b_i
         eta2 = scale * mean
         eta3 = - 0.5 * scale
-        eta4 = 0.5 * (nu - D)
+        eta4 = a - 0.5
 
     sufficient statistics (mu, l) (l is the diagonal of the precision):
         T_1(mu, l)_i = l_i
@@ -35,9 +35,10 @@ class NormalGammaPrior(ExpFamilyPrior):
             mean (``torch.Tensor[dim]``)): Mean of the Normal.
             scale (``torch.Tensor[1]``): Scaling of the precision
                 matrix.
-            shape (``torch.Tensor[1]`): Mean of the
-                precision matrix.
-            rates (``torch.tensor[dim]``): degree of freedom.
+            shape (``torch.Tensor[1]`): Shape parameter of the
+                Gamma distribution
+            rates (``torch.tensor[dim]``): Rate parameters of the
+                Gamma distribution.
         '''
         nparams = self.to_natural_parameters(mean, scale, shape, rates)
         super().__init__(nparams)
@@ -98,7 +99,7 @@ class NormalGammaPrior(ExpFamilyPrior):
         return torch.cat([
             diag_precision,
             diag_precision * mean,
-            ((dim / scale) + (diag_precision * mean) @ mean).view(1),
+            ((dim / scale) + torch.sum((diag_precision * mean) * mean)).view(1),
             logdet.view(1)
         ])
 
