@@ -126,9 +126,40 @@ class TestNormalFullCovariancePrior(BaseTestPrior):
                                      self.prior.natural_parameters.numpy())
 
 
+########################################################################
+# Normal Wishart covariance.
+########################################################################
+
+class TestNormalWishartPrior(BaseTestPrior):
+
+    def setUp(self):
+        dim = 10
+        self.mean = 3 + torch.zeros(dim).type(self.type)
+        self.scale = torch.tensor(2.5).type(self.type)
+        self.mean_precision = torch.eye(dim).type(self.type)
+        self.dof = torch.tensor(dim + 2).type(self.type)
+        self.prior = beer.NormalWishartPrior(self.mean, self.scale,
+                                             self.mean_precision, self.dof)
+
+    def test_natural2std(self):
+        mean, scale, mean_precision, dof = \
+            self.prior.to_std_parameters(self.prior.natural_parameters)
+        self.assertArraysAlmostEqual(mean.numpy(), self.mean.numpy())
+        self.assertArraysAlmostEqual(scale.numpy(), self.scale.numpy())
+        self.assertArraysAlmostEqual(mean_precision.numpy(), self.mean_precision.numpy())
+        self.assertArraysAlmostEqual(dof.numpy(), self.dof.numpy())
+
+    def test_std2natural(self):
+        mean, scale, mean_precision, dof = self.prior.to_std_parameters()
+        nparams = self.prior.to_natural_parameters(mean, scale, mean_precision, dof)
+        self.assertArraysAlmostEqual(nparams.numpy(),
+                                     self.prior.natural_parameters.numpy())
+
+
 __all__ = [
     'TestDirichletPrior',
     'TestGammaPrior',
     'TestNormalFullCovariancePrior',
+    'TestNormalWishartPrior',
     'TestWishartPrior'
 ]

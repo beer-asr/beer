@@ -4,7 +4,7 @@
 import abc
 import torch
 
-from ..expfamilyprior import ExpFamilyPrior
+from ..priors import ExpFamilyPrior
 
 
 _BAESIAN_PARAMETER_REPR_STRING = 'BayesianParameter(prior_type={type})'
@@ -80,12 +80,13 @@ class BayesianParameter:
                 of the parameter.
 
         '''
-        natural_grad = self.prior.natural_hparams + acc_stats - self.posterior.natural_hparams
+        natural_grad = self.prior.natural_parameters + acc_stats - \
+            self.posterior.natural_parameters
         self.natural_grad += natural_grad.detach()
 
     def natural_grad_update(self, lrate):
-        self.posterior.natural_hparams = torch.tensor(
-            self.posterior.natural_hparams + \
+        self.posterior.natural_parameters = torch.tensor(
+            self.posterior.natural_parameters + \
             lrate * self.natural_grad,
             requires_grad=True
         )

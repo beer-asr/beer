@@ -1,4 +1,4 @@
-'''Implementation of the Dirichlet prior.'''
+'''Implementation of the Normaldistribution.'''
 
 import math
 import torch

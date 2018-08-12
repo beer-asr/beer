@@ -1,4 +1,4 @@
-'''Implementation of the Dirichlet prior.'''
+'''Implementation of the Gamma distribution.'''
 
 import torch
 from .baseprior import ExpFamilyPrior

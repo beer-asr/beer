@@ -1,4 +1,4 @@
-'''Implementation of the Dirichlet prior.'''
+'''Implementation of the Dirichlet distribution.'''
 
 import torch
 from .baseprior import ExpFamilyPrior
@@ -25,7 +25,7 @@ class DirichletPrior(ExpFamilyPrior):
         super().__init__(nparams)
 
     def __repr__(self):
-        alphas = self.to_std_parameters(self.natural_parameters)
+        alphas = self.std_parameters(self.natural_parameters)
         return self.__repr_str.format(
             classname=self.__class__.__name__,
             alphas=alphas
@@ -44,15 +44,19 @@ class DirichletPrior(ExpFamilyPrior):
         new_alphas = value * mean
         self.natural_parameters = self.to_natural_parameters(new_alphas)
 
-    def to_std_parameters(self, natural_params):
-        return natural_params + 1
+    def to_std_parameters(self, natural_parameters=None):
+        if natural_parameters is None:
+            natural_parameters = self.natural_parameters
+        return (natural_parameters + 1)
 
-    def to_natural_parameters(self, std_params):
-        return std_params - 1
+    def to_natural_parameters(self, std_parameters=None):
+        if std_parameters is None:
+            std_parameters = self.std_parameters
+        return (std_parameters - 1)
 
     def expected_sufficient_statistics(self):
         alphas = self.to_std_parameters(self.natural_parameters)
-        return (torch.digamma(alphas) - torch.digamma(alphas.sum())).detach()
+        return (torch.digamma(alphas) - torch.digamma(alphas.sum()))
 
     def expected_value(self):
         alphas = self.to_std_parameters(self.natural_parameters)

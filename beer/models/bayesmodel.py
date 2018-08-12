@@ -210,7 +210,6 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         pass
 
-    @abc.abstractmethod
     def forward(self, s_stats, **kwargs):
         '''Abstract method to be implemented by subclasses of
         :any:`BayesianModel`.

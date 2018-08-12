@@ -6,12 +6,36 @@ import torch
 import torch.autograd as ta
 
 
+def _bregman_divergence(f_val1, f_val2, grad_f_val2, val1, val2):
+    return f_val1 - f_val2 - torch.sum(grad_f_val2 * (val1 - val2))
+
+
 class ExpFamilyPrior(metaclass=abc.ABCMeta):
     '''Abstract base class for (conjugate) priors from the exponential
     family of distribution.
 
     '''
     __repr_str = '{classname}(natural_params={nparams})'
+
+    @staticmethod
+    def kl_div(model1, model2):
+        '''Kullback-Leibler divergence between two densities of the same
+        type from the exponential family of distribution.
+        Args:
+            model1 (:any:`beer.ExpFamilyPrior`): First model.
+            model2 (:any:`beer.ExpFamilyPrior`): Second model.
+
+        Returns
+            float: Value of te KL. divergence between these two models.
+
+        '''
+        return _bregman_divergence(
+            model2.log_norm().detach(),
+            model1.log_norm().detach(),
+            model1.expected_sufficient_statistics(),
+            model2.natural_parameters,
+            model1.natural_parameters
+        )
 
     def __init__(self, natural_parameters):
         '''Initialize the base class.
@@ -35,7 +59,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
 
     @natural_parameters.setter
     def natural_parameters(self, value):
-        self._natural_params = value
+        self._natural_params = value.detach()
 
     @property
     @abc.abstractmethod
@@ -49,12 +73,12 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def to_std_parameters(self, natural_parameters):
+    def to_std_parameters(self, natural_parameters=None):
         'Convert the natural parameters to their standard form.'
         pass
 
     @abc.abstractmethod
-    def to_natural_parameters(self, std_parameters):
+    def to_natural_parameters(self, std_parameters=None):
         'Convert the standard parameters to their natural form.'
         pass
 
@@ -100,3 +124,6 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
 
         '''
         pass
+
+
+__all__ = ['ExpFamilyPrior']
