@@ -4,7 +4,7 @@
 import torch
 from .bayesmodel import DiscreteLatentBayesianModel
 from .bayesmodel import BayesianParameter
-from ..expfamilyprior import DirichletPrior
+from ..priors import DirichletPrior
 from ..utils import onehot
 from ..utils import logsumexp
 
@@ -13,7 +13,28 @@ class Mixture(DiscreteLatentBayesianModel):
     '''Bayesian Mixture Model.'''
 
     @classmethod
-    def create(cls, weights, prior_strength, modelset):
+    def create(cls, modelset, weights=None, prior_strength=1.):
+        '''Create a mixture model.
+
+        Args:
+            modelset (:any:`BayesianModelSet`): Component of the
+                mixture.
+            weights (``torch.Tensor[k]``): Prior probabilities of
+                the components of the mixture. If not provided, assume
+                flat prior.
+            prior_strength (float): Strength of the prior over the
+                weights.
+
+        '''
+        prior_nparams = modelset.mean_field_groups[0][0].prior.natural_parameters
+        dtype, device = prior_nparams.dtype, prior_nparams.device
+
+        if weights is None:
+            weights = torch.ones(len(modelset), dtype=dtype, device=device)
+            weights /= len(modelset)
+        else:
+            weights = torch.tensor(weights, dtype=dtype, device=device,
+                                   requires_grad=False)
         prior_weights = DirichletPrior(prior_strength * weights)
         posterior_weights = DirichletPrior(prior_strength * weights)
         return cls(prior_weights, posterior_weights, modelset)
@@ -29,31 +50,10 @@ class Mixture(DiscreteLatentBayesianModel):
 
         '''
         super().__init__(modelset)
-        self.weights_param = BayesianParameter(prior_weights, posterior_weights)
-
-    @property
-    def weights(self):
-        'Expected value of the weights of the mixture.'
-        weights = torch.exp(self.weights_param.expected_value())
-        return weights / weights.sum()
-
-    def reset_weights(self, prior_strength=1.):
-        '''Reset the prior/posterior over the weight to a flat
-        distribution
-
-        Args:
-            prior_strength (float): Strength of the prior.
-
-        '''
-        dtype, device = self.weights.dtype, self.weights.device
-        size = len(self.modelset)
-        weights = torch.ones(size, dtype=dtype, device=device) / size
-        prior_weights = DirichletPrior(prior_strength * weights)
-        posterior_weights = DirichletPrior(prior_strength * weights)
-        self.weights_param = BayesianParameter(prior_weights, posterior_weights)
+        self.weights = BayesianParameter(prior_weights, posterior_weights)
 
     def _local_kl_divergence(self, log_resps):
-        log_weights = self.weights_param.expected_value()
+        log_weights = self.weights.expected_natural_parameters()
         retval = torch.sum(log_resps.exp() * (log_resps - log_weights), dim=-1)
         return retval
 
@@ -63,18 +63,19 @@ class Mixture(DiscreteLatentBayesianModel):
 
     def mean_field_factorization(self):
         mf_groups = self.modelset.mean_field_factorization()
-        mf_groups[0].append(self.weights_param)
+        mf_groups[0].append(self.weights)
         return mf_groups
 
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
-    def forward(self, s_stats, labels=None):
-        log_weights = self.weights_param.expected_value().view(1, -1)
-        per_component_exp_llh = self.modelset(s_stats)
-
-        # Responsibilities, (i.e. output of the softmax function).
+    def expected_log_likelihood(self, stats, labels=None):
+        # Per-components weighted log-likelihood.
+        log_weights = self.weights.expected_natural_parameters().view(1, -1)
+        per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
         w_per_component_exp_llh = (per_component_exp_llh + log_weights)
+
+        # Responsibilities and expected llh.
         exp_llh = logsumexp(w_per_component_exp_llh.detach(), dim=1).view(-1)
         log_resps = w_per_component_exp_llh.detach() - exp_llh.view(-1, 1)
         local_kl_div = self._local_kl_divergence(log_resps)
@@ -96,37 +97,25 @@ class Mixture(DiscreteLatentBayesianModel):
 
         return exp_llh - local_kl_div
 
-    def accumulate(self, s_stats, parent_msg=None):
+    def accumulate(self, stats, parent_msg=None):
         resps = self.cache['resps']
         retval = {
-            self.weights_param: resps.sum(dim=0),
-            **self.modelset.accumulate(s_stats, resps)
+            self.weights: resps.sum(dim=0),
+            **self.modelset.accumulate(stats, resps)
         }
         return retval
 
-    def local_kl_div_posterior_prior(self, parent_msg=None):
-        return self.modelset.local_kl_div_posterior_prior(self.cache['resps'])
 
     ####################################################################
     # DiscreteLatentBayesianModel interface.
     ####################################################################
 
     def posteriors(self, data):
-        s_stats = self.modelset.sufficient_statistics(data)
-        per_component_exp_llh = self.modelset(s_stats)
-        per_component_exp_llh += self.weights_param.expected_value().view(1, -1)
+        stats = self.modelset.sufficient_statistics(data)
+        per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
+        per_component_exp_llh += self.weights.expected_value().view(1, -1)
         lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
         return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
-
-
-def create(model_conf, mean, variance, create_model_handle, modelset=None):
-    dtype, device = mean.dtype, mean.device
-    prior_strength = model_conf['prior_strength']
-    if modelset is None:
-        modelset = create_model_handle(model_conf['components'], mean, variance)
-    size = len(modelset)
-    weights = torch.ones(size, dtype=dtype, device=device) / size
-    return Mixture.create(weights, prior_strength, modelset)
 
 
 __all__ = ['Mixture']

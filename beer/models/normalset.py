@@ -82,7 +82,7 @@ class NormalSet(BayesianModelSet):
         return stats @ nparams.t() - .5 * self.dim * math.log(2 * math.pi)
 
     def accumulate(self, stats, weights):
-        return dict(zip(self.normals, weights.t() @ s_stats))
+        return dict(zip(self.means_precisions, weights.t() @ stats))
 
 
 class NormalSetIsotropicCovariance(NormalSet):
