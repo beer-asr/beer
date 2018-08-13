@@ -25,7 +25,7 @@ class DirichletPrior(ExpFamilyPrior):
         super().__init__(nparams)
 
     def __repr__(self):
-        alphas = self.std_parameters(self.natural_parameters)
+        alphas = self.to_std_parameters()
         return self.__repr_str.format(
             classname=self.__class__.__name__,
             alphas=alphas
