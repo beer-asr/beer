@@ -54,7 +54,8 @@ class Mixture(DiscreteLatentBayesianModel):
 
     def _local_kl_divergence(self, log_resps):
         log_weights = self.weights.expected_natural_parameters()
-        retval = torch.sum(log_resps.exp() * (log_resps - log_weights), dim=-1)
+        resps = log_resps.exp() + 1e-3
+        retval = torch.sum(resps * (log_resps - log_weights[None]), dim=-1)
         return retval
 
     ####################################################################
@@ -73,14 +74,14 @@ class Mixture(DiscreteLatentBayesianModel):
         # Per-components weighted log-likelihood.
         log_weights = self.weights.expected_natural_parameters().view(1, -1)
         per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
-        w_per_component_exp_llh = (per_component_exp_llh + log_weights)
 
         # Responsibilities and expected llh.
+        w_per_component_exp_llh = (per_component_exp_llh + log_weights)
         exp_llh = logsumexp(w_per_component_exp_llh.detach(), dim=1).view(-1)
         log_resps = w_per_component_exp_llh.detach() - exp_llh.view(-1, 1)
         local_kl_div = self._local_kl_divergence(log_resps)
         resps = log_resps.exp()
-        exp_llh = (w_per_component_exp_llh * resps).sum(dim=-1)
+        exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
 
         # If some labels are provided, override the previous results.
         if labels is not None:
@@ -90,7 +91,7 @@ class Mixture(DiscreteLatentBayesianModel):
                             dtype=log_weights.dtype, device=log_weights.device)
                 resps[idxs] = labels_resps[idxs]
                 local_kl_div[idxs] = 0.
-                exp_llh = (w_per_component_exp_llh * resps).sum(dim=-1)
+                exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
 
         # Store the responsibilites to accumulate the statistics.
         self.cache['resps'] = resps

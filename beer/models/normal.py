@@ -140,7 +140,7 @@ class NormalDiagonalCovariance(Normal):
     def sufficient_statistics(data):
         dtype, device = data.dtype, data.device
         return torch.cat([
-            -.5 * data**2,
+            -.5 * data ** 2,
             data,
             -.5 * torch.ones(len(data), 1, dtype=dtype, device=device),
             .5 * torch.ones(len(data), 1, dtype=dtype, device=device),
