@@ -44,7 +44,11 @@ def plot_gmm(fig, gmm, n_std_dev=2, npoints=100, alpha=1., colors=None, **kwargs
     'Plot a Normal density'
     if colors is None:
         colors = ['blue'] * len(gmm.modelset)
-    for weight, comp, color in zip(gmm.weights.expected_value(), gmm.modelset, colors):
+    try:
+        weights = gmm.weights.expected_value()
+    except Exception:
+        weights = gmm.weights
+    for weight, comp, color in zip(weights, gmm.modelset, colors):
         kwargs['color'] = color
         plot_normal(fig, comp.mean.numpy(), comp.cov.numpy(),
             n_std_dev, npoints, alpha=alpha * weight.numpy(), **kwargs)

@@ -27,19 +27,6 @@ from ..priors import JointNormalWishartPrior
 NormalSetElement = namedtuple('NormalSetElement', ['mean', 'cov'])
 
 
-def _create_prior_posterior(mean, cov, size, prior_strength, noise_std, cov_type):
-    normal = Normal.create(mean, cov, prior_strength, cov_type)
-    prior = normal.mean_precision.prior
-    posteriors = []
-    dtype, device = mean.dtype, mean.device
-    for i in range(size):
-        noise = noise_std * torch.randn(len(mean), dtype=dtype, device=device)
-        normal = Normal.create(mean + noise, cov, prior_strength, cov_type)
-        posteriors.append(normal.mean_precision.posterior)
-
-    return prior, posteriors
-
-
 class NormalSet(BayesianModelSet, metaclass=abc.ABCMeta):
     '''Set of Normal models.'''
 
