@@ -98,7 +98,7 @@ class Mixture(DiscreteLatentBayesianModel):
 
         return exp_llh - local_kl_div
 
-    def accumulate(self, stats, parent_msg=None):
+    def accumulate(self, stats):
         resps = self.cache['resps']
         retval = {
             self.weights: resps.sum(dim=0),

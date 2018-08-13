@@ -21,10 +21,6 @@ class BaseTestPrior(BaseTest):
         stats2 = copied_tensor.grad
         self.assertArraysAlmostEqual(stats1.numpy(), stats2.numpy())
 
-    def test_prior_strength(self):
-        self.prior.strength = 5
-        self.assertAlmostEqual(float(self.prior.strength), 5)
-
 ########################################################################
 # Dirichlet.
 ########################################################################
@@ -216,11 +212,43 @@ class TestIsotropicNormalGammaPrior(BaseTestPrior):
                                      self.prior.natural_parameters.numpy())
 
 
+########################################################################
+# Jiont Isotropic Normal Gamma.
+########################################################################
+
+class TestJointIsotropicNormalGammaPrior(BaseTestPrior):
+
+    def setUp(self):
+        dim = 10
+        k = 3
+        self.means = 3 + torch.zeros(k, dim).type(self.type)
+        self.scales = 2.5 * torch.ones(k).type(self.type)
+        self.shape = torch.tensor(3).type(self.type)
+        self.rate = torch.tensor(2).type(self.type)
+        self.prior = beer.JointIsotropicNormalGammaPrior(self.means, self.scales,
+                                                         self.shape, self.rate)
+
+    def test_natural2std(self):
+        means, scales, shape, rate = \
+            self.prior.to_std_parameters(self.prior.natural_parameters)
+        self.assertArraysAlmostEqual(means.numpy(), self.means.numpy())
+        self.assertArraysAlmostEqual(scales.numpy(), self.scales.numpy())
+        self.assertArraysAlmostEqual(shape.numpy(), self.shape.numpy())
+        self.assertArraysAlmostEqual(rate.numpy(), self.rate.numpy())
+
+    def test_std2natural(self):
+        means, scales, shape, rate = self.prior.to_std_parameters()
+        nparams = self.prior.to_natural_parameters(means, scales, shape, rate)
+        self.assertArraysAlmostEqual(nparams.numpy(),
+                                     self.prior.natural_parameters.numpy())
+
+
 __all__ = [
     'TestDirichletPrior',
     'TestGammaPrior',
     'TestNormalFullCovariancePrior',
     'TestIsotropicNormalGammaPrior',
+    'TestJointIsotropicNormalGammaPrior',
     'TestNormalGammaPrior',
     'TestWishartPrior'
 ]

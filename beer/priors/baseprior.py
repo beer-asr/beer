@@ -61,17 +61,6 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
     def natural_parameters(self, value):
         self._natural_params = value.detach()
 
-    @property
-    @abc.abstractmethod
-    def strength(self):
-        'Strength of the distribution in term of observed counts.'
-        pass
-
-    @strength.setter
-    @abc.abstractmethod
-    def strength(self, value):
-        pass
-
     @abc.abstractmethod
     def to_std_parameters(self, natural_parameters=None):
         'Convert the natural parameters to their standard form.'

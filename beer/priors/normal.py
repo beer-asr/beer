@@ -43,16 +43,6 @@ class NormalFullCovariancePrior(ExpFamilyPrior):
             precision=repr(self.precision_prior)
         )
 
-    @property
-    def strength(self):
-        return -2 * self.natural_parameters[-1]
-
-    @strength.setter
-    def strength(self, value):
-        nparams = self.natural_parameters
-        nparams[-1] = -.5 * value
-        self.natural_parameters = nparams
-
     def to_std_parameters(self, natural_parameters):
         scale = - 2 * natural_parameters[-1]
         mean = natural_parameters[:-1] / scale

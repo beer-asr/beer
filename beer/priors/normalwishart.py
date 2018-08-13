@@ -57,24 +57,6 @@ class NormalWishartPrior(ExpFamilyPrior):
             mean_precision={mean_precision}, dof={dof}
         )
 
-    @property
-    def strength(self):
-        return 2 * self.natural_parameters[-1] + 1
-
-    @strength.setter
-    def strength(self, value):
-        mean, scale, mean_precision, dof = self.to_std_parameters()
-        mean_precision *= dof
-        scale = torch.tensor(value, dtype=scale.dtype, device=scale.device)
-        dof = torch.tensor(value + len(mean) - 1, dtype=scale.dtype,
-                           device=scale.device)
-        self.natural_parameters = self.to_natural_parameters(
-            mean,
-            scale,
-            mean_precision / dof,
-            dof
-        )
-
     def to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters

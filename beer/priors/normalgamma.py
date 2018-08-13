@@ -51,23 +51,6 @@ class NormalGammaPrior(ExpFamilyPrior):
             shape={shape}, rates={rates}
         )
 
-    @property
-    def strength(self):
-        return 2 * (self.natural_parameters[-1] + .5)
-
-    @strength.setter
-    def strength(self, value):
-        mean, scale, shape, rates = self.to_std_parameters()
-        diag_precision = shape / rates
-        scale = torch.tensor(value, dtype=scale.dtype, device=scale.device)
-        shape = torch.tensor(.5 * value, dtype=scale.dtype, device=scale.device)
-        self.natural_parameters = self.to_natural_parameters(
-            mean,
-            scale,
-            shape,
-            shape / diag_precision
-        )
-
     def to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters

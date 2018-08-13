@@ -33,16 +33,6 @@ class GammaPrior(ExpFamilyPrior):
             shape=repr(shape), rate=repr(shape)
         )
 
-    @property
-    def strength(self):
-        return self.natural_parameters[-1] + 1
-
-    @strength.setter
-    def strength(self, value):
-        nparams = self.natural_parameters
-        nparams[-1] = value - 1
-        self.natural_parameters = nparams
-
     def to_std_parameters(self, natural_parameters):
         shape, rate = natural_parameters[1] + 1, -natural_parameters[0]
         return  shape, rate

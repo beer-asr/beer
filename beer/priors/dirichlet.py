@@ -31,19 +31,6 @@ class DirichletPrior(ExpFamilyPrior):
             alphas=alphas
         )
 
-    @property
-    def strength(self):
-        alphas = self.to_std_parameters(self.natural_parameters)
-        mean = alphas / alphas.sum()
-        return alphas[0] / mean[0]
-
-    @strength.setter
-    def strength(self, value):
-        alphas = self.to_std_parameters(self.natural_parameters)
-        mean = alphas / alphas.sum()
-        new_alphas = value * mean
-        self.natural_parameters = self.to_natural_parameters(new_alphas)
-
     def to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
