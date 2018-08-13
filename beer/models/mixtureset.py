@@ -10,9 +10,26 @@ from ..utils import logsumexp
 MixtureSetElement = namedtuple('MixtureSetElement', ['weights', 'modelset'])
 
 class MixtureSet(BayesianModelSet):
+    '''Set of mixture models, each of them having the same number of
+    components.
+
+    '''
 
     @classmethod
     def create(cls, size, modelset, weights=None, prior_strength=1.):
+        '''Create a :any:`MixtureSet' model.
+
+        Args:
+            size (int): Number of mixtures.
+            modelset (:any:`BayesianModelSet`): Set of models for all
+                the mixtures. The order of the model in the set defines
+                to which mixture they belong. The total size of the
+                model set should be: :any:`size` * `n_comp` where
+                `n_comp` is the number of component per mixture.
+            prior_strength (float): Strength the prior over the
+                weights.
+
+        '''
         tensor = modelset.mean_field_groups[0][0].prior.natural_parameters
         dtype, device = tensor.dtype, tensor.device
         n_comp_per_mixture = len(modelset) // size
@@ -27,10 +44,10 @@ class MixtureSet(BayesianModelSet):
     def __init__(self, prior_weights, posterior_weights, modelset):
         '''
         Args:
-            prior_weights (:any:`DirichletPrior`): Prior distribution
-                over the weights of the mixture.
-            posterior_weights (any:`DirichletPrior`): Posterior
-                distribution over the weights of the mixture.
+            prior_weights (list of :any:`DirichletPrior`): Prior distribution
+                over the weights for each mixture.
+            posterior_weights (list of :any:`DirichletPrior`): Posterior
+                distribution over the weights for each mixture.
             modelset (:any:`BayesianModelSet`): Set of models for all
                 mixtures.
 
@@ -52,6 +69,7 @@ class MixtureSet(BayesianModelSet):
 
     @property
     def n_comp_per_mixture(self):
+        'Number of components per mixture'
         return len(self.modelset) // len(self)
 
     def _local_kl_divergence(self, log_weights, log_resps):
