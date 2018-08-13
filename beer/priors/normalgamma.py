@@ -192,9 +192,9 @@ class JointNormalGammaPrior(ExpFamilyPrior):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         _, scales, shape, rates = self.to_std_parameters(natural_parameters)
-        ncomp, dim = self._ncomp, self._dim
+        dim = self._dim
         return dim * torch.lgamma(shape) - shape * rates.log().sum() \
-            - .5 * ncomp * dim * scales.log().sum()
+            - .5 * dim * scales.log().sum()
 
 
 __all__ = ['NormalGammaPrior', 'JointNormalGammaPrior']

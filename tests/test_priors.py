@@ -132,7 +132,8 @@ class TestNormalWishartPrior(BaseTestPrior):
         dim = 10
         self.mean = 3 + torch.zeros(dim).type(self.type)
         self.scale = torch.tensor(2.5).type(self.type)
-        self.mean_precision = torch.eye(dim).type(self.type)
+        self.mean_precision = torch.eye(dim).type(self.type) \
+            + torch.ger(self.mean, self.mean)
         self.dof = torch.tensor(dim + 2).type(self.type)
         self.prior = beer.NormalWishartPrior(self.mean, self.scale,
                                              self.mean_precision, self.dof)
@@ -274,6 +275,38 @@ class TestJointNormalGammaPrior(BaseTestPrior):
                                      self.prior.natural_parameters.numpy())
 
 
+########################################################################
+# Joint Normal Wishart.
+########################################################################
+
+class TestJointNormalWishartPrior(BaseTestPrior):
+
+    def setUp(self):
+        dim = 10
+        k = 3
+        self.means = 3 + torch.zeros(k, dim).type(self.type)
+        self.scales = 2.5 * torch.ones(k).type(self.type)
+        self.mean_precision = torch.eye(dim).type(self.type) \
+            + .1 * torch.ger(self.means[0], self.means[0])
+        self.dof = torch.tensor(dim + 2).type(self.type)
+        self.prior = beer.JointNormalWishartPrior(self.means, self.scales,
+                                                  self.mean_precision, self.dof)
+
+    def test_natural2std(self):
+        means, scales, mean_precision, dof = \
+            self.prior.to_std_parameters(self.prior.natural_parameters)
+        self.assertArraysAlmostEqual(means.numpy(), self.means.numpy())
+        self.assertArraysAlmostEqual(scales.numpy(), self.scales.numpy())
+        self.assertArraysAlmostEqual(mean_precision.numpy(), self.mean_precision.numpy())
+        self.assertArraysAlmostEqual(dof.numpy(), self.dof.numpy())
+
+    def test_std2natural(self):
+        means, scales, mean_precision, dof = self.prior.to_std_parameters()
+        nparams = self.prior.to_natural_parameters(means, scales, mean_precision, dof)
+        self.assertArraysAlmostEqual(nparams.numpy(),
+                                     self.prior.natural_parameters.numpy())
+
+
 __all__ = [
     'TestDirichletPrior',
     'TestGammaPrior',
@@ -281,6 +314,8 @@ __all__ = [
     'TestIsotropicNormalGammaPrior',
     'TestJointIsotropicNormalGammaPrior',
     'TestJointNormalGammaPrior',
+    'TestJointNormalWishartPrior',
     'TestNormalGammaPrior',
+    'TestNormalWishartPrior',
     'TestWishartPrior'
 ]

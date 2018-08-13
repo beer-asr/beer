@@ -54,7 +54,7 @@ class Mixture(DiscreteLatentBayesianModel):
 
     def _local_kl_divergence(self, log_resps):
         log_weights = self.weights.expected_natural_parameters()
-        resps = log_resps.exp() + 1e-3
+        resps = log_resps.exp()
         retval = torch.sum(resps * (log_resps - log_weights[None]), dim=-1)
         return retval
 
