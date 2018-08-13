@@ -213,7 +213,7 @@ class TestIsotropicNormalGammaPrior(BaseTestPrior):
 
 
 ########################################################################
-# Jiont Isotropic Normal Gamma.
+# Joint Isotropic Normal Gamma.
 ########################################################################
 
 class TestJointIsotropicNormalGammaPrior(BaseTestPrior):
@@ -243,12 +243,44 @@ class TestJointIsotropicNormalGammaPrior(BaseTestPrior):
                                      self.prior.natural_parameters.numpy())
 
 
+########################################################################
+# Joint Normal Gamma.
+########################################################################
+
+class TestJointNormalGammaPrior(BaseTestPrior):
+
+    def setUp(self):
+        dim = 10
+        k = 3
+        self.means = 3 + torch.zeros(k, dim).type(self.type)
+        self.scales = 2.5 * torch.ones(k).type(self.type)
+        self.shape = torch.tensor(3).type(self.type)
+        self.rates = 2 * torch.ones(dim).type(self.type)
+        self.prior = beer.JointNormalGammaPrior(self.means, self.scales,
+                                                self.shape, self.rates)
+
+    def test_natural2std(self):
+        means, scales, shape, rates = \
+            self.prior.to_std_parameters(self.prior.natural_parameters)
+        self.assertArraysAlmostEqual(means.numpy(), self.means.numpy())
+        self.assertArraysAlmostEqual(scales.numpy(), self.scales.numpy())
+        self.assertArraysAlmostEqual(shape.numpy(), self.shape.numpy())
+        self.assertArraysAlmostEqual(rates.numpy(), self.rates.numpy())
+
+    def test_std2natural(self):
+        means, scales, shape, rates = self.prior.to_std_parameters()
+        nparams = self.prior.to_natural_parameters(means, scales, shape, rates)
+        self.assertArraysAlmostEqual(nparams.numpy(),
+                                     self.prior.natural_parameters.numpy())
+
+
 __all__ = [
     'TestDirichletPrior',
     'TestGammaPrior',
     'TestNormalFullCovariancePrior',
     'TestIsotropicNormalGammaPrior',
     'TestJointIsotropicNormalGammaPrior',
+    'TestJointNormalGammaPrior',
     'TestNormalGammaPrior',
     'TestWishartPrior'
 ]

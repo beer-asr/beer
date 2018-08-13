@@ -5,7 +5,7 @@ from .baseprior import ExpFamilyPrior
 
 
 class NormalGammaPrior(ExpFamilyPrior):
-    '''Wishart distribution.
+    '''Normal-Gamma distribution.
 
     parameters:
         mean: mean (Normal)
@@ -99,4 +99,102 @@ class NormalGammaPrior(ExpFamilyPrior):
             - .5 * dim * scale.log()
 
 
-__all__ = ['NormalGammaPrior']
+class JointNormalGammaPrior(ExpFamilyPrior):
+    '''Joint NormalGamma distribution.
+
+    parameters:
+        means: mean (Normals)
+        scales: scale of the precision matrix (Normals)
+        a: shape parameter shared across dimension (joint Gamma)
+        b: rates parameter for each dimension (joint Gammas)
+
+    natural parameters:
+        eta1_i_k = - 0.5 * scales[k] * means[k]_i * means[k]_i - b_i
+        eta2_k = scales[k] * means[k]
+        eta3_k = - 0.5 * scales[k]
+        eta4 = a - 0.5
+
+    sufficient statistics (mu, l) (l is the diagonal of the precision):
+        T_1(mu, l)_i = l_i
+        T_2(mu, l)_i_k = l_i * mu[k]_i
+        T_3(mu, l)_k = sum(l_i * mu[k]_i * mu[k]_i)
+        T_4(mu, l) = sum(ln l_i)
+
+    '''
+    __repr_str = '{classname}(means={means}, scale={scale}, ' \
+                 'shape={shape}, rates={rates})'
+
+    def __init__(self, means, scales, shape, rates):
+        '''
+        Args:
+            means (``torch.Tensor[dim]``)): Means of the Normals.
+            scales (``torch.Tensor[1]``): Scaling of the precision
+                matrix.
+            shape (``torch.Tensor[1]`): Shape parameter of the
+                Gamma distribution
+            rates (``torch.tensor[dim]``): Rate parameters of the
+                Gamma distribution.
+        '''
+        self._ncomp, self._dim = means.shape
+        nparams = self.to_natural_parameters(means, scales, shape, rates)
+        super().__init__(nparams)
+
+    def __repr__(self):
+        means, scales, shape, rates = self.to_std_parameters()
+        return self.__repr_str.format(
+            classname=self.__class__.__name__,
+            means=repr(means), scales=repr(scales),
+            shape={shape}, rates={rates}
+        )
+
+    def to_std_parameters(self, natural_parameters=None):
+        if natural_parameters is None:
+            natural_parameters = self.natural_parameters
+        ncomp, dim = self._ncomp, self._dim
+        np1 = natural_parameters[:dim]
+        np2s = natural_parameters[dim:dim + ncomp * dim].view((ncomp, dim))
+        np3s = natural_parameters[-(ncomp + 1):-1]
+        np4 = natural_parameters[-1]
+
+        scales = -2 * np3s
+        shape = np4 + 1 - .5 * ncomp
+        means = np2s / scales[:, None]
+        rates = -np1 - .5 * ((scales[:, None] * means) * means).sum(dim=0)
+
+        return means, scales, shape, rates
+
+    def to_natural_parameters(self, means, scales, shape, rates):
+        return torch.cat([
+            -.5 * ((scales[:, None] * means) * means).sum(dim=0) - rates,
+            (scales[:, None] * means).view(-1),
+            -.5 * scales.view(-1),
+            shape.view(1) - 1. + .5 * self._ncomp
+        ])
+
+    def expected_sufficient_statistics(self):
+        means, scales, shape, rates = self.to_std_parameters()
+        dim = self._dim
+        diag_precision = shape / rates
+        logdet = torch.sum(torch.digamma(shape) - torch.log(rates))
+        return torch.cat([
+            diag_precision,
+            (diag_precision[None] * means).view(-1),
+            ((dim / scales) + torch.sum((diag_precision[None] * means) * means,
+                                         dim=-1)).view(-1),
+            logdet.view(1)
+        ])
+
+    def expected_value(self):
+        means, _, shape, rates = self.to_std_parameters()
+        return means, shape / rates
+
+    def log_norm(self, natural_parameters=None):
+        if natural_parameters is None:
+            natural_parameters = self.natural_parameters
+        _, scales, shape, rates = self.to_std_parameters(natural_parameters)
+        ncomp, dim = self._ncomp, self._dim
+        return dim * torch.lgamma(shape) - shape * rates.log().sum() \
+            - .5 * ncomp * dim * scales.log().sum()
+
+
+__all__ = ['NormalGammaPrior', 'JointNormalGammaPrior']
