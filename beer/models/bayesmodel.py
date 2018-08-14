@@ -318,6 +318,7 @@ class DiscreteLatentBayesianModel(BayesianModel, metaclass=abc.ABCMeta):
         super().__init__()
         self.modelset = modelset
 
+    @abc.abstractmethod
     def posteriors(self, data, **kwargs):
         '''Abstract method to be implemented by subclasses of
         :any:`BayesianModelSet`.
