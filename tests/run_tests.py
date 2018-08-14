@@ -29,13 +29,14 @@ import test_subspacemodels
 import test_utils
 import test_vae
 import test_vbi
+import test_priors
 
 testcases = {
     'test_problayers': test_problayers,
     'test_arnet': test_arnet,
     'test_nnet': test_nnet,
     'test_features': test_features,
-    'test_expfamilyprior': test_expfamilyprior,
+    'test_priors': test_priors,
     'test_bayesmodel': test_bayesmodel,
     'test_create_model': test_create_model,
     'test_mixture': test_mixture,
@@ -84,6 +85,7 @@ def run():
             test_utils,
             test_vae,
             test_vbi,
+            test_priors,
         ]
 
     suite = unittest.TestSuite()

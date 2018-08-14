@@ -4,113 +4,34 @@ prior over the latent space.
 
 '''
 
-import copy
-import math
-import torch
 from .bayesmodel import BayesianModel
-from .normal import NormalDiagonalCovariance
-from .normal import NormalIsotropicCovariance
-from ..utils import sample_from_normals
-from .. import nnet
-
-
-##############################################
-# Log-likelihood function for different VAE. #
-##############################################
-
-def _normal_log_likelihood(data, means, variances):
-    distance_term = 0.5 * (data - means).pow(2) / variances
-    precision_term = 0.5 * variances.log()
-    llh =  (-distance_term - precision_term).sum(dim=-1)
-    llh -= .5 * means.shape[-1] * math.log(2 * math.pi)
-    return llh
-
-
-def _bernoulli_log_likelihood(data, mean):
-    epsilon = 1e-6
-    per_pixel_bce = data * torch.log(epsilon + mean) + \
-        (1.0 - data) * torch.log(epsilon + 1 - mean)
-    return per_pixel_bce.sum(dim=-1)
-
-
-def _beta_log_likelihood(data, alpha, beta):
-    epsilon = 1e-6
-    llh = (alpha - 1) * torch.log(epsilon + data) + \
-        (beta - 1) * torch.log(epsilon + 1 - data) + \
-        torch.lgamma(alpha + beta) - torch.lgamma(alpha) - torch.lgamma(beta)
-    return llh.sum(dim=-1)
-
-
-llh_fns = {
-    'normal': _normal_log_likelihood,
-    'bernoulli': _bernoulli_log_likelihood,
-    'beta': _beta_log_likelihood
-}
-
-
-################################
-# Inverse AutoRegressive Flow #
-###############################
-
-class InverseAutoRegressiveFlow(torch.nn.Module):
-
-    def __init__(self, nnet_flow):
-        '''
-        Args:
-            nnet_flow (list): Sequence of transformation.
-        '''
-        super().__init__()
-        self.nnet_flow = torch.nn.Sequential(*nnet_flow)
-
-    def forward(self, mean, variance, flow_params, use_mean=False,
-                stop_level=-1):
-        if use_mean:
-            noise = torch.zeros_like(mean)
-        else:
-            noise = torch.randn(*mean.shape, dtype=mean.dtype,
-                                device=mean.device)
-
-        # Initialize the flow
-        feadim = mean.shape[1]
-        flow = mean + variance.sqrt() * noise
-        llh = -.5 * ((noise ** 2).sum(dim=-1) + feadim * math.log(2 * math.pi))
-        llh = - .5 * torch.log(variance).sum(dim=-1)
-
-        for i, flow_step in enumerate(self.nnet_flow):
-            new_mean, new_variance = flow_step(flow, flow_params)
-            flow = new_mean + torch.sqrt(new_variance) * flow
-            llh += -.5 * torch.log(new_variance).sum(dim=-1)
-            if stop_level >= 0 and i >= stop_level:
-                break
-        return llh, flow
-        return avg_llh, samples
 
 
 class VAE(BayesianModel):
     '''Variational Auto-Encoder (VAE).'''
 
-    def __init__(self, encoder, decoder, latent_model, nflow, llh_fn):
+    def __init__(self, encoder, encoder_problayer, decoder,  decoder_problayer,
+                 latent_model):
         '''Initialize the VAE.
 
         Args:
-            encoder (``MLPModel``): Encoder of the VAE.
-            decoder (``MLPModel``): Decoder of the VAE.
+            encoder (``torch.nn.Module``): Encoder of the VAE.
+            encoder_problayer (:any:`beer.nnet.ProbabilisticLayer`):
+                Layer to transform the output of the encoder into a
+                probability distribution.
+            decoder (``torch.nn.Module``): Decoder of the VAE.
+            decoder_problayer (:any:`beer.nnet.ProbabilisticLayer`):
+                Layer to transform the output of the decoder into a
+                probability distribution.
             latent_model(``BayesianModel``): Bayesian Model
                 for the prior over the latent space.
-            llh_fn (function): Function to compute the log-likelihood.
         '''
         super().__init__()
         self.encoder = encoder
+        self.encoder_problayer = encoder_problayer
         self.decoder = decoder
+        self.decoder_problayer = decoder_problayer
         self.latent_model = latent_model
-        self.nflow = nflow
-        self.llh_fn = llh_fn
-
-    def _log_likelihood_from_states(self, data, states):
-        params = list(self.decoder(states))
-        for i, param in enumerate(params):
-            params[i] = param
-        return self.llh_fn(data, *params)
 
     ####################################################################
     # BayesianModel interface.
@@ -121,36 +42,37 @@ class VAE(BayesianModel):
 
     @staticmethod
     def sufficient_statistics(data):
+        #For the VAE, this is just the idenity function
         return data
 
-    def forward(self, s_stats, kl_weight=1., use_mean=False, **kwargs):
-        # For the case of the VAE, the sufficient statistics is just
-        # the data itself. We just rename s_stats to avoid
-        # confusion with the sufficient statistics of the latent model.
-        data = s_stats
+    def expected_log_likelihood(self, stats, kl_weight=1., use_mean=False,
+                                **kwargs):
+        encoder_states = self.encoder(stats)
+        posterior_params = self.encoder_problayer(encoder_states)
+        samples, post_llh = self.encoder_problayer.samples_and_llh(
+                posterior_params, use_mean)
 
-        # Sample states from the posterior distribution.
-        mean, variance, flow_params = self.encoder(data)
-        nflow_llh, nflow_samples = self.nflow(mean, variance, flow_params,
-                                             use_mean)
+        # Per-frame KL divergence between the (approximate) posterior
+        # and the prior.
+        latent_stats = self.latent_model.sufficient_statistics(samples)
+        prior_llh = self.latent_model.expected_log_likelihood(latent_stats,
+                                                              **kwargs)
+        kl_divs = post_llh - prior_llh
 
-        # Expected log-likelihood of the states given the prior model.
-        latent_stats = self.latent_model.sufficient_statistics(nflow_samples)
+        # Log-likelihood.
+        decoder_states = self.decoder(samples)
+        llh_params = self.decoder_problayer(decoder_states)
+        llhs = self.decoder_problayer.log_likelihood(stats, llh_params)
+
+        # Store the statistics of the latent model to compute its
+        # gradients
         self.cache['latent_stats'] = latent_stats
-        prior_llh = self.latent_model(latent_stats, **kwargs)
 
-        # KL divergence posterior / prior.
-        local_kl_div = nflow_llh - prior_llh
+        return llhs - kl_weight * kl_divs
 
-        # Return the log-likelihood of the model.
-        retval = self._log_likelihood_from_states(data, nflow_samples)
-        retval -= kl_weight * local_kl_div
-
-        return retval
-
-    def accumulate(self, _, parent_msg=None):
+    def accumulate(self, _):
         latent_stats = self.cache['latent_stats']
-        return self.latent_model.accumulate(latent_stats, parent_msg)
+        return self.latent_model.accumulate(latent_stats)
 
 
 class VAEGlobalMeanVariance(VAE):
@@ -159,17 +81,11 @@ class VAEGlobalMeanVariance(VAE):
 
     '''
 
-    def __init__(self, normal, encoder, decoder, latent_model, nflow):
-        super().__init__(encoder, decoder, latent_model, nflow, None)
+    def __init__(self, encoder, encoder_problayer, decoder,
+                 normal, latent_model):
+        super().__init__(encoder, encoder_problayer, decoder, None,
+                         latent_model)
         self.normal = normal
-
-    def _log_likelihood_from_states(self, data, states):
-        dec_means = self.decoder(states)[0]
-        centered_data = (data - dec_means)
-        s_stats = self.normal.sufficient_statistics(centered_data)
-        llh = self.normal(s_stats)
-        self.cache['centered_s_stats'] = s_stats
-        return llh
 
     ####################################################################
     # BayesianModel interface.
@@ -179,69 +95,38 @@ class VAEGlobalMeanVariance(VAE):
         return self.latent_model.mean_field_factorization() + \
             self.normal.mean_field_factorization()
 
-    def accumulate(self, _, parent_msg=None):
+    def expected_log_likelihood(self, data, kl_weight=1., use_mean=False,
+                                **kwargs):
+        encoder_states = self.encoder(data)
+        posterior_params = self.encoder_problayer(encoder_states)
+        samples, post_llh = self.encoder_problayer.samples_and_llh(
+            posterior_params, use_mean)
+
+        # Per-frame KL divergence between the (approximate) posterior
+        # and the prior.
+        latent_stats = self.latent_model.sufficient_statistics(samples)
+        prior_llh = self.latent_model.expected_log_likelihood(latent_stats,
+                                                              **kwargs)
+        kl_divs = post_llh - prior_llh
+
+        decoder_means = self.decoder(samples)
+        centered_data = (data - decoder_means)
+        centered_stats = self.normal.sufficient_statistics(centered_data)
+        llhs = self.normal.expected_log_likelihood(centered_stats)
+
+        # Store the statistics of the latent/likelihood model to
+        # compute their gradients.
+        self.cache['latent_stats'] = latent_stats.detach()
+        self.cache['centered_stats'] = centered_stats.detach()
+        return llhs - kl_weight * kl_divs
+
+    def accumulate(self, _):
         latent_stats = self.cache['latent_stats']
-        centered_s_stats = self.cache['centered_s_stats']
+        centered_stats = self.cache['centered_stats']
         return {
             **self.latent_model.accumulate(latent_stats),
-            **self.normal.accumulate(centered_s_stats)
+            **self.normal.accumulate(centered_stats)
         }
-
-
-#################
-# VAE creation. #
-#################
-
-def create_probabbilistic_nnet(conf, dtype, device):
-    nnet_blocks = list(nnet.neuralnetwork.create(conf, dtype, device))
-    nnet_blocks.append(nnet.problayers.create(conf['prob_layer']))
-    return torch.nn.Sequential(*nnet_blocks).type(dtype).to(device)
-
-
-def create_nflow(conf, dtype, device):
-    flow_type = conf['type']
-    nnet_flow = []
-    if flow_type == 'InverseAutoRegressive':
-        depth = conf['depth']
-        for i in range(depth):
-            nnet_flow.append(
-                nnet.arnet.create_arnetwork(conf['iaf_block']).type(dtype).to(device)
-            )
-        return InverseAutoRegressiveFlow(nnet_flow).type(dtype).to(device)
-    else:
-        raise ValueError('Unsupported flow type: {}'.format(flow_type))
-
-def create_vae(model_conf, mean, variance, create_model_handle):
-    dtype, device = mean.dtype, mean.device
-    llh_fn = llh_fns[model_conf['llh_type']]
-    latent_dim = model_conf['encoder']['prob_layer']['dim_out']
-    encoder = create_probabbilistic_nnet(model_conf['encoder'], dtype, device)
-    decoder = create_probabbilistic_nnet(model_conf['decoder'], dtype, device)
-    latent_model = create_model_handle(model_conf['latent_model'],
-                                       torch.zeros(latent_dim, dtype=dtype,
-                                                   device=device),
-                                       torch.ones(latent_dim, dtype=dtype,
-                                                   device=device), create_model_handle)
-    iaf = create_nflow(model_conf['normalizing_flow'], dtype, device)
-    return VAE(encoder, decoder, latent_model, iaf, llh_fn)
-
-
-def create_non_linear_subspace_model(model_conf, mean, variance,
-                                     create_model_handle):
-    dtype, device = mean.dtype, mean.device
-    normal = create_model_handle(model_conf['normal_model'],
-                                 mean, variance, create_model_handle)
-    latent_dim = model_conf['encoder']['prob_layer']['dim_out']
-    encoder = create_probabbilistic_nnet(model_conf['encoder'], dtype, device)
-    decoder = create_probabbilistic_nnet(model_conf['decoder'], dtype, device)
-    latent_model = create_model_handle(model_conf['latent_model'],
-                                       torch.zeros(latent_dim, dtype=dtype,
-                                                   device=device),
-                                       torch.ones(latent_dim, dtype=dtype,
-                                                   device=device), create_model_handle)
-    iaf = create_nflow(model_conf['normalizing_flow'], dtype, device)
-    return VAEGlobalMeanVariance(normal, encoder, decoder, latent_model, iaf)
-
 
 __all__ = [
     'VAE',

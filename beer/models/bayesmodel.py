@@ -4,6 +4,7 @@
 import abc
 import torch
 
+from .parameters import ConstantParameter
 from .parameters import BayesianParameter
 from .parameters import BayesianParameterSet
 
@@ -44,6 +45,14 @@ class BayesianModel(metaclass=abc.ABCMeta):
     def _unregister_submodel(self, name):
         del self._submodels[name]
 
+    def _register_const_parameter(self, name, param):
+        if hasattr(self, name):
+            self._unregister_parameter(name)
+        self._const_parameters[name] = param
+
+    def _unregister_const_parameter(self, name):
+        del self._const_parameters[name]
+
     def _register_parameter(self, name, param):
         if hasattr(self, name):
             self._unregister_parameter(name)
@@ -71,6 +80,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
     def __setattr__(self, name, value):
         if isinstance(value, BayesianModel):
             self._register_submodel(name, value)
+        if isinstance(value, ConstantParameter):
+            self._register_const_parameter(name, value)
         if isinstance(value, BayesianParameter):
             self._register_parameter(name, value)
         if isinstance(value, BayesianParameterSet):
@@ -150,6 +161,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
             :any:`BayesianModel`
 
         '''
+        for parameter in self._const_parameters.values():
+            parameter.float_()
         for parameter in self.bayesian_parameters():
             parameter.float_()
         for name, module in self._modules.items():
@@ -167,6 +180,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
             :any:`BayesianModel`
 
         '''
+        for parameter in self._const_parameters.values():
+            parameter.double_()
         for parameter in self.bayesian_parameters():
             parameter.double_()
         for name, module in self._modules.items():
@@ -181,6 +196,8 @@ class BayesianModel(metaclass=abc.ABCMeta):
             :any:`BayesianModel`
 
         '''
+        for parameter in self._const_parameters.values():
+            parameter.to_(device)
         for parameter in self.bayesian_parameters():
             parameter.to_(device)
         for name, module in self._modules.items():
@@ -210,7 +227,6 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         pass
 
-    @abc.abstractmethod
     def forward(self, s_stats, **kwargs):
         '''Abstract method to be implemented by subclasses of
         :any:`BayesianModel`.
@@ -302,6 +318,7 @@ class DiscreteLatentBayesianModel(BayesianModel, metaclass=abc.ABCMeta):
         super().__init__()
         self.modelset = modelset
 
+    @abc.abstractmethod
     def posteriors(self, data, **kwargs):
         '''Abstract method to be implemented by subclasses of
         :any:`BayesianModelSet`.

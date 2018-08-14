@@ -56,6 +56,7 @@ class EvidenceLowerBoundInstance:
         This object should not be created directly.
 
     '''
+    __repr_str = '{classname}(value={value})'
 
     def __init__(self, elbo_value, acc_stats, model_parameters, minibatchsize,
                  datasize):
@@ -64,6 +65,12 @@ class EvidenceLowerBoundInstance:
         self._model_parameters = set(model_parameters)
         self._minibatchsize = minibatchsize
         self._datasize = datasize
+
+    def __repr__(self):
+        return self.__repr_str.format(
+            classname=self.__class__.__name__,
+            value=float(self._elbo_value)
+        )
 
     def __str__(self):
         return str(self._elbo_value)
@@ -170,7 +177,7 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
 
     # Compute the ELBO.
     stats = model.sufficient_statistics(minibatch_data)
-    exp_llh = model(stats, **kwargs)
+    exp_llh = model.expected_log_likelihood(stats, **kwargs)
     if not fast_eval:
         kl_div = model.kl_div_posterior_prior().sum()
     else:

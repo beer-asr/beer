@@ -8,7 +8,7 @@ from .bayesmodel import BayesianParameter
 from .bayesmodel import BayesianParameterSet
 from .bayesmodel import BayesianModel
 from .bayesmodel import BayesianModelSet
-from .ppca import kl_div_std_norm
+#from .ppca import kl_div_std_norm
 from .normal import NormalFullCovariance
 from .normalset import NormalSetElement
 from ..expfamilyprior import NormalWishartPrior
