@@ -4,8 +4,6 @@ prior over the latent space.
 
 '''
 
-import math
-import torch
 from .bayesmodel import BayesianModel
 
 
