@@ -1,14 +1,41 @@
 
 '''Implementation of the models\' parameters.'''
 
-import abc
 import torch
-
 from ..priors import ExpFamilyPrior
 
 
-_BAESIAN_PARAMETER_REPR_STRING = 'BayesianParameter(prior_type={type})'
+class ConstantParameter:
+    'Simple wrapper over ``torch.Tensor`` to handle fixed parameters.'
 
+    __repr_str = '{classname}}(value={value})'
+
+    def __init__(self, tensor, fixed_dtype=False):
+        self.fixed_dtype = fixed_dtype
+        self.value = tensor
+
+    def __repr__(self):
+        return self.__repr_str.format(self.__class__.__name, value=self.value)
+
+    def float_(self):
+        'Convert value of the parameter to float precision.'
+        if not self.fixed_dtype:
+            self.value = self.value.float()
+
+    def double_(self):
+        'Convert the value of the parameter to double precision.'
+        if not self.fixed_dtype:
+            self.value = self.value.double()
+
+    def to_(self, device):
+        '''Move the internal buffer of the parameter to the given
+        device.
+
+        Parameters:
+            device (``torch.device``): Device on which to move on
+
+        '''
+        self.value = self.value.to(device)
 
 class BayesianParameter:
     '''Parameter which has a *prior* and a *posterior* distribution.
@@ -26,6 +53,8 @@ class BayesianParameter:
         posterior (:any:`beer.ExpFamilyPrior`): Posterior distribution
             over the parameter.
     '''
+    __repr_str = 'BayesianParameter(prior={prior}, posterior={posterior})'
+
 
     def __init__(self, prior, posterior):
         self._callbacks = set()
@@ -36,8 +65,11 @@ class BayesianParameter:
             torch.zeros_like(self.prior.natural_parameters, dtype=dtype,
                             device=device, requires_grad=False)
 
+    def __repr__(self):
+        return self.__repr_str.format(prior=self.prior, posterior=self.posterior)
+
     def __hash__(self):
-        return hash(repr(self))
+        return hash(super().__repr__())
 
     def _dispatch(self):
         for callback in self._callbacks:
@@ -169,6 +201,7 @@ class BayesianParameterSet:
 
 
 __all__ = [
+    'ConstantParameter',
     'BayesianParameter',
     'BayesianParameterSet'
 ]

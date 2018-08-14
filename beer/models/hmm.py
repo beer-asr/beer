@@ -4,6 +4,7 @@
 import torch
 import numpy as np
 from .bayesmodel import BayesianModel, BayesianModelSet
+from .parameters import ConstantParameter
 from ..utils import onehot, logsumexp
 
 
@@ -32,9 +33,11 @@ class HMM(BayesianModel):
 
         '''
         super().__init__()
-        self.init_states = init_states
-        self.final_states = final_states
-        self.trans_mat = trans_mat
+        self.init_states = ConstantParameter(torch.tensor(init_states).long(),
+                                             fixed_dtype=True)
+        self.final_states = ConstantParameter(torch.tensor(final_states).long(),
+                                              fixed_dtype=True)
+        self.trans_mat = ConstantParameter(trans_mat)
         self.modelset = modelset
 
     @classmethod
@@ -161,17 +164,24 @@ class HMM(BayesianModel):
     def expected_log_likelihood(self, stats, inference_type='viterbig'):
         pc_exp_llh = self.modelset.expected_log_likelihood(stats)
         if inference_type == 'viterbi':
-            onehot_labels = onehot(HMM.viterbi(self.init_states,
-                                  self.final_states, self.trans_mat,
-                                  pc_exp_llh.detach()),
-                                  len(self.modelset), dtype=pc_exp_llh.dtype,
-                                  device=pc_exp_llh.device)
+            onehot_labels = onehot(
+                HMM.viterbi(
+                    self.init_states.value,
+                    self.final_states.value,
+                    self.trans_mat.value,
+                    pc_exp_llh.detach()
+                ), len(self.modelset),
+                dtype=pc_exp_llh.dtype,
+                device=pc_exp_llh.device
+            )
             exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
             self.cache['resps'] = onehot_labels
         else:
-            log_alphas = HMM.baum_welch_forward(self.init_states,
-                                                self.trans_mat, pc_exp_llh.detach())
-            log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat,
+            log_alphas = HMM.baum_welch_forward(self.init_states.value,
+                                                self.trans_mat.value,
+                                                pc_exp_llh.detach())
+            log_betas = HMM.baum_welch_backward(self.final_states.value,
+                                                self.trans_mat.value,
                                                 pc_exp_llh.detach())
             exp_llh = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
             self.cache['resps'] = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))

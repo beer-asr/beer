@@ -52,6 +52,18 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             nparams=self.natural_hparams
         )
 
+    def float(self):
+        self.natural_parameters = self.natural_parameters.float()
+        return self
+
+    def double(self):
+        self.natural_parameters = self.natural_parameters.double()
+        return self
+
+    def to(self, device):
+        self.natural_parameters = self.natural_parameters.to(device)
+        return self
+
     @property
     def natural_parameters(self):
         '``torch.Tensor``: Natural parameters.'
