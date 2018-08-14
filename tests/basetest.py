@@ -13,7 +13,7 @@ import numpy as np
 import torch
 
 
-FLOAT_TOLPLACES = 1
+FLOAT_TOLPLACES = 2
 FLOAT_TOL = 10 ** (-FLOAT_TOLPLACES)
 
 DOUBLE_TOLPLACES = 6
@@ -51,8 +51,7 @@ class BaseTest(unittest.TestCase):
     def assertArraysAlmostEqual(self, arr1, arr2):
         try:
             fail = False
-            self.assertTrue(np.allclose(arr1, arr2, rtol=self.tol,
-                                        atol=self.tol))
+            self.assertTrue(np.allclose(arr1, arr2, atol=self.tol))
         except AssertionError as error:
             fail = True
             raise error

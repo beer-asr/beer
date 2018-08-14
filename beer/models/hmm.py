@@ -1,61 +1,29 @@
 
 'Bayesian HMM model.'
 
+import math
 import torch
 import numpy as np
-from .bayesmodel import BayesianModel, BayesianModelSet
+from .bayesmodel import DiscreteLatentBayesianModel, BayesianModelSet
+from .parameters import ConstantParameter
 from ..utils import onehot, logsumexp
 
 
-class HMM(BayesianModel):
+class HMM(DiscreteLatentBayesianModel):
     ''' Hidden Markov Model.
 
     Attributes:
-        init_states  (list): Indices of initial states who have
+        init_states  (list): Indices of the initial states with
             non-zero probability.
-        final_states  (list): Indices of final states who have
+        final_states  (list): Indices of the final states wiht
             non-zero probability.
-        trans_mat (``torch.Tensor``): Transition matrix of HMM states.
-        modelset (:any:`BayesianModelSet`): Set of emission density.
+        trans_mat (``torch.Tensor``): Transition matrix of the HMM states.
+        modelset (:any:`BayesianModelSet`): Set of emission densities.
 
-    Example:
-        >>> # Create a set of Normal densities.
-        >>> mean = torch.zeros(2)
-        >>> cov = torch.eye(2)
-        >>> normalset = beer.NormalSetSharedFullCovariance.create(mean, cov, 3, noise_std=0.1)
-        >>> init_state = [0]
-        >>> final_state = [1]
-        >>> hmm = beer.HMM(init_state, final_state, trans_mat, normalset)
-        >>> hmm.init_states
-        [0]
-        >>> hmm.final_states
-        [1]
-        >>> hmm.trans_mat
-        tensor([[ 0.5000,  0.5000],
-                [ 1.0000,  0.0000]])
     '''
 
-    def __init__(self, init_states, final_states, trans_mat, modelset, training_type):
-        '''
-        Args:
-            init_states  (list): Indices of initial states who have
-                non-zero probability.
-            final_states  (list): Indices of final states who have
-                non-zero probability.
-            trans_mat (``torch.Tensor``): Transition matrix of HMM states.
-            modelset (:any:`BayesianModelSet`): Set of emission density.
-
-        '''
-        super().__init__()
-        self.init_states = init_states
-        self.final_states = final_states
-        self.trans_mat = trans_mat
-        self.modelset = modelset
-        #self._resps = None
-        self.training_type = training_type
-
     @classmethod
-    def create(cls, init_states, final_states, trans_mat, modelset, training_type):
+    def create(cls, init_states, final_states, trans_mat, modelset):
         '''Create a :any:`HMM` model.
 
         Args:
@@ -70,16 +38,7 @@ class HMM(BayesianModel):
             :any:`HMM`
 
         '''
-        return cls(init_states, final_states, trans_mat, modelset, training_type)
-    
-    def mean_field_factorization(self):
-        return self.model_set.mean_field_factorization()
-
-    def sufficient_statistics(self, data):
-        return self.modelset.sufficient_statistics(data)
-
-    def sufficient_statistics_from_mean_var(self, mean, var):
-        return self.modelset.sufficient_statistics_from_mean_var(mean, var)
+        return cls(init_states, final_states, trans_mat, modelset)
 
     @staticmethod
     def create_trans_mat(unigram, nstate_per_unit, gamma):
@@ -169,48 +128,86 @@ class HMM(BayesianModel):
             path.insert(0, backtrack[i, path[0]])
         return torch.LongTensor(path)
 
+    def __init__(self, init_states, final_states, trans_mat, modelset):
+        '''
+        Args:
+            init_states  (list): Indices of initial states who have
+                non-zero probability.
+            final_states  (list): Indices of final states who have
+                non-zero probability.
+            trans_mat (``torch.Tensor``): Transition matrix of HMM states.
+            modelset (:any:`BayesianModelSet`): Set of emission density.
+
+        '''
+        super().__init__(modelset)
+        self.init_states = ConstantParameter(torch.tensor(init_states).long(),
+                                             fixed_dtype=True)
+        self.final_states = ConstantParameter(torch.tensor(final_states).long(),
+                                              fixed_dtype=True)
+        self.trans_mat = ConstantParameter(trans_mat)
+
+    def _get_log_posteriors(self, pc_llhs, inference_type):
+        init_states, final_states, trans_mat = self.init_states.value, \
+            self.final_states.value, self.trans_mat.value
+        dtype, device = pc_llhs.dtype, pc_llhs.device
+        if inference_type == 'viterbi':
+            best_path = HMM.viterbi(init_states, final_states, trans_mat, pc_llhs)
+            lposteriors = onehot(best_path, len(self.modelset), dtype=dtype,
+                                   device=device).log()
+        elif inference_type == 'baum_welch':
+            log_alphas = HMM.baum_welch_forward(init_states, trans_mat, pc_llhs)
+            log_betas = HMM.baum_welch_backward(final_states, trans_mat, pc_llhs)
+            lognorm = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
+            lposteriors = log_alphas + log_betas - lognorm.view(-1, 1)
+        else:
+            raise ValueError('Unknown inference type: {}'.format(inference_type))
+        return lposteriors
+
     def decode(self, data):
         stats = self.sufficient_statistics(data)
-        pc_llhs = self.modelset(stats)
+        pc_llhs = self.modelset.expected_log_likelihood(stats)
         best_path = HMM.viterbi(self.init_states,
                                 self.final_states,
                                 self.trans_mat, pc_llhs)
         return best_path
 
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
 
-    def forward(self, s_stats, state_path=None):
-        pc_exp_llh = self.modelset(s_stats)
-        if state_path is not None:
-            onehot_labels = onehot(state_path, len(self.modelset),
-                                   dtype=pc_exp_llh.dtype,
-                                   device=pc_exp_llh.device)
-            exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
-            #self._resps = onehot_labels
-            self.cache['resps'] = onehot_labels
-        elif self.training_type == 'viterbi':
-            onehot_labels = onehot(HMM.viterbi(self.init_states,
-                                  self.final_states, self.trans_mat,
-                                  pc_exp_llh.detach()),
-                                  len(self.modelset), dtype=pc_exp_llh.dtype,
-                                  device=pc_exp_llh.device)
-            exp_llh = (pc_exp_llh * onehot_labels).sum(dim=-1)
-            #self._resps = onehot_labels
-            self.cache['resps'] = onehot_labels
-        else:
-            log_alphas = HMM.baum_welch_forward(self.init_states,
-                                                self.trans_mat, pc_exp_llh.detach())
-            log_betas = HMM.baum_welch_backward(self.final_states, self.trans_mat,
-                                                pc_exp_llh.detach())
-            exp_llh = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
-            #resps = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))
-            self.cache['resps'] = torch.exp(log_alphas + log_betas - exp_llh.view(-1, 1))
+    def mean_field_factorization(self):
+        return self.modelset.mean_field_factorization()
+
+    def sufficient_statistics(self, data):
+        return self.modelset.sufficient_statistics(data)
+
+    def expected_log_likelihood(self, stats, inference_type='baum_welch'):
+        pc_exp_llh = self.modelset.expected_log_likelihood(stats)
+        log_resps = self._get_log_posteriors(pc_exp_llh.detach(),
+                                             inference_type)
+        resps = log_resps.exp()
+        exp_llh = (pc_exp_llh * resps).sum(dim=-1)
+        self.cache['resps'] = resps
+
+        # We ignore the KL divergence term. This may bias the
+        # lower-bound a little bit but will not affect the training.
         return exp_llh
 
-    def accumulate(self, s_stats, parent_msg=None):
+    def accumulate(self, stats, parent_msg=None):
         retval = {
-            **self.modelset.accumulate(s_stats, self.cache['resps'])
+            **self.modelset.accumulate(stats, self.cache['resps'])
         }
         return retval
+
+    ####################################################################
+    # DiscreteLatentBayesianModel interface.
+    ####################################################################
+
+    def posteriors(self, data, inference_type='viterbi'):
+        stats = self.modelset.sufficient_statistics(data)
+        pc_exp_llh = self.modelset.expected_log_likelihood(stats)
+        return self._get_log_posteriors(pc_exp_llh.detach(),
+                                        inference_type).exp()
 
 
 class AlignModelSet(BayesianModelSet):
@@ -222,38 +219,38 @@ class AlignModelSet(BayesianModelSet):
 
         '''
         super().__init__()
-        self.model_set = model_set
-        self.state_ids = torch.tensor(state_ids).long()
-        self._idxs = list(range(len(self.state_ids)))
+        self.modelset = model_set
+        self.state_ids = ConstantParameter(torch.tensor(state_ids).long(),
+                                           fixed_dtype=True)
+        self._idxs = ConstantParameter(list(range(len(state_ids))),
+                                       fixed_dtype=True)
 
     ####################################################################
     # BayesianModel interface.
     ####################################################################
+
     def mean_field_factorization(self):
-        return self.model_set.mean_field_factorization()
+        return self.modelset.mean_field_factorization()
 
     def sufficient_statistics(self, data):
-        return len(data), self.model_set.sufficient_statistics(data)
+        return self.modelset.sufficient_statistics(data)
 
-    def forward(self, len_s_stats):
-        length, s_stats = len_s_stats
-        pc_exp_llh = self.model_set(s_stats)
-        new_pc_exp_llh = torch.zeros((length, len(self.state_ids)),
-                                     dtype=pc_exp_llh.dtype, device=pc_exp_llh.device)
-        new_pc_exp_llh[:, self._idxs] = pc_exp_llh[:, self.state_ids[self._idxs]]
+    def expected_log_likelihood(self, stats):
+        state_ids, idxs = self.state_ids.value, self._idxs.value
+        dtype, device = stats.dtype, stats.device
+        pc_exp_llh = self.modelset.expected_log_likelihood(stats)
+        new_pc_exp_llh = torch.zeros((len(stats), len(state_ids)),
+                                     dtype=dtype, device=device)
+        new_pc_exp_llh[:, idxs] = pc_exp_llh[:, state_ids[idxs]]
         return new_pc_exp_llh
 
-    def accumulate(self, len_s_stats, parent_msg=None):
-        length, s_stats = len_s_stats
-        if parent_msg is None:
-            raise ValueError('"parent_msg" should not be None')
-        weights = parent_msg
-        new_weights = torch.zeros((length, len(self.model_set)),
-                                  dtype=weights.dtype, device=weights.device)
-        for key, val in enumerate(weights.t()):
-            new_weights[:, self.state_ids[key]] += val
-
-        return self.model_set.accumulate(s_stats, parent_msg=new_weights)
+    def accumulate(self, stats, resps):
+        state_ids = self.state_ids.value
+        new_resps = torch.zeros((len(stats), len(self.modelset)),
+                                 dtype=resps.dtype, device=resps.device)
+        for key, val in enumerate(resps.t()):
+            new_resps[:, state_ids[key]] += val
+        return self.modelset.accumulate(stats, new_resps)
 
     ####################################################################
     # BayesianModelSet interface.
@@ -264,10 +261,10 @@ class AlignModelSet(BayesianModelSet):
         key (int): state index.
 
         '''
-        return self.model_set[self.state_ids[key]]
+        return self.modelset[self.state_ids.value[key]]
 
     def __len__(self):
-        return len(self.state_ids)
+        return len(self.state_ids.value)
 
 
 __all__ = ['HMM', 'AlignModelSet']

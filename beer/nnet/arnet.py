@@ -103,14 +103,7 @@ class SequentialMultipleInput(torch.nn.Sequential):
         return new_input
 
 
-def create_arnetwork(conf):
-    dim_in = conf['data_dim']
-    context_dim = conf['context_dim']
-    depth = conf['depth']
-    width = conf['width']
-    function_name, kwargs = parse_nnet_element(conf['activation'])
-    function = getattr(torch.nn, function_name)
-    activation = function(**kwargs)
+def AutoRegressiveNetwork(dim_in, flow_params_dim, depth, width, activation):
     ordering = range(dim_in)
     layer_connections = []
     for i in range(depth):
@@ -121,12 +114,12 @@ def create_arnetwork(conf):
     for i in range(depth):
         ltrans = torch.nn.Linear(previous_dim, width)
         mask = create_mask(previous_ordering, layer_connections[i])
-        if i > 0 or context_dim == 0:
+        if i > 0 or flow_params_dim == 0:
             arch.append(MaskedLinear(mask, ltrans))
         else:
             arch.append(MergeTransform(MaskedLinear(mask, ltrans),
-                                       torch.nn.Linear(context_dim, width)))
-        arch.append(activation)
+                                    torch.nn.Linear(flow_params_dim, width)))
+        arch.append(activation())
         previous_dim = width
         previous_ordering = layer_connections[i]
 
@@ -135,3 +128,6 @@ def create_arnetwork(conf):
     arch.append(ARNetNormalDiagonalCovarianceLayer(mask, width, dim_in))
 
     return SequentialMultipleInput(*arch)
+
+
+__all__ = ['AutoRegressiveNetwork']
