@@ -76,9 +76,9 @@ class Mixture(DiscreteLatentBayesianModel):
         per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
 
         # Responsibilities and expected llh.
-        w_per_component_exp_llh = (per_component_exp_llh + log_weights)
-        exp_llh = logsumexp(w_per_component_exp_llh.detach(), dim=1).view(-1)
-        log_resps = w_per_component_exp_llh.detach() - exp_llh.view(-1, 1)
+        w_per_component_exp_llh = (per_component_exp_llh + log_weights).detach()
+        w_exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
+        log_resps = w_per_component_exp_llh.detach() - w_exp_llh.view(-1, 1)
         local_kl_div = self._local_kl_divergence(log_resps)
         resps = log_resps.exp()
         exp_llh = (per_component_exp_llh * resps).sum(dim=-1)

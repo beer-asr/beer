@@ -1,5 +1,4 @@
 
-from . import arnet
-from . import problayers
+from .arnet import *
+from .problayers import *
 from . import neuralnetwork
-
