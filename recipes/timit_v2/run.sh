@@ -26,13 +26,23 @@ if [ $stage -le 1 ]; then
     done
 fi
 
-if [ $stage -le 2 ]; then
+if [ $stage -le 1 ]; then
+    echo =========================================================================
+    echo "                         Features Extraction                           "
+    echo =========================================================================
+    for s in train test dev; do
+        echo "Extracting features for: $s"
+        steps/extract_features.sh $setup $datadir/$s || exit 1
+    done
+fi
+
+if [ $stage -le 3 ]; then
     echo "Accumulating training data stastics"
     python utils/accumulate_data_stats.py \
         $datadir/train/feats.npz $datadir/train/feats.stats.npz
 fi
 
-if [ $stage -le 3 ]; then
+if [ $stage -le 4 ]; then
     echo "Convert transcriptio into state sequences"
         python utils/prepare_lables.py \
             $langdir/phones_48.txt $datadir/train/text $nstate_per_phone
