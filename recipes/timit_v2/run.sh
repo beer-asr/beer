@@ -4,7 +4,7 @@
 # Load the configuration.
 setup="./setup.sh"
 . $setup
-stage=1
+stage=0
 
 if [ $stage -le 0 ]; then
     echo =========================================================================
