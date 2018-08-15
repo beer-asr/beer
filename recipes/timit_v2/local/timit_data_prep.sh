@@ -19,8 +19,8 @@ dir=$(pwd)/data/local/data
 mkdir -p $dir
 
 
-[ -f $conf/test_spk.list ] || error_exit "$PROG: Eval-set speaker list not found.";
-[ -f $conf/dev_spk.list ] || error_exit "$PROG: dev-set speaker list not found.";
+[ -f $conf/test_spk.list ] || exit "$PROG: Eval-set speaker list not found.";
+[ -f $conf/dev_spk.list ] || exit "$PROG: dev-set speaker list not found.";
 
 
 # First check if the train & test directories exist (these can either be upper-

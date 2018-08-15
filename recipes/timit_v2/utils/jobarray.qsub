@@ -1,18 +1,30 @@
 #!/usr/bin/env bash
 
+
 if [ $# -ne 2 ]; then
     echo "usage: <command> <splitdir>"
     exit 1
 fi
 
-. path.sh
+if [ $# -ne 2 ]; then
+    echo "$0 <command> <splitdir>"
+    exit 1
+fi
 
 cmd=$1
 splitdir=$2
 
-# ID of the current BATCH starting from 0 to N-1 and padded with 0s
-# at the beginning.
-printf -v BATCH_ID "%02d" $((SGE_TASK_ID - 1 ))
+echo date: $(date)
+echo hostname: $(hostname)
+echo directory: $(pwd)
+echo splitdir: $splitdir
+echo cmd: $cmd
 
-$($cmd "${splitdir}/x${BATCH_ID}")
+. path.sh
 
+# This is bash specific and will not work in other shells.
+shopt -s extglob
+
+cat "$splitdir"/x*(0)${SGE_TASK_ID} | $cmd || exit 1
+
+echo "job succeeded on date $(date)"

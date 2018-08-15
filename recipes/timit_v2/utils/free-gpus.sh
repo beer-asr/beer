@@ -62,8 +62,8 @@ fi
 
 
 if [ ${n_gpus} -eq 0 ]; then
-    echo "No GPUs on this machine." 1>&2
-    exit 1
+    # There is no GPU/CUDA on this machine.
+    exit 0
 fi
 
 for i in $(seq 1 $n_gpus); do
