@@ -19,10 +19,9 @@ if [ $stage -le 1 ]; then
         mkdir -p $datadir/$s
         cp $datadir/local/data/${s}_wav.scp $datadir/$s/wav.scp
         cp $datadir/local/data/$s.uttids $datadir/$s/uttids
-        cp $datadir/local/data/$s.text $datadir/$s/text
-        # Feature extraction
+        cp $datadir/local/data/$s.text $datadir/$s/trans
         python utils/prepare_trans.py \
-            $datadir/$s/text $langdir/phones_48.txt $datadir/$s
+            $datadir/$s/trans $langdir/phones.txt $datadir/$s
     done
 fi
 
@@ -47,7 +46,7 @@ fi
 if [ $stage -le 3 ]; then
     echo "Convert the transcription into state sequences"
         python utils/prepare_labels.py \
-            $langdir/phones_48.txt $datadir/train/text $nstate_per_phone
+            $langdir/phones.txt $datadir/train/text $nstate_per_phone
     echo "Initialize emission models"
     # To be done
 fi
