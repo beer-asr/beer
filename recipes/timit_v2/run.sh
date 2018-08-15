@@ -4,7 +4,7 @@
 # Load the configuration.
 setup="./setup.sh"
 . $setup
-stage=0
+stage=3
 
 if [ $stage -le 0 ]; then
     echo =========================================================================
@@ -46,7 +46,8 @@ fi
 if [ $stage -le 3 ]; then
     echo "Convert the transcription into state sequences"
         python utils/prepare_labels.py \
-            $langdir/phones.txt $datadir/train/text $nstate_per_phone
+            $langdir/phones.txt $datadir/train/phones.int.npz \
+            $nstate_per_phone $mdldir
     echo "Initialize emission models"
     # To be done
 fi
