@@ -2,20 +2,20 @@
 
 
 # Load the configuration.
-. ./setup.sh
-
+setup="./setup.sh"
+. $setup
 stage=1
 
 if [ $stage -le 0 ]; then
     echo =========================================================================
     echo "                         Data Preparation                              "
     echo =========================================================================
-    local/timit_data_prep.sh "$timit"  || exit 1
-    python local/timit_lang_prep.py $langdir $confdir/phones.60-48-39.map
+    local/timit_data_prep.sh "$timit" "$langdir" "$confdir" || exit 1
 fi
 
 if [ $stage -le 1 ]; then
     for s in train test dev; do
+        echo "Preparing for $datadir/$s"
         mkdir -p $datadir/$s
         cp $datadir/local/data/${s}_wav.scp $datadir/$s/wav.scp
         cp $datadir/local/data/$s.uttids $datadir/$s/uttids
