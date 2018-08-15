@@ -94,7 +94,7 @@ for x in train dev test; do
         | sort > $x.text || exit 1;
 
     # Create wav.scp
-    awk '{printf("%s '$sph2pipe' -f wav %s |\n", $1, $2);}' < ${x}_sph.scp > ${x}_wav.scp
+    awk '{printf("%s sph2pipe -f wav %s |\n", $1, $2);}' < ${x}_sph.scp > ${x}_wav.scp
 done
 
 echo "Data preparation succeeded"
