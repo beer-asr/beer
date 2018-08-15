@@ -4,7 +4,7 @@
 # Load the configuration.
 setup="./setup.sh"
 . $setup
-stage=2
+stage=0
 
 if [ $stage -le 0 ]; then
     echo =========================================================================
@@ -42,8 +42,6 @@ if [ $stage -le 2 ]; then
     python utils/compute_data_stats.py \
         $datadir/train/feats.npz $datadir/train/feats.stats.npz
 fi
-
-exit 0 
 
 if [ $stage -le 3 ]; then
     echo "Convert the transcription into state sequences"

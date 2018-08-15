@@ -13,7 +13,7 @@ def accumulate(feature_file):
     '''
     feats = np.load(feature_file)
     keys = list(feats.keys())
-    dim = feats[feats.keys()[0]].shape[1]
+    dim = feats[keys[0]].shape[1]
     tot_sum = np.zeros(dim)
     tot_square_sum = np.zeros(dim)
     tot_counts = 0
