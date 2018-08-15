@@ -34,21 +34,21 @@ if [ $stage -le 1 ]; then
         echo "Extracting features for: $s"
         steps/extract_features.sh $setup $datadir/$s || exit 1
     done
-fi
 
-if [ $stage -le 3 ]; then
-    echo "Accumulating training data stastics"
-    python utils/accumulate_data_stats.py \
+    # We need the mean/variance of the training data for the
+    # initialization of the models. Also, we need to know how many
+    # frames are in the training data to properly compute the
+    # Stochastic Variational Lower Bound.
+    echo "Computing training data statistics"
+    python utils/compute_data_stats.py \
         $datadir/train/feats.npz $datadir/train/feats.stats.npz
 fi
 
-if [ $stage -le 4 ]; then
-    echo "Convert transcriptio into state sequences"
-        python utils/prepare_lables.py \
+if [ $stage -le 3 ]; then
+    echo "Convert the transcription into state sequences"
+        python utils/prepare_labels.py \
             $langdir/phones_48.txt $datadir/train/text $nstate_per_phone
     echo "Initialize emission models"
     # To be done
 fi
-
-
 
