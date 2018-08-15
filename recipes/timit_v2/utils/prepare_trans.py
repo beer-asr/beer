@@ -18,7 +18,7 @@ def read_phonelist(infile):
     return dict_map
 
 def main():
-    parser = argparse.ArgumentParser('Convert transcription into npz file')
+    parser = argparse.ArgumentParser(description='Convert transcription into npz file')
     parser.add_argument('trans', help='Transcription file')
     parser.add_argument('phonelist', help='phones.txt')
     parser.add_argument('outdir', help='Output directory')

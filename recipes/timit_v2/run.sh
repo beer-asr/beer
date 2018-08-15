@@ -22,6 +22,23 @@ if [ $stage -le 1 ]; then
         cp $datadir/local/data/$s.text $datadir/$s/text
         # Feature extraction
         python utils/prepare_trans.py \
-        $datadir/$s/text $langdir/phones_48.txt $datadir/$s
+            $datadir/$s/text $langdir/phones_48.txt $datadir/$s
     done
 fi
+
+if [ $stage -le 2 ]; then
+    echo "Accumulating training data stastics"
+    python utils/accumulate_data_stats.py \
+        $datadir/train/feats.npz $datadir/train/feats.stats.npz
+fi
+
+if [ $stage -le 3 ]; then
+    echo "Convert transcriptio into state sequences"
+        python utils/prepare_lables.py \
+            $langdir/phones_48.txt $datadir/train/text $nstate_per_phone
+    echo "Initialize emission models"
+    # To be done
+fi
+
+
+
