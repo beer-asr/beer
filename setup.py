@@ -13,7 +13,7 @@ setup(
         'torch',
     ],
     version=1.0,
-    packages=['beer', 'beer.models', 'beer.nnet']
+    packages=['beer', 'beer.priors', 'beer.models', 'beer.nnet']
 )
 
 
