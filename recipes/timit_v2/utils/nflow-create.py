@@ -24,9 +24,9 @@ def main():
 
     # Load the formatting values.
     format_values = {}
-    for key_val in args.set.split(','):
+    for key_val in args.set.strip().split(','):
         try:
-            key, val = key_val.split('=')
+            key, val = key_val.strip().split('=')
             format_values[key] = val
         except Exception:
             pass

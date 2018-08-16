@@ -27,10 +27,10 @@ def main():
 
     # Load the formatting values.
     format_values = {}
-    for key_val in args.set.split(','):
+    for key_val in args.set.strip().split(','):
         try:
             key, val = key_val.split('=')
-            format_values[key] = val
+            format_values[key.strip()] = val.strip()
         except Exception:
             pass
 
