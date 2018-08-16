@@ -26,6 +26,7 @@ pushd "$datadir"/split > /dev/null
 cp ../wav.scp ./
 split --numeric-suffixes=1 -n l/$fea_njobs ./wav.scp
 popd > /dev/null
+trap 'rm -rf "$datadir/split"' EXIT
 
 # Cleanup the log files.
 rm -f "$logdir"/extract-features.out.*
@@ -47,4 +48,3 @@ qsub \
 
 # Create the "npz" archives.
 find "$tmpdir" -name '*npy' | zip -j -@ "$datadir"/feats.npz > /dev/null
-

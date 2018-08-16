@@ -5,6 +5,7 @@ datadir=data
 langdir=data/lang
 timit=/export/corpora/LDC/LDC93S1/timit/TIMIT  # @JHU
 #timit=/mnt/matylda2/data/TIMIT/timit  # @BUT
+mdldir=exp/hmm_gmm
 
 # Features extraction.
 fea_njobs=10
