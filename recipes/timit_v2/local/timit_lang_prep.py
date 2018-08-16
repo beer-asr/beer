@@ -11,8 +11,8 @@ def main():
 
     if not os.path.exists(args.outdir):
         os.makedirs(args.outdir)
-    phone_48 = args.outdir + '/phones.txt'
-    phone_map = args.outdir + '/phones_48_to_39.txt'
+    phone_48 = os.path.join(args.outdir, 'phones.txt')
+    phone_map = os.path.join(args.outdir, 'phones_48_to_39.txt')
 
     dict_phone_48 = {}
     dict_map = {}

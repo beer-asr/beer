@@ -2,14 +2,19 @@
 
 
 # Load the configuration.
-setup="./setup.sh"
+
+if [ $# -ne 1 ]; then
+    echo "$0 <setup.sh>"
+    exit 1
+fi
+setup=$1
 . $setup
-stage=2
+stage=3
 
 if [ $stage -le 0 ]; then
-    echo =========================================================================
-    echo "                         Data Preparation                              "
-    echo =========================================================================
+    echo ======================================================================
+    echo "                         Data Preparation                           "
+    echo ======================================================================
     local/timit_data_prep.sh "$timit" "$langdir" "$confdir" || exit 1
 fi
 
@@ -26,9 +31,9 @@ if [ $stage -le 1 ]; then
 fi
 
 if [ $stage -le 2 ]; then
-    echo =========================================================================
-    echo "                         Features Extraction                           "
-    echo =========================================================================
+    echo ======================================================================
+    echo "                         Features Extraction                        "
+    echo ======================================================================
     for s in train test dev; do
         echo "Extracting features for: $s"
         steps/extract_features.sh $setup $datadir/$s || exit 1
@@ -36,11 +41,26 @@ if [ $stage -le 2 ]; then
 fi
 
 if [ $stage -le 3 ]; then
+    echo ======================================================================
+    echo "                         HMM-GMM Training                           "
+    echo ======================================================================
     echo "Convert the transcription into state sequences"
         python utils/prepare_labels.py \
-            $langdir/phones.txt $datadir/train/phones.int.npz \
-            $nstate_per_phone $mdldir
+            $langdir/phones.txt $data_train_dir/phones.int.npz \
+            $hmm_conf $hmm_gmm_mdl_dir
     echo "Initialize emission models"
-    # To be done
+    python utils/create_emission.py \
+        --stats $data_train_dir/feats.stats.npz \
+        $hmm_conf $hmm_gmm_mdl_dir/emission.mdl
+    echo "Training HMM-GMM model"
+    python utils/train_hmm.py \
+        --infer_type $hmm_infer_type \
+        --lrate $hmm_lrate \
+        --batch_size $hmm_batch_size \
+        --epochs $hmm_epochs \
+        $data_train_dir/feats.npz $hmm_gmm_mdl_dir/states.int.npz \
+        $hmm_gmm_mdl_dir/emission.mdl $data_train_dir/feats.stats.npz \
+        $hmm_gmm_mdl_dir $use_gpu $hmm_fast_eval \
+        > $hmm_gmm_mdl_dir/train.log 2>&1
 fi
 
