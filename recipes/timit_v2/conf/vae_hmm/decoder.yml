@@ -1,0 +1,38 @@
+# Decoder of the VAE model. It is symmetric to the encoder. see
+# "encoder.yml" in the same directory. When creating this network,
+# you need to supply "dim_in" and "dim_out".
+
+nnet_structure:
+
+# The first layer is just a linear transformation to change the
+# dimension of the the input to the decoder.
+- block_structure:
+  - Linear:in_features={dim_in}; out_features=128
+
+# Feed-forward block with a residual connection.
+- block_structure:
+  - Linear:in_features=128;out_features=256
+  - Softplus
+  - Linear:in_features=256;out_features=128
+  - Softplus
+  residual: IdentityLayer
+
+# Prepare the data to be processed by the convolutive block.
+- block_structure:
+  - TransposeLayer
+  - ReshapeLayer:shape=(1, 128, -1, 1)
+
+# Convolutive block. Note that we use the "transposed" convolution
+# to up-sample the signal.
+- block_structure:
+  - Conv2d:in_channels=128;out_channels=128;kernel_size=(11,1);padding=(5,0)
+  - Softplus
+  - ConvTranspose2d:in_channels=128;out_channels=1;kernel_size=(11,{dim_out});padding=(5,0);stride=2
+  - Softplus
+  residual: ConvTranspose2d:in_channels=128;out_channels=1;kernel_size=(11,{dim_out});padding=(5,0);stride=2
+
+# Final reshaping to get the exact same dimension as the output
+# utterance.
+- block_structure:
+  - ReshapeLayer:shape=(-1, {dim_out})
+
