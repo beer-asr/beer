@@ -1,5 +1,4 @@
-# Encoder of the VAE model. When creating this network, you need to
-# supply "dim_in".
+# Encoder of the VAE model.
 
 nnet_structure:
 
@@ -12,23 +11,23 @@ nnet_structure:
 # Convolutive block consisting of 2 stacks convolution layers with
 # a residual connection (avg pooling to match the down sampling).
 - block_structure:
-  - Conv2d:in_channels=1;out_channels=128;kernel_size=(11,{dim_in});padding=(5,0);stride=2
+  - Conv2d:in_channels=1;out_channels={dim_out};kernel_size=(11,{dim_in});padding=(5,0);stride=2
   - ELU
-  - Conv2d:in_channels=128;out_channels=128;kernel_size=(11,1);padding=(5,0)
+  - Conv2d:in_channels={dim_out};out_channels={dim_out};kernel_size=(11,1);padding=(5,0)
   - ELU
   residual: AvgPool2d:kernel_size=(11,39);stride=2;padding=(5,0)
 
 # After the convolutive block, reshape the data so to be processed
 # by standard feed-forward layer.
 - block_structure:
-  - ReshapeLayer:shape=(128, -1)
+  - ReshapeLayer:shape=({dim_out}, -1)
   - TransposeLayer
 
 # Final block of the encoder: 2 fully connected layers  with a
 # residual connection.
 - block_structure:
-  - Linear:in_features=128;out_features=512
+  - Linear:in_features={dim_out};out_features=512
   - ELU
-  - Linear:in_features=512;out_features=128
+  - Linear:in_features=512;out_features={dim_out}
   residual: IdentityLayer
 

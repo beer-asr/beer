@@ -180,5 +180,5 @@ def create(conf):
 
 
 # This module has no public interface.
-__all__ = ['create']
+__all__ = ['create', 'create_nnet_element']
 

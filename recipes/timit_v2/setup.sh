@@ -15,3 +15,14 @@ fea_conf=$confdir/features.yml
 # Model parameters.
 nstate_per_phone=3
 
+# VAE-HMM model.
+vae_hmm_confdir=$(pwd)/conf/vae_hmm
+vae_hmm_encoder_conf=$vae_hmm_confdir/encoder.yml
+vae_hmm_decoder_conf=$vae_hmm_confdir/decoder.yml
+vae_hmm_normalizing_flow_conf=$vae_hmm_confdir/normalizing_flow.yml
+vae_hmm_emissions_conf=$vae_hmm_confdir/emissions.yml
+vae_hmm_latent_dim=30
+vae_hmm_encoder_out_dim=128
+vae_hmm_encoder_cov_type=isotropic
+vae_hmm_decoder_cov_type=diagonal
+

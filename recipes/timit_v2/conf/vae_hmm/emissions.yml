@@ -1,0 +1,5 @@
+n_units: 48
+n_state_per_unit: 3
+n_normal_per_state: 1
+cov_type: full
+shared_cov: yes

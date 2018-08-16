@@ -1,8 +1,5 @@
 
-'''Create a neural network from a YAML configuration file. The
-components of the network are build upon pytorch "modules" object.
-See in the "conf" directory for an example.
-'''
+'Create a normalizing flow network from a YAML configuration file.'
 
 
 import argparse
@@ -39,12 +36,22 @@ def main():
         conf_str = fid.read().format(**format_values)
         conf = yaml.load(conf_str)
 
-    # Create the neural network.
-    nnet = beer.nnet.create(conf)
+    activation = beer.nnet.create_nnet_element(conf['activation'])
+    nnet_flow = []
+    for i in range(conf['depth']):
+        nnet_flow.append(
+            beer.nnet.AutoRegressiveNetwork(
+                dim_in=conf['dim'],
+                flow_params_dim=conf['flow_params_dim'],
+                depth=conf['block_depth'],
+                width=conf['block_width'],
+                activation=activation
+            )
+        )
 
     # Save the model on disk.
     with open(args.out, 'wb') as fid:
-        pickle.dump(nnet, fid)
+        pickle.dump(nnet_flow, fid)
 
 
 if __name__ == '__main__':
