@@ -18,7 +18,14 @@ class ReshapeLayer(torch.nn.Module):
         self.shape = shape
 
     def forward(self, data):
-        return data.view(*self.shape)
+        return data.contiguous().view(*self.shape)
+
+
+class TransposeLayer(torch.nn.Module):
+    '''Transpose the input.'''
+
+    def forward(self, data):
+        return data.t().contiguous()
 
 
 class IdentityLayer(torch.nn.Module):
@@ -90,13 +97,14 @@ def parse_nnet_element(strval):
 
     '''
     str_kwargs = {}
-    if ':' in strval:
-        function_name, args_and_vals = strval.strip().split(':')
+    nospace_str = ''.join(strval.split())
+    if ':' in nospace_str:
+        function_name, args_and_vals = nospace_str.strip().split(':')
         for arg_and_val in args_and_vals.split(';'):
             argname, str_argval = arg_and_val.split('=')
             str_kwargs[argname] = str_argval
     else:
-        function_name = strval
+        function_name = nospace_str
     return function_name, str_kwargs
 
 
@@ -120,6 +128,8 @@ def create_nnet_element(strval):
         # for the beer extensions or raise an error.
         elif function_name == 'ReshapeLayer':
             function = ReshapeLayer
+        elif function_name == 'TransposeLayer':
+            function = TransposeLayer
         elif function_name == 'IdentityLayer':
             function = IdentityLayer
         else:
@@ -154,23 +164,21 @@ def create_nnet_block(block_conf):
     return NeuralNetworkBlock(structure, res_connection)
 
 
-def create(conf, dtype, device):
+def create(conf):
     '''Create a neural network.
 
     Args:
         conf (dif): Configuration data.
-        dtype (``torch.dtype``): Type of the returned network.
-        device (``torch.device``): Device of the returned network.
 
     Returns:
-        list of :any:`NeuralNetworkBlock`
-
+        ``torch.Sequential``
     '''
     nnet_blocks_conf = conf['nnet_structure']
     network = torch.nn.Sequential(*[create_nnet_block(block_conf)
                                   for block_conf in nnet_blocks_conf])
-    return network.type(dtype).to(device)
+    return network
 
 
 # This module has no public interface.
-__all__ = []
+__all__ = ['create']
+

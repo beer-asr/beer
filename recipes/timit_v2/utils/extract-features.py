@@ -104,7 +104,7 @@ def main():
 
             # HTK compatibility steps (probably doesn't change
             # the accuracy of the recognition).
-            features *= np.sqrt(2. / feaconf['nfilters'])
+            #features *= np.sqrt(2. / feaconf['nfilters'])
 
             # Liftering.
             l_coeff = feaconf['lifter_coeff']
