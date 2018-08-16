@@ -96,6 +96,18 @@ exit 0
 if [ ! -f $outdir/final.mdl ]; then
     echo "Training..."
 
+    python utils/vae-hmm-train.py \
+        --training_type $vae_hmm_training_type \
+        --lrate $vae_hmm_lrate \
+        --lrate-nnet $vae_hmm_lrate_nnet \
+        --batch-size $vae_hmm_batch_size \
+        --epochs $vae_hmm_epochs \
+        --fast-eval \
+        $train_datadir/feats.npz \
+        $outdir/labels.int \
+        $outdir/0.mdl \
+        $train_datadir/feats.stats.npz \
+        $outdir
 else
     echo "The model is already trained. Final model is: $outdir/final.dml"
 fi
