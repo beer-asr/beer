@@ -2,6 +2,7 @@
 
 import numpy as np
 import argparse
+import os
 
 def read_phonelist(infile):
     '''Read phones.txt file and store in a dictionary
@@ -18,14 +19,15 @@ def read_phonelist(infile):
     return dict_map
 
 def main():
-    parser = argparse.ArgumentParser(description='Convert transcription into npz file')
+    parser = argparse.ArgumentParser(description='Convert text \
+        transcription into intergals, and save in npz file')
     parser.add_argument('trans', help='Transcription file')
     parser.add_argument('phonelist', help='phones.txt')
     parser.add_argument('outdir', help='Output directory')
     args = parser.parse_args()
 
     text = args.trans
-    outfile = args.outdir + '/phones.int.npz'
+    outfile = os.path.join(args.outdir, 'phones.int.npz')
     dict_map = read_phonelist(args.phonelist)
     dict_phones = {}
     with open(text, 'r') as f:
