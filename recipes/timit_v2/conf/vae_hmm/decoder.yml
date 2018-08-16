@@ -12,9 +12,9 @@ nnet_structure:
 # Feed-forward block with a residual connection.
 - block_structure:
   - Linear:in_features=128;out_features=256
-  - Softplus
+  - ELU
   - Linear:in_features=256;out_features=128
-  - Softplus
+  - ELU
   residual: IdentityLayer
 
 # Prepare the data to be processed by the convolutive block.
@@ -26,9 +26,9 @@ nnet_structure:
 # to up-sample the signal.
 - block_structure:
   - Conv2d:in_channels=128;out_channels=128;kernel_size=(11,1);padding=(5,0)
-  - Softplus
+  - ELU
   - ConvTranspose2d:in_channels=128;out_channels=1;kernel_size=(11,{dim_out});padding=(5,0);stride=2
-  - Softplus
+  - ELU
   residual: ConvTranspose2d:in_channels=128;out_channels=1;kernel_size=(11,{dim_out});padding=(5,0);stride=2
 
 # Final reshaping to get the exact same dimension as the output
