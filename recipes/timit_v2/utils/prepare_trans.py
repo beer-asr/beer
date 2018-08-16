@@ -20,7 +20,7 @@ def read_phonelist(infile):
 
 def main():
     parser = argparse.ArgumentParser(description='Convert text \
-        transcription into intergals, and save in npz file')
+        transcriptions into integer sequences, and save in npz file')
     parser.add_argument('trans', help='Transcription file')
     parser.add_argument('phonelist', help='phones.txt')
     parser.add_argument('outdir', help='Output directory')

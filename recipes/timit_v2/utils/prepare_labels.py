@@ -17,11 +17,11 @@ def read_phonelist(infile):
     return dict_map
 
 def main():
-    parser = argparse.ArgumentParser(description='Convert phone ids into states ids')
+    parser = argparse.ArgumentParser(description='Convert phone integer\
+        transcriptions into hmm states integer labels, used for HMM training')
     parser.add_argument('phonefile', help='phones.txt')
     parser.add_argument('phoneids', help='phone.int.npz file')
-    parser.add_argument('conf',
-        help='HMM configuration file')
+    parser.add_argument('conf', help='HMM configuration file')
     parser.add_argument('outdir', help='Output directory')
     args = parser.parse_args()
 
