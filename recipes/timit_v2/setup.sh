@@ -2,10 +2,11 @@
 # Directory structure.
 confdir=conf
 datadir=data
+data_train_dir=data/train
 langdir=data/lang
 timit=/export/corpora/LDC/LDC93S1/timit/TIMIT  # @JHU
 #timit=/mnt/matylda2/data/TIMIT/timit  # @BUT
-mdldir=exp/hmm_gmm
+
 
 # Features extraction.
 fea_njobs=10
@@ -23,7 +24,8 @@ vae_hmm_encoder_out_dim=128
 vae_hmm_encoder_cov_type=isotropic
 vae_hmm_decoder_cov_type=diagonal
 
-# HMM-GMM parameters.
+# HMM-GMM model parameters.
+hmm_gmm_mdl_dir=exp/hmm_gmm
 hmm_conf=$confdir/hmm_gmm.yml
 hmm_infer_type='viterbi'
 hmm_lrate=0.1
