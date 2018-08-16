@@ -22,3 +22,12 @@ vae_hmm_latent_dim=30
 vae_hmm_encoder_out_dim=128
 vae_hmm_encoder_cov_type=isotropic
 vae_hmm_decoder_cov_type=diagonal
+
+# HMM-GMM parameters.
+hmm_conf=$confdir/hmm_gmm.yml
+hmm_infer_type='viterbi'
+hmm_lrate=0.1
+hmm_batch_size=400
+hmm_epochs=10
+hmm_fast_eval="--fast-eval"
+use_gpu=""
