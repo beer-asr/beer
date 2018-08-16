@@ -4,7 +4,7 @@
 # Load the configuration.
 setup="./setup.sh"
 . $setup
-stage=3
+stage=2
 
 if [ $stage -le 0 ]; then
     echo =========================================================================
@@ -33,14 +33,6 @@ if [ $stage -le 2 ]; then
         echo "Extracting features for: $s"
         steps/extract_features.sh $setup $datadir/$s || exit 1
     done
-
-    # We need the mean/variance of the training data for the
-    # initialization of the models. Also, we need to know how many
-    # frames are in the training data to properly compute the
-    # Stochastic Variational Lower Bound.
-    echo "Computing training data statistics"
-    python utils/compute_data_stats.py \
-        $datadir/train/feats.npz $datadir/train/feats.stats.npz
 fi
 
 if [ $stage -le 3 ]; then
