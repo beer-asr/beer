@@ -14,14 +14,14 @@ if [ $stage -le 0 ];then
     echo "Convert the transcription into state sequences"
         python utils/prepare_state_labels.py \
             $langdir/phones.txt $data_train_dir/phones.int.npz \
-            $hmm_conf $hmm_gmm_mdl_dir
+            $hmm_emission_conf $hmm_gmm_mdl_dir
 fi
 
 if [ $stage -le 1 ];then
     echo "Initialize emission models"
     python utils/create_emission.py \
         --stats $data_train_dir/feats.stats.npz \
-        $hmm_conf $hmm_gmm_mdl_dir/emission.mdl
+        $hmm_emission_conf $hmm_gmm_mdl_dir/emission.mdl
 fi
 
 if [ $stage -le 2 ];then

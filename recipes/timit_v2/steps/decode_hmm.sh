@@ -15,7 +15,7 @@ if [ $stage -le 0 ];then
     python utils/decode_hmm.py \
         --gamma $hmm_gamma \
         $hmm_gmm_mdl_dir/final.mdl $decode_dir \
-        $data_test_dir/feats.npz $hmm_conf > $decode_dir/decode.log 2>&1 || exit 1
+        $data_test_dir/feats.npz $hmm_emission_conf > $decode_dir/decode.log 2>&1 || exit 1
 fi
 
 if [ $stage -le 1 ];then

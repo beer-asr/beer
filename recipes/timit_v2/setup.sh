@@ -36,7 +36,7 @@ vae_hmm_dir=$expdir/vae_hmm_nw${vae_hmm_encoder_out_dim}_ldim${vae_hmm_latent_di
 
 # HMM-GMM model parameters.
 hmm_gmm_mdl_dir=$expdir/hmm_gmm
-hmm_conf=$confdir/hmm_gmm.yml
+hmm_emission_conf=$confdir/hmm_gmm.yml
 hmm_infer_type='viterbi'
 hmm_lrate=0.1
 hmm_batch_size=400
