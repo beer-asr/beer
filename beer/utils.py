@@ -22,7 +22,7 @@ def onehot(labels, max_label, dtype, device):
             has a single element set to 1.
     '''
     retval = torch.zeros(len(labels), max_label, dtype=dtype, device=device)
-    idxs = torch.range(0, len(labels) - 1).long()
+    idxs = torch.arange(0, len(labels)).long()
     retval[idxs, labels] = 1
     return retval
 
