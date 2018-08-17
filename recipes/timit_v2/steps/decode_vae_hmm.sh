@@ -11,12 +11,12 @@ stage=0
 
 if [ $stage -le 0 ];then
     echo "Decoding"
-    mkdir -p $hmm_decode_dir
-    python utils/decode_hmm.py \
+    mkdir -p $vae_hmm_decode_dir
+    python utils/decode_vae_hmm.py \
         --gamma $hmm_gamma \
-        $hmm_gmm_mdl_dir/final.mdl $hmm_decode_dir \
-        $data_test_dir/feats.npz $hmm_emission_conf \
-        > $hmm_decode_dir/decode.log 2>&1 || exit 1
+        $vae_hmm_dir/final.mdl $vae_hmm_decode_dir \
+        $data_test_dir/feats.npz $vae_hmm_emissions_conf \
+        > $vae_hmm_decode_dir/decode.log 2>&1 || exit 1
 fi
 
 if [ $stage -le 1 ];then
