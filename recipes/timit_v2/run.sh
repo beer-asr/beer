@@ -44,23 +44,6 @@ if [ $stage -le 3 ]; then
     echo ======================================================================
     echo "                         HMM-GMM Training                           "
     echo ======================================================================
-    echo "Convert the transcription into state sequences"
-        python utils/prepare_labels.py \
-            $langdir/phones.txt $data_train_dir/phones.int.npz \
-            $hmm_conf $hmm_gmm_mdl_dir
-    echo "Initialize emission models"
-    python utils/create_emission.py \
-        --stats $data_train_dir/feats.stats.npz \
-        $hmm_conf $hmm_gmm_mdl_dir/emission.mdl
-    echo "Training HMM-GMM model"
-    python utils/train_hmm.py \
-        --infer_type $hmm_infer_type \
-        --lrate $hmm_lrate \
-        --batch_size $hmm_batch_size \
-        --epochs $hmm_epochs \
-        $data_train_dir/feats.npz $hmm_gmm_mdl_dir/states.int.npz \
-        $hmm_gmm_mdl_dir/emission.mdl $data_train_dir/feats.stats.npz \
-        $hmm_gmm_mdl_dir $use_gpu $hmm_fast_eval \
-        > $hmm_gmm_mdl_dir/train.log 2>&1
+    utils/train_hmm.sh $setup
 fi
 

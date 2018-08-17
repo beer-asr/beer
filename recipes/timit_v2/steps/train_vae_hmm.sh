@@ -44,7 +44,7 @@ feadim=$(python -c "$pycmd")
 
 if [ ! -f $outdir/states.int.npz ]; then
     echo "Convert the transcription to the state sequence."
-    python utils/prepare_labels.py \
+    python utils/prepare_state_labels.py \
         $langdir/phones.txt \
         $train_datadir/phones.int.npz \
         $vae_hmm_emissions_conf \

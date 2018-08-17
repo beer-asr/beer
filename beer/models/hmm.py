@@ -166,9 +166,9 @@ class HMM(DiscreteLatentBayesianModel):
     def decode(self, data):
         stats = self.sufficient_statistics(data)
         pc_llhs = self.modelset.expected_log_likelihood(stats)
-        best_path = HMM.viterbi(self.init_states,
-                                self.final_states,
-                                self.trans_mat, pc_llhs)
+        best_path = HMM.viterbi(self.init_states.value,
+                                self.final_states.value,
+                                self.trans_mat.value, pc_llhs)
         return best_path
 
     ####################################################################
