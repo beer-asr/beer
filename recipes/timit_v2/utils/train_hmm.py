@@ -65,7 +65,7 @@ def main():
         random.shuffle(keys)
         batches = [keys[i: i+batch_size] for i in range(0, len(keys), batch_size)]
         logging.info("Data shuffled into %d batches", len(batches))
-        hmm_epoch = os.path.join(hmm_mdl_dir, str(epoch), '.mdl')
+        hmm_epoch = os.path.join(hmm_mdl_dir, str(epoch) + '.mdl')
         for batch_keys in batches:
             optimizer.zero_grad()
             elbo = beer.evidence_lower_bound(datasize=tot_counts,
