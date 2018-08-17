@@ -42,8 +42,10 @@ fi
 
 if [ $stage -le 3 ]; then
     echo ======================================================================
-    echo "                         HMM-GMM Training                           "
+    echo "                         HMM-GMM Training and decoding              "
     echo ======================================================================
-    utils/train_hmm.sh $setup
+    steps/train_hmm.sh $setup
+    steps/decode_hmm.sh $setup
+
 fi
 

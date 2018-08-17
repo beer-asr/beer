@@ -2,6 +2,7 @@
 
 if [ $# -ne 1 ];then
     echo "$0 <setup.sh>"
+    exit 1
 fi
 
 setup=$1
