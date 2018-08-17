@@ -11,6 +11,9 @@ import pickle
 import logging
 import os
 
+log_format = "%(asctime)s :%(lineno)d %(levelname)s:%(message)s"
+logging.basicConfig(level=logging.INFO, format=log_format)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('feats', type=str, help='Feature file')
@@ -45,22 +48,25 @@ def main():
     else:
         device = torch.device('cpu')
 
-    with open(args.emissions, 'rb') as pickle_file:
+    init_mdl = args.emissions
+    final_mdl = os.path.join(hmm_mdl_dir, 'final.mdl')
+    start_id = 1
+    if not os.path.exists(final_mdl):
+        for i in range(1, epochs):
+            exist_mdl = os.path.join(hmm_mdl_dir, str(i) + '.mdl')
+            if os.path.exists(exist_mdl):
+                init_mdl = exist_mdl
+                start_id = i + 1
+    with open(init_mdl, 'rb') as pickle_file:
         emissions = pickle.load(pickle_file)
     emissions = emissions.to(device)
-
     tot_counts = int(stats['nframes'])
 
-    log_format = "%(asctime)s :%(lineno)d %(levelname)s:%(message)s"
-    logging.basicConfig(level=logging.INFO, format=log_format)
-
-    # Training
     params = emissions.mean_field_groups
     optimizer = beer.BayesianModelCoordinateAscentOptimizer(params, lrate=lrate)
 
-    for epoch in range(epochs):
+    for epoch in range(start_id, epochs + 1):
         logging.info("Epoch: %d", epoch)
-        # Prepare data
         keys = list(feats.keys())
         random.shuffle(keys)
         batches = [keys[i: i+batch_size] for i in range(0, len(keys), batch_size)]
@@ -88,11 +94,10 @@ def main():
             logging.info("Elbo value is %f", float(elbo) / (tot_counts *
                          batch_nutt))
             optimizer.step()
-        with open(hmm_epoch, 'wb') as m:
-            pickle.dump(emissions.to(torch.device('cpu')), m)
-
-    hmm_mdl = os.path.join(hmm_mdl_dir, 'hmm.mdl')
-    with open(hmm_mdl, 'wb') as m:
+        if epoch != epochs:
+            with open(hmm_epoch, 'wb') as m:
+                pickle.dump(emissions.to(torch.device('cpu')), m)
+    with open(final_mdl, 'wb') as m:
         pickle.dump(emissions.to(torch.device('cpu')), m)
 
 if __name__ == "__main__":
