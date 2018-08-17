@@ -4,8 +4,9 @@ timit=/export/corpora/LDC/LDC93S1/timit/TIMIT  # @JHU
 #timit=/mnt/matylda2/data/TIMIT/timit  # @BUT
 confdir=$(pwd)/conf
 datadir=$(pwd)/data
-data_train_dir=$(pwd)/data/train
-langdir=$(pwd)/data/lang
+data_train_dir=$datadir/train
+data_test_dir=$datadir/test
+langdir=$datadir/lang
 expdir=$(pwd)/exp
 
 
@@ -16,7 +17,7 @@ fea_conf=$confdir/features.yml
 
 
 # VAE-HMM model.
-vae_hmm_confdir=$(pwd)/conf/vae_hmm
+vae_hmm_confdir=$confdir/vae_hmm
 vae_hmm_encoder_conf=$vae_hmm_confdir/encoder.yml
 vae_hmm_decoder_conf=$vae_hmm_confdir/decoder.yml
 vae_hmm_normalizing_flow_conf=$vae_hmm_confdir/normalizing_flow.yml
@@ -32,7 +33,7 @@ vae_hmm_batch_size=400
 vae_hmm_epochs=10
 vae_hmm_opts="--fast-eval --use-gpu"
 vae_hmm_dir=$expdir/vae_hmm_nw${vae_hmm_encoder_out_dim}_ldim${vae_hmm_latent_dim}
-
+vae_hmm_decode_dir=$vae_hmm_dir/decode_test
 
 # HMM-GMM model parameters.
 hmm_gmm_mdl_dir=$expdir/hmm_gmm
@@ -43,9 +44,6 @@ hmm_batch_size=400
 hmm_epochs=10
 hmm_fast_eval="--fast-eval"
 use_gpu=""
-
-
-# Decode parameters.
-data_test_dir=$datadir/test
-decode_dir=$expdir/hmm_gmm/decode_test
+# HMM Decode parameters.
+hmm_decode_dir=$expdir/hmm_gmm/decode_test
 hmm_gamma=0.5 # HMM transition probability between phones
