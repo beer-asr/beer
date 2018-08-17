@@ -22,7 +22,6 @@ setup=$1
 train_datadir=$2
 outdir=$3
 
-
 encoder_conf=$vae_hmm_encoder_conf
 decoder_conf=$vae_hmm_decoder_conf
 emissions_conf=$vae_hmm_emissions_conf
@@ -43,10 +42,21 @@ utts = np.load('$features'); \
 print(utts[utts.files[0]].shape[1])"
 feadim=$(python -c "$pycmd")
 
+if [ ! -f $outdir/states.int.npz ]; then
+    echo "Convert the transcription to the state sequence."
+    python utils/prepare_labels.py \
+        $langdir/phones.txt \
+        $train_datadir/phones.int.npz \
+        $vae_hmm_emissions_conf \
+        $outdir || exit_msg "Failed to create the state phone sequence"
+else
+    echo "Phone state sequence already created in $outdir/states.int.npz"
+fi
+
 #######################################################################
 # Model creation.
 
-if [ ! -f $outdir/model_0.mdl ]; then
+if [ ! -f $outdir/0.mdl ]; then
     echo "Creating the VAE-HMM model..."
 
     mkdir -p "$outdir"/init
@@ -87,16 +97,15 @@ if [ ! -f $outdir/model_0.mdl ]; then
         $outdir/init/nflow.mdl \
         $outdir/init/emissions.mdl \
         $outdir/init/decoder.mdl \
-        $outdir/model_0.mdl || exit_msg "Failed to create the VAE"
+        $outdir/0.mdl || exit_msg "Failed to create the VAE"
 else
-    echo "Initial model already created: $outdir/model_0.mdl"
+    echo "Initial model already created: $outdir/0.mdl"
 fi
-exit 0
 
 if [ ! -f $outdir/final.mdl ]; then
     echo "Training..."
 
-    python utils/vae-hmm-train.py \
+    python -m cProfile -s cumtime utils/vae-hmm-train.py \
         --training_type $vae_hmm_training_type \
         --lrate $vae_hmm_lrate \
         --lrate-nnet $vae_hmm_lrate_nnet \
@@ -104,7 +113,7 @@ if [ ! -f $outdir/final.mdl ]; then
         --epochs $vae_hmm_epochs \
         --fast-eval \
         $train_datadir/feats.npz \
-        $outdir/labels.int \
+        $outdir/states.int.npz \
         $outdir/0.mdl \
         $train_datadir/feats.stats.npz \
         $outdir

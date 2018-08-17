@@ -31,25 +31,25 @@ class DirichletPrior(ExpFamilyPrior):
             alphas=alphas
         )
 
-    def to_std_parameters(self, natural_parameters=None):
-        if natural_parameters is None:
-            natural_parameters = self.natural_parameters
-        return (natural_parameters + 1)
+    def expected_value(self):
+        alphas = self.to_std_parameters(self.natural_parameters)
+        return alphas / alphas.sum()
 
     def to_natural_parameters(self, std_parameters=None):
         if std_parameters is None:
             std_parameters = self.std_parameters
         return (std_parameters - 1)
 
-    def expected_sufficient_statistics(self):
+    def _to_std_parameters(self, natural_parameters=None):
+        if natural_parameters is None:
+            natural_parameters = self.natural_parameters
+        return (natural_parameters + 1)
+
+    def _expected_sufficient_statistics(self):
         alphas = self.to_std_parameters(self.natural_parameters)
         return (torch.digamma(alphas) - torch.digamma(alphas.sum()))
 
-    def expected_value(self):
-        alphas = self.to_std_parameters(self.natural_parameters)
-        return alphas / alphas.sum()
-
-    def log_norm(self, natural_parameters=None):
+    def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         alphas = self.to_std_parameters(natural_parameters)
@@ -57,3 +57,4 @@ class DirichletPrior(ExpFamilyPrior):
 
 
 __all__ = ['DirichletPrior']
+

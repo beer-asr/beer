@@ -118,7 +118,7 @@ class VAEGlobalMeanVariance(VAE):
         # compute their gradients.
         self.cache['latent_stats'] = latent_stats.detach()
         self.cache['centered_stats'] = centered_stats.detach()
-        return llhs - kl_weight * kl_divs
+        return llhs.sum() - kl_weight * kl_divs.sum()
 
     def accumulate(self, _):
         latent_stats = self.cache['latent_stats']

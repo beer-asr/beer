@@ -6,12 +6,13 @@ import argparse
 import sys
 import pickle
 import logging
+import os
 import numpy as np
 import torch
 import beer
 
 
-logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 training_types = ['viterbi', 'baum_welch']
@@ -19,38 +20,45 @@ training_types = ['viterbi', 'baum_welch']
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('feats', help='train features (npz file)')
-    parser.add_argument('labels', type=str, help='Label file')
-    parser.add_argument('vae_emissions', help='vae + emissions model')
-    parser.add_argument('stats', help='stats of the training data')
-    parser.add_argument('outdir', help='output directory')
     parser.add_argument('--training_type', default=training_types[0],
                         choices=training_types)
     parser.add_argument('--lrate', type=float,
                         help='learning rate for the latent model')
     parser.add_argument('--lrate-nnet', type=float,
                         help='learning rate for the nnet components')
-    parser.add_argument('--batch_size', type=int,
+    parser.add_argument('--batch-size', type=int,
                         help='number of utterances per batch')
     parser.add_argument('--epochs', type=int, help='number of epochs')
     parser.add_argument('--use-gpu', action='store_true',
                         help='train on gpu')
     parser.add_argument('--fast-eval', action='store_true',
                         help='do not compute unecessary KL divergence term')
+    parser.add_argument('--kl-weight', type=float, default=1.,
+                        help='weighting of the KL divergence')
+    parser.add_argument('--verbose', action='store_true',
+                        help='show debug messages')
+    parser.add_argument('feats', help='train features (npz file)')
+    parser.add_argument('labels', type=str, help='Label file')
+    parser.add_argument('vae_emissions', help='vae + emissions model')
+    parser.add_argument('stats', help='stats of the training data')
+    parser.add_argument('outdir', help='output directory')
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.setLevel(logging.DEBUG)
 
     # Read arguments
     feats = np.load(args.feats)
     labels = np.load(args.labels)
-    hmm_mdl_dir = args.hmm_model_dir
     training_type = args.training_type
-    stats = np.load(args.feat_stats)
+    stats = np.load(args.stats)
     lrate = args.lrate
     lrate_nnet = args.lrate_nnet
     batch_size = args.batch_size
     epochs = args.epochs
     use_gpu = args.use_gpu
     fast_eval = args.fast_eval
+    kl_weight = args.kl_weight
 
     if use_gpu:
         device = torch.device('cuda')
@@ -60,6 +68,7 @@ def main():
     with open(args.vae_emissions, 'rb') as pickle_file:
         vae_emissions = pickle.load(pickle_file)
     vae_emissions = vae_emissions.to(device)
+    emissions = vae_emissions.latent_model
 
     # Total number of frames in the training data. This is needed to
     # compute the stochastic version of the ELBO.
@@ -70,9 +79,9 @@ def main():
     # is responsible to call the nnet optimizer.
     nnet_optim = torch.optim.Adam(vae_emissions.modules_parameters(), lr=lrate_nnet,
                                   weight_decay=1e-2)
-    latent_model_optim = beer.BayesianModelCoordinateAscentOptimizer(
-                                  model.mean_field_groups,
-                                  lrate=lrate, std_optim=nnet_optim)
+    optim = beer.BayesianModelCoordinateAscentOptimizer(vae_emissions.mean_field_groups,
+                                                        lrate=lrate,
+                                                        std_optim=nnet_optim)
 
     for epoch in range(1, epochs + 1):
         logging.info("Epoch: %d", epoch)
@@ -83,14 +92,14 @@ def main():
         random.shuffle(keys)
         batches = [keys[i: i + batch_size]
                    for i in range(0, len(keys), batch_size)]
-        logging.info("Data shuffled into %d batches", len(batches))
+        logging.debug("Data shuffled into %d batches", len(batches))
 
         for batch_keys in batches:
             # Initialize the lower-bound.
             elbo = beer.evidence_lower_bound(datasize=tot_counts)
 
             # Reset the gradient of the parameters.
-            optimizer.zero_grad()
+            optim.zero_grad()
 
             batch_nutt = len(batch_keys)
             for utt in batch_keys:
@@ -105,10 +114,9 @@ def main():
                 init_state = torch.tensor([0]).to(device)
                 final_state = torch.tensor([len(lab) - 1]).to(device)
                 trans_mat_ali = beer.HMM.create_ali_trans_mat(len(lab)).to(device)
-                ali_sets = beer.AlignModelSet(vae_emissions.latent_model, lab)
+                ali_sets = beer.AlignModelSet(emissions, lab)
                 hmm_ali = beer.HMM.create(init_state, final_state,
-                                          trans_mat_ali, ali_sets,
-                                          training_type)
+                                          trans_mat_ali, ali_sets)
 
                 # Set the current HMM as the latent model of the
                 # VAE.
@@ -116,7 +124,9 @@ def main():
 
                 # Accumulate the ELBO for each utterance.
                 elbo += beer.evidence_lower_bound(vae_emissions, ft,
-                        datasize=tot_counts, fast_eval=fast_eval)
+                        datasize=tot_counts,
+                        kl_weight=kl_weight,
+                        inference_type=training_type, fast_eval=fast_eval)
 
             # Compute the natural gradient for the parameters of the
             # latent model.
@@ -126,16 +136,17 @@ def main():
             elbo.backward()
 
             # Update the latent model and the nnets.
-            optimizer.step()
+            optim.step()
 
-            logging.info("Elbo value is %f", float(elbo) / (tot_counts *
-                         batch_nutt))
+            elbo_value = float(elbo) / (tot_counts * batch_nutt)
+            logging.info("ln p(X) >= {}".format(round(elbo_value, 3)))
+            exit(0)
 
         # At the end of each epoch, output the current state of the
         # model.
         path = os.path.join(args.outdir, str(epoch) + 'mdl')
-        with open(path, 'wb') as m:
-            pickle.dump(vae_emissions.to(torch.device('cpu')), path)
+        with open(path, 'wb') as fid:
+            pickle.dump(vae_emissions.to(torch.device('cpu')), fid)
 
 if __name__ == "__main__":
     main()

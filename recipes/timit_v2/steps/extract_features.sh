@@ -60,7 +60,7 @@ else
 fi
 
 
-if [ ! "$datadir"/feats.stats.npz ]; then
+if [ ! -f "$datadir"/feats.stats.npz ]; then
     python utils/compute_data_stats.py \
         $datadir/feats.npz $datadir/feats.stats.npz
 else

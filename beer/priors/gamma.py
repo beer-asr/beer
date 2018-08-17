@@ -33,23 +33,23 @@ class GammaPrior(ExpFamilyPrior):
             shape=repr(shape), rate=repr(shape)
         )
 
-    def to_std_parameters(self, natural_parameters):
-        shape, rate = natural_parameters[1] + 1, -natural_parameters[0]
-        return  shape, rate
-
-    def to_natural_parameters(self, shape, rate):
-        return torch.cat([-rate.view(1), (shape - 1).view(1)])
-
-    def expected_sufficient_statistics(self):
-        shape, rate = self.to_std_parameters(self.natural_parameters)
-        return torch.cat([(shape / rate).view(1),
-                          (torch.digamma(shape) - torch.log(rate)).view(1)])
-
     def expected_value(self):
         shape, rate = self.to_std_parameters(self.natural_parameters)
         return shape / rate
 
-    def log_norm(self, natural_parameters=None):
+    def to_natural_parameters(self, shape, rate):
+        return torch.cat([-rate.view(1), (shape - 1).view(1)])
+
+    def _to_std_parameters(self, natural_parameters):
+        shape, rate = natural_parameters[1] + 1, -natural_parameters[0]
+        return  shape, rate
+
+    def _expected_sufficient_statistics(self):
+        shape, rate = self.to_std_parameters(self.natural_parameters)
+        return torch.cat([(shape / rate).view(1),
+                          (torch.digamma(shape) - torch.log(rate)).view(1)])
+
+    def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         shape, rate = self.to_std_parameters(natural_parameters)

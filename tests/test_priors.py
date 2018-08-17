@@ -30,7 +30,7 @@ class TestDirichletPrior(BaseTestPrior):
     def setUp(self):
         dim = 10
         self.std_parameters = 2 * torch.ones(dim)
-        self.prior = beer.DirichletPrior(self.std_parameters)
+        self.prior = beer.priors.DirichletPrior(self.std_parameters)
 
     def test_natural2std(self):
         std_params = self.prior.to_std_parameters(self.prior.natural_parameters)
@@ -56,7 +56,7 @@ class TestGammaPrior(BaseTestPrior):
         dim = 10
         self.shape = torch.tensor(2).type(self.type)
         self.rate = torch.tensor(.5).type(self.type)
-        self.prior = beer.GammaPrior(self.shape, self.rate)
+        self.prior = beer.priors.GammaPrior(self.shape, self.rate)
 
     def test_natural2std(self):
         shape, rate = self.prior.to_std_parameters(self.prior.natural_parameters)
@@ -80,7 +80,7 @@ class TestWishartPrior(BaseTestPrior):
         dim = 10
         self.scale = torch.eye(dim).type(self.type)
         self.dof = torch.tensor(dim + 2).type(self.type)
-        self.prior = beer.WishartPrior(self.scale, self.dof)
+        self.prior = beer.priors.WishartPrior(self.scale, self.dof)
 
     def test_natural2std(self):
         scale, dof = self.prior.to_std_parameters(self.prior.natural_parameters)
@@ -104,10 +104,10 @@ class TestNormalFullCovariancePrior(BaseTestPrior):
         dim = 10
         self.scale = torch.eye(dim).type(self.type)
         self.dof = torch.tensor(dim + 2).type(self.type)
-        self.prior_precision = beer.WishartPrior(self.scale, self.dof)
+        self.prior_precision = beer.priors.WishartPrior(self.scale, self.dof)
         self.mean = 3 * torch.ones(dim).type(self.type)
         self.scale = torch.tensor(1.5).type(self.type)
-        self.prior = beer.NormalFullCovariancePrior(self.mean, self.scale,
+        self.prior = beer.priors.NormalFullCovariancePrior(self.mean, self.scale,
                                                     self.prior_precision)
 
     def test_natural2std(self):
@@ -135,7 +135,7 @@ class TestNormalWishartPrior(BaseTestPrior):
         self.mean_precision = torch.eye(dim).type(self.type) \
             + torch.ger(self.mean, self.mean)
         self.dof = torch.tensor(dim + 2).type(self.type)
-        self.prior = beer.NormalWishartPrior(self.mean, self.scale,
+        self.prior = beer.priors.NormalWishartPrior(self.mean, self.scale,
                                              self.mean_precision, self.dof)
 
     def test_natural2std(self):
@@ -165,7 +165,7 @@ class TestNormalGammaPrior(BaseTestPrior):
         self.scale = torch.tensor(2.5).type(self.type)
         self.shape = torch.tensor(3).type(self.type)
         self.rates = 2* torch.ones(dim).type(self.type)
-        self.prior = beer.NormalGammaPrior(self.mean, self.scale,
+        self.prior = beer.priors.NormalGammaPrior(self.mean, self.scale,
                                            self.shape, self.rates)
 
     def test_natural2std(self):
@@ -195,7 +195,7 @@ class TestIsotropicNormalGammaPrior(BaseTestPrior):
         self.scale = torch.tensor(2.5).type(self.type)
         self.shape = torch.tensor(3).type(self.type)
         self.rate = torch.tensor(2).type(self.type)
-        self.prior = beer.IsotropicNormalGammaPrior(self.mean, self.scale,
+        self.prior = beer.priors.IsotropicNormalGammaPrior(self.mean, self.scale,
                                                     self.shape, self.rate)
 
     def test_natural2std(self):
@@ -226,7 +226,7 @@ class TestJointIsotropicNormalGammaPrior(BaseTestPrior):
         self.scales = 2.5 * torch.ones(k).type(self.type)
         self.shape = torch.tensor(3).type(self.type)
         self.rate = torch.tensor(2).type(self.type)
-        self.prior = beer.JointIsotropicNormalGammaPrior(self.means, self.scales,
+        self.prior = beer.priors.JointIsotropicNormalGammaPrior(self.means, self.scales,
                                                          self.shape, self.rate)
 
     def test_natural2std(self):
@@ -257,7 +257,7 @@ class TestJointNormalGammaPrior(BaseTestPrior):
         self.scales = 2.5 * torch.ones(k).type(self.type)
         self.shape = torch.tensor(3).type(self.type)
         self.rates = 2 * torch.ones(dim).type(self.type)
-        self.prior = beer.JointNormalGammaPrior(self.means, self.scales,
+        self.prior = beer.priors.JointNormalGammaPrior(self.means, self.scales,
                                                 self.shape, self.rates)
 
     def test_natural2std(self):
@@ -289,7 +289,7 @@ class TestJointNormalWishartPrior(BaseTestPrior):
         self.mean_precision = torch.eye(dim).type(self.type) \
             + .1 * torch.ger(self.means[0], self.means[0])
         self.dof = torch.tensor(dim + 2).type(self.type)
-        self.prior = beer.JointNormalWishartPrior(self.means, self.scales,
+        self.prior = beer.priors.JointNormalWishartPrior(self.means, self.scales,
                                                   self.mean_precision, self.dof)
 
     def test_natural2std(self):

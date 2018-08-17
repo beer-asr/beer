@@ -1,17 +1,19 @@
 
 # Directory structure.
-confdir=conf
-datadir=data
-data_train_dir=data/train
-langdir=data/lang
 timit=/export/corpora/LDC/LDC93S1/timit/TIMIT  # @JHU
 #timit=/mnt/matylda2/data/TIMIT/timit  # @BUT
+confdir=$(pwd)/conf
+datadir=$(pwd)/data
+data_train_dir=$(pwd)/data/train
+langdir=$(pwd)/data/lang
+root=$(pwd)/exp
 
 
 # Features extraction.
 fea_njobs=10
 fea_sge_opts="-l mem_free=100M,ram_free=100M"
 fea_conf=$confdir/features.yml
+
 
 # VAE-HMM model.
 vae_hmm_confdir=$(pwd)/conf/vae_hmm
@@ -23,6 +25,14 @@ vae_hmm_latent_dim=30
 vae_hmm_encoder_out_dim=128
 vae_hmm_encoder_cov_type=isotropic
 vae_hmm_decoder_cov_type=diagonal
+vae_hmm_training_type=viterbi
+vae_hmm_lrate=1e-1
+vae_hmm_lrate_nnet=1e-3
+vae_hmm_batch_size=400
+vae_hmm_epochs=10
+vae_hmm_opts="--fast-eval --use-gpu"
+vae_hmm_dir=$root/vae_hmm_nw${vae_hmm_encoder_out_dim}_ldim${vae_hmm_latent_dim}
+
 
 # HMM-GMM model parameters.
 hmm_gmm_mdl_dir=exp/hmm_gmm

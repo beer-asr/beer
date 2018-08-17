@@ -7,9 +7,9 @@ if [ $# -ne 1 ]; then
     echo "$0 <setup.sh>"
     exit 1
 fi
-setup=$1
+setup=$(pwd)/$1
 . $setup
-stage=3
+stage=0
 
 if [ $stage -le 0 ]; then
     echo ======================================================================
