@@ -118,6 +118,6 @@ if [ ! -f $outdir/final.mdl ]; then
         $train_datadir/feats.stats.npz \
         $outdir
 else
-    echo "The model is already trained. Final model is: $outdir/final.dml"
+    echo "The model is already trained. Final model is: $outdir/final.mdl"
 fi
 
