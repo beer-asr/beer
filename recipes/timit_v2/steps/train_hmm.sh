@@ -55,7 +55,7 @@ if [ ! -f $mdl_dir/final.mdl ];then
         $data_train_dir/feats.npz $mdl_dir/states.int.npz \
         $mdl_dir/emission.mdl $data_train_dir/feats.stats.npz \
         $mdl_dir $use_gpu $hmm_fast_eval \
-        > $mdl_dir/log/train.log 2>&1
+        > $mdl_dir/log/train.log 2>&1 || exit_msg "Training failed"
 else
     echo "Model already trained: $mdl_dir/final.mdl"
 fi

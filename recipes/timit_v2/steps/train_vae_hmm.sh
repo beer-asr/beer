@@ -109,18 +109,18 @@ fi
 if [ ! -f $mdl_dir/final.mdl ]; then
     echo "Training..."
 
-    python -m cProfile -s cumtime utils/train_vae_hmm.py \
+    python -u -m cProfile -s cumtime utils/train_vae_hmm.py \
         --training_type $vae_hmm_training_type \
         --lrate $vae_hmm_lrate \
         --lrate-nnet $vae_hmm_lrate_nnet \
         --batch-size $vae_hmm_batch_size \
         --epochs $vae_hmm_epochs \
-        --fast-eval \
+        $vae_hmm_opts \
         $data_train_dir/feats.npz \
         $mdl_dir/states.int.npz \
         $mdl_dir/0.mdl \
         $data_train_dir/feats.stats.npz \
-        $mdl_dir > $mdl_dir/log/vae-hmm-train.log 2>&1
+        $mdl_dir > $mdl_dir/log/vae-hmm-train.log 2>&1 || exit_msg "Training failed"
 else
     echo "Model already trained: $mdl_dir/final.mdl"
 fi
