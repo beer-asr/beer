@@ -18,6 +18,8 @@ mkdir -p "$logdir"
 if [ ! -f "$fea_conf" ]; then
     echo "\"$fea_conf\" not found."
     exit 1
+else
+    cp $fea_conf $datadir
 fi
 if [ ! -f "$scp" ]; then
     echo "\"$scp\" not found."

@@ -41,7 +41,7 @@ def main():
     parser.add_argument('labels', type=str, help='Label file')
     parser.add_argument('vae_emissions', help='vae + emissions model')
     parser.add_argument('stats', help='stats of the training data')
-    parser.add_argument('outdir', help='output directory')
+    parser.add_argument('mdldir', help='output model directory')
     args = parser.parse_args()
 
     if args.verbose:
@@ -52,6 +52,7 @@ def main():
     labels = np.load(args.labels)
     training_type = args.training_type
     stats = np.load(args.stats)
+    mdldir = args.mdldir
     lrate = args.lrate
     lrate_nnet = args.lrate_nnet
     batch_size = args.batch_size
@@ -59,13 +60,21 @@ def main():
     use_gpu = args.use_gpu
     fast_eval = args.fast_eval
     kl_weight = args.kl_weight
-
     if use_gpu:
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
 
-    with open(args.vae_emissions, 'rb') as pickle_file:
+    init_vae_emissions = args.vae_emissions
+    final_mdl = os.path.join(mdldir, 'final.mdl')
+    start_id = 1
+    if not os.path.exists(final_mdl):
+        for i in range(1, epochs):
+            exist_mdl = os.path.join(mdldir, str(i) + '.mdl')
+            if os.path.exists(exist_mdl):
+                init_vae_emissions = exist_mdl
+                start_id = i + 1
+    with open(init_vae_emissions, 'rb') as pickle_file:
         vae_emissions = pickle.load(pickle_file)
     vae_emissions = vae_emissions.to(device)
     emissions = vae_emissions.latent_model
@@ -83,7 +92,7 @@ def main():
                                                         lrate=lrate,
                                                         std_optim=nnet_optim)
 
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_id, epochs + 1):
         logging.info("Epoch: %d", epoch)
 
         # At the beginning of each epoch we shuffle the order of the
@@ -143,10 +152,13 @@ def main():
 
         # At the end of each epoch, output the current state of the
         # model.
-        path = os.path.join(args.outdir, str(epoch) + 'mdl')
+        mdlname = os.path.join(mdldir, str(epoch) + '.mdl')
         vae_emissions.latent_model = emissions
-        with open(path, 'wb') as fid:
-            pickle.dump(vae_emissions.to(torch.device('cpu')), fid)
+        if epoch != epochs:
+            with open(mdlname, 'wb') as m:
+                pickle.dump(vae_emissions.to(torch.device('cpu')), m)
+    with open(final_mdl, 'wb') as m:
+        pickle.dump(vae_emissions.to(torch.device('cpu')), m)
 
 if __name__ == "__main__":
     main()

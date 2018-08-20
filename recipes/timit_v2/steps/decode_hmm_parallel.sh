@@ -9,6 +9,7 @@ setup=$1
 data_test_dir=$2
 decode_dir=$3
 stage=0
+nj=10
 
 [ -f $setup ] && . $setup
 mdldir=$(dirname $decode_dir)
@@ -20,10 +21,13 @@ for f in $mdl $emission_conf; do
     [ ! -f $f ] && echo "No such file: $f" && exit 1;
 done
 
+mkdir -p $decode_dir/split
+
+
+
 if [ $stage -le 0 ];then
     echo "Decoding"
-    mkdir -p $decode_dir
-    python utils/decode_vae_hmm.py \
+    python utils/decode_hmm.py \
         --gamma $hmm_gamma \
         $mdl $decode_dir \
         $data_test_dir/feats.npz $emission_conf \
