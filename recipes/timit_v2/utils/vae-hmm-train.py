@@ -140,11 +140,11 @@ def main():
 
             elbo_value = float(elbo) / (tot_counts * batch_nutt)
             logging.info("ln p(X) >= {}".format(round(elbo_value, 3)))
-            exit(0)
 
         # At the end of each epoch, output the current state of the
         # model.
         path = os.path.join(args.outdir, str(epoch) + 'mdl')
+        vae_emissions.latent_model = emissions
         with open(path, 'wb') as fid:
             pickle.dump(vae_emissions.to(torch.device('cpu')), fid)
 
