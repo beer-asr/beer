@@ -16,7 +16,7 @@ mdl_dir=$3
 
 . $setup
 
-[ -f "$hmm_emission_conf" ] || exit_msg "$hmm_emission_conf"
+[ -f "$hmm_emission_conf" ] || exit_msg "File not found: $hmm_emission_conf"
 
 if [ ! -d $mdl_dir ];then
     mkdir -p $mdl_dir/log

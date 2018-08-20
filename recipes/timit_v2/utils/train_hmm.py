@@ -16,12 +16,6 @@ logging.basicConfig(level=logging.INFO, format=log_format)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('feats', type=str, help='Feature file')
-    parser.add_argument('labels', type=str, help='States label file')
-    parser.add_argument('emissions', type=str, help='Emission modelset file')
-    parser.add_argument('feat_stats', type=str, default=None,
-        help='Feature statistics: mean, standard deviation, count')
-    parser.add_argument('hmm_model_dir', type=str, help='Output trained HMM model')
     parser.add_argument('--infer_type', type=str, default='viterbi',
         choices=['baum_welch', 'viterbi'], help='Method to compute elbo value')
     parser.add_argument('--lrate', type=float, help='Learning rate')
@@ -30,6 +24,12 @@ def main():
     parser.add_argument('--epochs', type=int)
     parser.add_argument('--use-gpu', action='store_true')
     parser.add_argument('--fast-eval', action='store_true')
+    parser.add_argument('feats', type=str, help='Feature file')
+    parser.add_argument('labels', type=str, help='States label file')
+    parser.add_argument('emissions', type=str, help='Emission modelset file')
+    parser.add_argument('feat_stats', type=str, default=None,
+        help='Feature statistics: mean, standard deviation, count')
+    parser.add_argument('hmm_model_dir', type=str, help='Output trained HMM model')
     args = parser.parse_args()
 
     feats = np.load(args.feats)

@@ -28,11 +28,11 @@ vae_hmm_training_type=viterbi
 vae_hmm_lrate=1e-1
 vae_hmm_lrate_nnet=1e-3
 vae_hmm_batch_size=400
-vae_hmm_epochs=10
+vae_hmm_epochs=2
 vae_hmm_opts="--fast-eval --use-gpu"
 
 # HMM-GMM model parameters.
-hmm_emission_conf=$confdir/hmm_gmm/emission.yml
+hmm_emission_conf=$confdir/hmm_gmm/emissions.yml
 hmm_infer_type='viterbi'
 hmm_lrate=0.1
 hmm_batch_size=400
