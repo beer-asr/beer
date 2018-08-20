@@ -22,7 +22,7 @@ done
 
 if [ $stage -le 0 ];then
     echo "Decoding"
-    mkdir -p $vae_hmm_decode_dir
+    mkdir -p $decode_dir
     python utils/decode_vae_hmm.py \
         --gamma $hmm_gamma \
         $mdl $decode_dir \
