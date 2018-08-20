@@ -1,5 +1,6 @@
 'Acoustic graph for the HMM.'
 
+from collections import defaultdict
 import torch
 from ..utils import logsumexp
 
@@ -103,8 +104,10 @@ class Graph:
         dot.graph_attr['rankdir'] = 'LR'
         for state in self._states.values():
             attrs = {'shape': 'circle'}
-            if state.unit_id == '<s>' or state.unit_id == '</s>':
-                attrs.update(shape='point')
+            if state.unit_id == '</s>':
+                attrs.update(shape='doublecircle')
+            if state.unit_id == '<s>':
+                attrs.update(penwidth='2.0')
             dot.node(state.name, **attrs)
         for arc in self.arcs():
             dot.edge(str(arc.start), str(arc.end), label=str(round(arc.weight, 3)))
@@ -122,12 +125,12 @@ class Graph:
                 if state is None or arc.end == state.name:
                     yield arc
 
-    def add_state(self, unit_id, state_id, pdf_id):
+    def add_state(self, unit_id, pdf_id, state_id=0):
         new_state = State(unit_id, state_id, pdf_id)
         self._states[new_state.name] = new_state
         return new_state
 
-    def add_arc(self, start, end, weight):
+    def add_arc(self, start, end, weight=1.0):
         new_arc = Arc(start.name, end.name, weight)
         self._arcs.add(new_arc)
         return new_arc
@@ -149,12 +152,66 @@ class Graph:
             for arc in self.arcs(state):
                 arc.weight /= sum_out_weights
 
-    def to_matrix(self):
-        nstates = len(self.states)
-        matrix = torch.zeros((nstates, nstates))
-        for arc in self.arcs.values():
-            matrix[arc.start, arc.end] = arc.weight
-        return matrix
+    def _get_unit_states(self, unit_id):
+        retval = []
+        for state in self._states.values():
+            if state.unit_id == unit_id:
+                retval.append(state)
+        return retval
+
+    def _get_unit_arcs(self, unit_states):
+        unit_ids = [state.unit_id for state in unit_states]
+        retval = []
+        for arc in self.arcs():
+            s_state = self._states[arc.start]
+            e_state = self._states[arc.end]
+            if s_state.unit_id in unit_ids or e_state.unit_id in unit_ids:
+                retval.append(arc)
+        return retval
+
+    def graph_from_unit_path(self, unit_path):
+        unit_s_counts = defaultdict(int)
+        pdf_count = 0
+        pdf_id_mapping = []
+        ali_graph = Graph()
+
+        last_state = ali_graph.start_state
+        for i, unit in enumerate(unit_path):
+            start = last_state
+            if i < len(unit_path) - 1:
+                unit_s_counts['<>'] += 1
+                state_id = unit_s_counts['<>']
+                joint_state = ali_graph.add_state(unit_id='<>', state_id=state_id,
+                                                pdf_id=None)
+                end = joint_state
+            else:
+                end = ali_graph.end_state
+
+            mapping = {
+                self.start_state.name: start,
+                self.end_state.name: end
+            }
+
+            states = self._get_unit_states(unit)
+            arcs = self._get_unit_arcs(states)
+
+            # Copy the states.
+            for state in states:
+                unit_s_counts[state.unit_id] += 1
+                state_id = unit_s_counts[state.unit_id]
+                s = ali_graph.add_state(unit_id=state.unit_id, state_id=state_id,
+                                        pdf_id=pdf_count)
+                pdf_count += 1
+                mapping[state.name] = s
+                pdf_id_mapping.append(state.pdf_id)
+
+            # Copy the arcs.
+            for arc in arcs:
+                ali_graph.add_arc(mapping[arc.start], mapping[arc.end], arc.weight)
+            last_state = end
+
+        return ali_graph, pdf_id_mapping
+
 
     def _find_next_pdf_ids(self, start_state, init_weight):
         for arc in self.arcs(start_state):
@@ -165,10 +222,14 @@ class Graph:
                 yield from self._find_next_pdf_ids(self._states[arc.end],
                                                    init_weight * arc.weight)
 
-    def compile(self):
+    def compile(self, pdf_id_mapping=None):
         '''Compile the graph.'''
-        # Total number of states
-        tot_n_states = len(self._states) - 2
+        # Total number of emitting states.
+        tot_n_states = 0
+        for state in self._states.values():
+            if state.pdf_id is not None:
+                tot_n_states += 1
+
         init_probs = torch.zeros(tot_n_states)
         final_probs = torch.zeros(tot_n_states)
         trans_probs = torch.zeros(tot_n_states, tot_n_states)
@@ -201,22 +262,27 @@ class Graph:
                     trans_probs[pdf_id1, pdf_id2] = weight
             else:
                 trans_probs[pdf_id1, pdf_id2] = weight
+        trans_probs /= trans_probs.sum(dim=1)[:, None]
 
-        return CompiledGraph(init_probs, final_probs, trans_probs)
+        return CompiledGraph(init_probs, final_probs, trans_probs,
+                             pdf_id_mapping)
+
 
 class CompiledGraph:
     '''Inference graph for a HMM model.'''
 
-    def __init__(self, init_probs, final_probs, trans_probs):
+    def __init__(self, init_probs, final_probs, trans_probs, pdf_id_mapping=None):
         '''
         Args:
             init_probs (``torch.Tensor``): Initial probabilities.
             final_probs (``torch.Tensor``): Final probabilities.
             trans_probs (``torch.Tensor``): Transition probabilities.
+            pdf_id_mapping (list): Mapping of the pdf ids (optional)
         '''
         self.init_probs = init_probs
         self.final_probs = final_probs
         self.trans_probs = trans_probs
+        self.pdf_id_mapping = pdf_id_mapping
 
     @property
     def n_states(self):
@@ -248,12 +314,12 @@ class CompiledGraph:
     def posteriors(self, llhs):
         # Scale the log-likelihoods to avoid overflow.
         max_val = llhs.max()
-        lhs = (llhs - max_val).exp() + 1e-6
+        lhs = (llhs - max_val).exp() + 1e-9
 
         # Scaled forward-backward algorithm.
         alphas, consts = self._baum_welch_forward(lhs)
         betas = self._baum_welch_backward(lhs, consts)
-        posts = alphas * betas
+        posts = alphas * betas * torch.exp(max_val)
         norm = posts.sum(dim=1)
         posts /= norm[:, None]
 
@@ -275,6 +341,23 @@ class CompiledGraph:
             path.insert(0, backtrack[i, path[0]])
         return torch.LongTensor(path)
 
+    def float(self):
+            return CompiledGraph(self.init_probs.float(),
+                                 self.final_probs.float(),
+                                 self.trans_probs.float(),
+                                 self.pdf_id_mapping)
+
+    def double(self):
+        return CompiledGraph(self.init_probs.double(),
+                                 self.final_probs.double(),
+                                 self.trans_probs.double(),
+                                 self.pdf_id_mapping)
+
+    def to(self, device):
+        return CompiledGraph(self.init_probs.to(device),
+                                 self.final_probs.to(device),
+                                 self.trans_probs.to(device),
+                                 self.pdf_id_mapping)
 
 
 __all__ = ['Graph']

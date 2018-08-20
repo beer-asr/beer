@@ -5,109 +5,82 @@ import math
 import torch
 import numpy as np
 from .hmm import HMM, AlignModelSet
+from ..utils import onehot
 
 
 class PhoneRecognizer(HMM):
     'HMM based Phone recognizer.'
 
-    @classmethod
-    def create(cls, n_units, n_states_per_unit, n_normal_per_state, modelset):
-        '''Create a :any:`PhoneRecognizer` model.
-
-        Args:
-            init_states  (list): Indices of initial states who have
-                non-zero probability.
-            final_states  (list): Indices of final states who have
-                non-zero probability.
-            trans_mat (``torch.Tensor``): Transition matrix of HMM states.
-            modelset (:any:`BayesianModelSet`): Set of emission density.
-
-        Returns:
-            :any:`HMM`
-
-        '''
-        return cls(init_states, final_states, trans_mat, modelset)
-
-    def __init__(self, init_states, final_states, trans_mat, modelset):
+    def __init__(self, acoustic_graph, emissions):
         '''
         Args:
-            init_states  (list): Indices of initial states who have
-                non-zero probability.
-            final_states  (list): Indices of final states who have
-                non-zero probability.
-            trans_mat (``torch.Tensor``): Transition matrix of HMM states.
-            modelset (:any:`BayesianModelSet`): Set of emission density.
-
+            acoustic_graph  (:any:`AcousticGraph`): Decoding acoustic
+                graph.
+            emissions  (:any:`BayesianModelSet`): Set of emissions for
+                each state of the graph.
         '''
-        super().__init__(modelset)
-        self.init_states = ConstantParameter(torch.tensor(init_states).long(),
-                                             fixed_dtype=True)
-        self.final_states = ConstantParameter(torch.tensor(final_states).long(),
-                                              fixed_dtype=True)
-        self.trans_mat = ConstantParameter(trans_mat)
-
-    def _get_log_posteriors(self, pc_llhs, inference_type):
-        init_states, final_states, trans_mat = self.init_states.value, \
-            self.final_states.value, self.trans_mat.value
-        dtype, device = pc_llhs.dtype, pc_llhs.device
-        if inference_type == 'viterbi':
-            best_path = HMM.viterbi(init_states, final_states, trans_mat, pc_llhs)
-            lposteriors = onehot(best_path, len(self.modelset), dtype=dtype,
-                                   device=device).log()
-        elif inference_type == 'baum_welch':
-            log_alphas = HMM.baum_welch_forward(init_states, trans_mat, pc_llhs)
-            log_betas = HMM.baum_welch_backward(final_states, trans_mat, pc_llhs)
-            lognorm = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
-            lposteriors = log_alphas + log_betas - lognorm.view(-1, 1)
-        else:
-            raise ValueError('Unknown inference type: {}'.format(inference_type))
-        return lposteriors
+        super().__init__(emissions)
+        self.acoustic_graph = acoustic_graph
+        self.emissions = emissions
 
     def decode(self, data):
         stats = self.sufficient_statistics(data)
-        pc_llhs = self.modelset.expected_log_likelihood(stats)
-        best_path = HMM.viterbi(self.init_states,
-                                self.final_states,
-                                self.trans_mat, pc_llhs)
-        return best_path
+        pc_llhs = self.emissions.expected_log_likelihood(stats)
+        return self.acoustic_graph.best_path(pc_llhs)
 
     ####################################################################
     # BayesianModel interface.
     ####################################################################
 
     def mean_field_factorization(self):
-        return self.modelset.mean_field_factorization()
+        return self.emissions.mean_field_factorization()
 
     def sufficient_statistics(self, data):
-        return self.modelset.sufficient_statistics(data)
+        return self.emissions.sufficient_statistics(data)
 
-    def expected_log_likelihood(self, stats, inference_type='baum_welch'):
-        pc_exp_llh = self.modelset.expected_log_likelihood(stats)
-        log_resps = self._get_log_posteriors(pc_exp_llh.detach(),
-                                             inference_type)
-        resps = log_resps.exp()
-        exp_llh = (pc_exp_llh * resps).sum(dim=-1)
+    def expected_log_likelihood(self, stats, labels=None,
+                                inference_type='baum_welch'):
+        # If a sequence of labels is provided, change the inference
+        # graph.
+        if labels not None:
+            inference_graph = self.acoustic_graph.alignment_graph(labels)
+            #emissions = self.AlignModelSet()
+        else:
+            inference_graph = self.acoustic_graph
+            emissions = self.emissions
+
+        pc_llhs = emissions.expected_log_likelihood(stats)
+
+        if inference_type == 'baum_welch':
+            resps = inference_graph(pc_llhs)
+        elif inference_type == 'viterbi':
+            best_path = inference_graph.best_path()
+            resps = onehot(best_path, len(emissions),
+                           dtype=pc_llhs.dtype, device=pc_llhs.device)
+        else:
+            raise ValueError('Unknown inference type: {}'.format(inference_type))
+
+        # Store the responsibilities to compute the natural gradients.
         self.cache['resps'] = resps
+        self.cache['emissions'] = emissions
+
+        exp_llh = (pc_llhs * resps).sum(dim=-1)
 
         # We ignore the KL divergence term. This may bias the
         # lower-bound a little bit but will not affect the training.
         return exp_llh
 
-    def accumulate(self, stats, parent_msg=None):
-        retval = {
-            **self.modelset.accumulate(stats, self.cache['resps'])
-        }
-        return retval
+    def accumulate(self, stats):
+        return self.cache['emissions'].accumulate(stats, self.cache['resps'])
 
     ####################################################################
     # DiscreteLatentBayesianModel interface.
     ####################################################################
 
-    def posteriors(self, data, inference_type='viterbi'):
-        stats = self.modelset.sufficient_statistics(data)
-        pc_exp_llh = self.modelset.expected_log_likelihood(stats)
-        return self._get_log_posteriors(pc_exp_llh.detach(),
-                                        inference_type).exp()
+    def posteriors(self, data):
+        stats = self.sufficient_statistics(data)
+        pc_llhs = self.emissions.expected_log_likelihood(stats)
+        return self.acoustic_graph.posteriors(pc_llhs)
 
 
-__all__ = ['HMM', 'AlignModelSet']
+__all__ = ['PhoneRecognizer']
