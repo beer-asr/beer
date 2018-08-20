@@ -4,8 +4,6 @@ timit=/export/corpora/LDC/LDC93S1/timit/TIMIT  # @JHU
 #timit=/mnt/matylda2/data/TIMIT/timit  # @BUT
 confdir=$(pwd)/conf
 datadir=$(pwd)/data
-data_train_dir=$datadir/train
-data_test_dir=$datadir/test
 langdir=$datadir/lang
 expdir=$(pwd)/exp
 
@@ -32,18 +30,13 @@ vae_hmm_lrate_nnet=1e-3
 vae_hmm_batch_size=400
 vae_hmm_epochs=10
 vae_hmm_opts="--fast-eval --use-gpu"
-vae_hmm_dir=$expdir/vae_hmm_nw${vae_hmm_encoder_out_dim}_ldim${vae_hmm_latent_dim}
-vae_hmm_decode_dir=$vae_hmm_dir/decode_test
 
 # HMM-GMM model parameters.
-hmm_gmm_mdl_dir=$expdir/hmm_gmm
-hmm_emission_conf=$confdir/hmm_gmm.yml
+hmm_emission_conf=$confdir/hmm_gmm/emission.yml
 hmm_infer_type='viterbi'
 hmm_lrate=0.1
 hmm_batch_size=400
 hmm_epochs=10
 hmm_fast_eval="--fast-eval"
 use_gpu=""
-# HMM Decode parameters.
-hmm_decode_dir=$expdir/hmm_gmm/decode_test
 hmm_gamma=0.5 # HMM transition probability between phones
