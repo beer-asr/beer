@@ -27,7 +27,7 @@ def main():
     feats = np.load(args.feats)
     decode_dir = args.decode_dir
     gamma = args.gamma
-    decode_results = os.path.join(decode_dir,'decode_results.txt')
+    decode_results = os.path.join(decode_dir,'decode_states.txt')
     with open(args.model, 'rb') as m:
         vae_mdl = pickle.load(m)
     emission_mdl = vae_mdl.latent_model

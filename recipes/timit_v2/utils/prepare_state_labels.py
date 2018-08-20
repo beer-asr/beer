@@ -6,7 +6,6 @@ import yaml
 import logging
 
 logging.basicConfig(format='%(levelname)s: %(message)s')
-n_state_per_unit = 3
 
 def read_phonelist(infile):
     dict_map = {}
