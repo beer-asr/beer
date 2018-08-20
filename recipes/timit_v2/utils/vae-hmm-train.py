@@ -145,6 +145,7 @@ def main():
         # At the end of each epoch, output the current state of the
         # model.
         path = os.path.join(args.outdir, str(epoch) + 'mdl')
+        vae_emissions.latent_model = emissions
         with open(path, 'wb') as fid:
             pickle.dump(vae_emissions.to(torch.device('cpu')), fid)
 
