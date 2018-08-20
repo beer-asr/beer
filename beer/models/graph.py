@@ -1,4 +1,3 @@
-
 'Acoustic graph for the HMM.'
 
 import torch
@@ -224,30 +223,41 @@ class CompiledGraph:
         'Total number of states in the graph.'
         return len(self.trans_probs)
 
-    def _baum_welch_forward(self, llhs):
-        log_trans_mat = self.trans_probs.log()
-        log_alphas = torch.zeros_like(llhs) - float('inf')
-        log_alphas[0] = llhs[0] + self.init_probs.log()
-        for i in range(1, llhs.shape[0]):
-            log_alphas[i] = llhs[i]
-            log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(),
-                                       dim=1).view(-1)
-        return log_alphas
+    def _baum_welch_forward(self, lhs):
+        alphas = torch.zeros_like(lhs)
+        consts = torch.zeros(len(lhs), dtype=lhs.dtype, device=lhs.device)
+        trans_mat = self.trans_probs
+        res = lhs[0] * self.init_probs
+        consts[0] = res.sum()
+        alphas[0] = res / consts[0]
+        for i in range(1, lhs.shape[0]):
+            res = lhs[i] * (trans_mat.t() @ alphas[i-1])
+            consts[i] = res.sum()
+            alphas[i] = res / consts[i]
+        return alphas, consts
 
-    def _baum_welch_backward(self, llhs):
-        log_trans_mat = self.trans_probs.log()
-        log_betas = torch.zeros_like(llhs) - float('inf')
-        log_betas[-1] = self.final_probs.log()
-        for i in reversed(range(llhs.shape[0]-1)):
-            log_betas[i] = logsumexp(log_trans_mat + llhs[i+1] + \
-                log_betas[i+1], dim=1).view(-1)
-        return log_betas
+    def _baum_welch_backward(self, lhs, consts):
+        betas = torch.zeros_like(lhs)
+        trans_mat = self.trans_probs
+        betas[-1] = self.final_probs
+        for i in reversed(range(lhs.shape[0] - 1)):
+            res = trans_mat @ (lhs[i+1] * betas[i+1])
+            betas[i] = res / consts[i+1]
+        return betas
 
     def posteriors(self, llhs):
-        log_alphas = self._baum_welch_forward(llhs)
-        log_betas = self._baum_welch_backward(llhs)
-        lognorm = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
-        return torch.exp(log_alphas + log_betas - lognorm.view(-1, 1))
+        # Scale the log-likelihoods to avoid overflow.
+        max_val = llhs.max()
+        lhs = (llhs - max_val).exp() + 1e-6
+
+        # Scaled forward-backward algorithm.
+        alphas, consts = self._baum_welch_forward(lhs)
+        betas = self._baum_welch_backward(lhs, consts)
+        posts = alphas * betas
+        norm = posts.sum(dim=1)
+        posts /= norm[:, None]
+
+        return posts
 
     def best_path(self, llhs):
         init_log_prob = self.init_probs.log()
