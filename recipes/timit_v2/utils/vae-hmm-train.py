@@ -140,7 +140,6 @@ def main():
 
             elbo_value = float(elbo) / (tot_counts * batch_nutt)
             logging.info("ln p(X) >= {}".format(round(elbo_value, 3)))
-            exit(0)
 
         # At the end of each epoch, output the current state of the
         # model.
