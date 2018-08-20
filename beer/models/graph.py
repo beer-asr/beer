@@ -2,82 +2,153 @@
 'Acoustic graph for the HMM.'
 
 import torch
-import numpy as np
-
+from ..utils import logsumexp
 
 class Arc:
-    __repr_str = 'Arc(arc_id={}, start={}, end={}, weight={})'
+    '''Arc between to state (i.e. node) of a graph with a weight.
 
-    def __init__(self, arc_id, start, end, weight):
+    Attributes:
+        start (int): Identifier of the starting state.
+        end (int): Identifier of the ending state.
+        weight (float): Weight of the arc.
+    '''
+    __repr_str = 'Arc(start={}, end={}, weight={})'
+
+    def __init__(self, start, end, weight):
         '''
         Args:
-            arc_id (int): Unique arc number.
-            start (int): Starting state.
-            end (int): Final state,
+            start (State): Starting state.
+            end (State): Final state,
             weight (int): Weight of the arc.
         '''
-        self.arc_id = arc_id
         self.start = start
         self.end = end
         self.weight = weight
 
+    def __hash__(self):
+        return hash('{}:{}'.format(self.start, self.end))
+
     def __repr__(self):
-        return self.__repr_str.format(self.arc_id, self.start, self.end,
-                                      self.weight)
+        return self.__repr_str.format(self.start, self.end, self.weight)
 
 
 class State:
-    __repr_str = 'State(state_id={}, init_weight={}, final_weight={})'
+    '''State (or node) of a graph.
 
-    def __init__(self, state_id):
-        self.init_weight = -1.
-        self.final_weight = -1
+    Attributes:
+        unit_id (obj): Identifier of the parent unit.
+        state_id (int): Unique identifier of the state within the unit.
+        pdf_id (int): Idenitifier of the probability density function
+            associated with this state.
+    '''
+    __repr_str = 'State(unit_id={}, state_id={}, pdf_id={})'
+
+    def __init__(self, unit_id, state_id, pdf_id):
+        self.unit_id = unit_id
         self.state_id = state_id
-        self.arcs = {}
+        self.pdf_id = pdf_id
+
+    @property
+    def name(self):
+        return str(self.unit_id) + '_' + str(self.state_id)
+
+    def __hash__(self):
+        return hash('{}:{}'.format(self.unit_id, self.state_id))
 
     def __repr__(self):
-        retval = self.__repr_str.format(self.state_id, self.init_weight,
-                                        self.final_weight)
-        for i, arc_id in enumerate(self.arcs):
-            retval += '\n'
-            retval += '  (' + str(i + 1) + ') ' + repr(self.arcs[arc_id])
-        return retval
+        return self.__repr_str.format(self.unit_id, self.state_id, self.pdf_id)
+
+    def __eq__(self, other):
+        if isinstance(other, State):
+            return hash(self) == hash(other)
+        return NotImplemented
+
 
 class Graph:
+    '''Graph.
+
+    Attributes:
+        states (dictionary): All the states of the graph.
+        arcs (dictionary): All the arcs of the graph.
+    '''
+
     def __init__(self):
-        self.states = {}
-        self.arcs = {}
+        start = State(unit_id='<s>', state_id=0, pdf_id=None)
+        end = State(unit_id='</s>', state_id=0, pdf_id=None)
+        self._states = {
+            start.name: start, end.name: end
+        }
+        self._arcs = set()
+
+    @property
+    def start_state(self):
+        return self._states['<s>_0']
+
+    @property
+    def end_state(self):
+        return self._states['</s>_0']
 
     def __repr__(self):
         retval = ''
-        for i, state in enumerate(self.states.values()):
+        for i, state in enumerate(self._states):
             retval += repr(state)
-            if i <= len(self.states) - 1:
+            if i <= len(self._states) - 1:
                 retval += '\n'
         return retval
 
-    def add_state(self):
-        state_id = len(self.states)
-        new_state = State(state_id)
-        self.states[state_id] = new_state
-        return state_id
+    def _repr_svg_(self):
+        # We import the module here as it is only needed by the Jupyter
+        # notebook.
+        import graphviz
+        dot = graphviz.Digraph()
+        dot.graph_attr['rankdir'] = 'LR'
+        for state in self._states.values():
+            attrs = {'shape': 'circle'}
+            if state.unit_id == '<s>' or state.unit_id == '</s>':
+                attrs.update(shape='point')
+            dot.node(state.name, **attrs)
+        for arc in self.arcs():
+            dot.edge(str(arc.start), str(arc.end), label=str(round(arc.weight, 3)))
+        return graphviz.Source(dot.source)._repr_svg_()
+
+    def arcs(self, state=None, outgoing=True):
+        '''Iterates over the arcs. If state is provided enumerate the
+        outgoing args from "state"
+        '''
+        for arc in self._arcs:
+            if outgoing:
+                if state is None or arc.start == state.name:
+                    yield arc
+            else:
+                if state is None or arc.end == state.name:
+                    yield arc
+
+    def add_state(self, unit_id, state_id, pdf_id):
+        new_state = State(unit_id, state_id, pdf_id)
+        self._states[new_state.name] = new_state
+        return new_state
 
     def add_arc(self, start, end, weight):
-        arc_id = len(self.arcs)
-        new_arc = Arc(arc_id, start, end, weight)
-        self.arcs[arc_id] = new_arc
-        self.states[start].arcs[arc_id] = new_arc
-        return arc_id
+        new_arc = Arc(start.name, end.name, weight)
+        self._arcs.add(new_arc)
+        return new_arc
 
-    def initial_states(self):
-        for state_id, state in self.states.items():
-            if state.init_weight > 0:
-                yield state_id
+    def join(self, graphs):
+        'Concatenate a set of graphs into one big graph.'
+        for graph in graphs:
+            self.add_graph(graph)
 
-    def final_states(self):
-        for state_id, state in self.states.items():
-            if state.final_weight > 0:
-                yield state_id
+    def add_graph(self, graph):
+        self._states.update(graph._states)
+        self._arcs.update(graph._arcs)
+
+    def normalize(self):
+        for state in self._states.values():
+            sum_out_weights = 0.
+            for arc in self.arcs(state):
+                sum_out_weights += arc.weight
+            for arc in self.arcs(state):
+                arc.weight /= sum_out_weights
 
     def to_matrix(self):
         nstates = len(self.states)
@@ -86,35 +157,114 @@ class Graph:
             matrix[arc.start, arc.end] = arc.weight
         return matrix
 
-
-class AcousticGraph(Graph):
-
-    def __init__(self):
-        super().__init__()
-        self.units = {}
-
-    def add_unit(self, n_states, edges_conf):
-        state_ids = [self.add_state() for i in range(n_states)]
-        self.states[state_ids[0]].init_weight = 1.0
-        for edge_conf in edges_conf:
-            if edge_conf['end_id'] == '<exit>':
-                self.states[state_ids[-1]].final_weight = edge_conf['trans_prob']
+    def _find_next_pdf_ids(self, start_state, init_weight):
+        for arc in self.arcs(start_state):
+            pdf_id = self._states[arc.end].pdf_id
+            if pdf_id is not None:
+                yield pdf_id, init_weight * arc.weight
             else:
-                start = state_ids[edge_conf['start_id']]
-                end = state_ids[edge_conf['end_id']]
-                weight = edge_conf['trans_prob']
-                self.add_arc(start, end, weight)
-        unit_id = len(self.units)
-        self.units[unit_id] = state_ids
+                yield from self._find_next_pdf_ids(self._states[arc.end],
+                                                   init_weight * arc.weight)
 
-    def to_matrix(self):
-        matrix = super().to_matrix()
-        prob_unit = 1. / len(self.units)
-        for state_id in self.final_states():
-            final_weight = self.states[state_id].final_weight
-            for unit_states in self.units.values():
-                matrix[state_id, unit_states[0]] = final_weight * prob_unit
-        return matrix
+    def compile(self):
+        '''Compile the graph.'''
+        # Total number of states
+        tot_n_states = len(self._states) - 2
+        init_probs = torch.zeros(tot_n_states)
+        final_probs = torch.zeros(tot_n_states)
+        trans_probs = torch.zeros(tot_n_states, tot_n_states)
+
+        # Init probs.
+        for arc in self.arcs(state=self.start_state):
+            pdf_id = self._states[arc.end].pdf_id
+            init_probs[pdf_id] = arc.weight
+
+        # Init probs.
+        for arc in self.arcs(state=self.end_state, outgoing=False):
+            pdf_id = self._states[arc.start].pdf_id
+            final_probs[pdf_id] = arc.weight
+        final_probs /= final_probs.sum()
+
+        # Transprobs
+        for arc in self.arcs():
+            pdf_id1 = self._states[arc.start].pdf_id
+            pdf_id2 = self._states[arc.end].pdf_id
+            weight = arc.weight
+
+            # These connections are handled by the init_probs.
+            if pdf_id1 is None:
+                continue
+
+            # We need to follow the path until the next valid pdf_id
+            if pdf_id2 is None:
+                for pdf_id2, weight in self._find_next_pdf_ids(self._states[arc.end],
+                                                               weight):
+                    trans_probs[pdf_id1, pdf_id2] = weight
+            else:
+                trans_probs[pdf_id1, pdf_id2] = weight
+
+        return CompiledGraph(init_probs, final_probs, trans_probs)
+
+class CompiledGraph:
+    '''Inference graph for a HMM model.'''
+
+    def __init__(self, init_probs, final_probs, trans_probs):
+        '''
+        Args:
+            init_probs (``torch.Tensor``): Initial probabilities.
+            final_probs (``torch.Tensor``): Final probabilities.
+            trans_probs (``torch.Tensor``): Transition probabilities.
+        '''
+        self.init_probs = init_probs
+        self.final_probs = final_probs
+        self.trans_probs = trans_probs
+
+    @property
+    def n_states(self):
+        'Total number of states in the graph.'
+        return len(self.trans_probs)
+
+    def _baum_welch_forward(self, llhs):
+        log_trans_mat = self.trans_probs.log()
+        log_alphas = torch.zeros_like(llhs) - float('inf')
+        log_alphas[0] = llhs[0] + self.init_probs.log()
+        for i in range(1, llhs.shape[0]):
+            log_alphas[i] = llhs[i]
+            log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(),
+                                       dim=1).view(-1)
+        return log_alphas
+
+    def _baum_welch_backward(self, llhs):
+        log_trans_mat = self.trans_probs.log()
+        log_betas = torch.zeros_like(llhs) - float('inf')
+        log_betas[-1] = self.final_probs.log()
+        for i in reversed(range(llhs.shape[0]-1)):
+            log_betas[i] = logsumexp(log_trans_mat + llhs[i+1] + \
+                log_betas[i+1], dim=1).view(-1)
+        return log_betas
+
+    def posteriors(self, llhs):
+        log_alphas = self._baum_welch_forward(llhs)
+        log_betas = self._baum_welch_backward(llhs)
+        lognorm = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
+        return torch.exp(log_alphas + log_betas - lognorm.view(-1, 1))
+
+    def best_path(self, llhs):
+        init_log_prob = self.init_probs.log()
+        backtrack = torch.zeros_like(llhs, dtype=torch.long, device=llhs.device)
+        omega = llhs[0] + init_log_prob
+        log_trans_mat = self.trans_probs.log()
+
+        for i in range(1, llhs.shape[0]):
+            hypothesis = omega + log_trans_mat.t()
+            backtrack[i] = torch.argmax(hypothesis, dim=1)
+            omega = llhs[i] + hypothesis[range(len(log_trans_mat)), backtrack[i]]
+
+        path = [torch.argmax(omega + self.final_probs.log())]
+        for i in reversed(range(1, len(llhs))):
+            path.insert(0, backtrack[i, path[0]])
+        return torch.LongTensor(path)
 
 
-__all__ = ['AcousticGraph']
+
+__all__ = ['Graph']
