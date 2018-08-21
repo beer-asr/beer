@@ -179,21 +179,30 @@ class Graph:
         del self._states[old_state_id]
 
     def _find_next_pdf_ids(self, start_state, init_weight):
-        for arc in self.arcs(start_state):
+        to_explore = [arc for arc in self.arcs(start_state)]
+        visited = set([start_state])
+        while len(to_explore) > 0:
+            arc = to_explore.pop()
             pdf_id = self._states[arc.end].pdf_id
             if pdf_id is not None:
                 yield pdf_id, init_weight * arc.weight
             else:
-                yield from self._find_next_pdf_ids(arc.end, init_weight * arc.weight)
+                if arc.end not in visited:
+                    to_explore += [arc for arc in self.arcs(arc.end)]
+                    visited.add(arc.end)
 
     def _find_previous_pdf_ids(self, start_state, init_weight):
-        for arc in self.arcs(start_state, incoming=True):
+        to_explore = [arc for arc in self.arcs(start_state, incoming=True)]
+        visited = set([start_state])
+        while len(to_explore) > 0:
+            arc = to_explore.pop()
             pdf_id = self._states[arc.start].pdf_id
             if pdf_id is not None:
                 yield pdf_id, init_weight * arc.weight
             else:
-                yield from self._find_previous_pdf_ids(arc.start,
-                                                       init_weight * arc.weight)
+                if arc.start not in visited:
+                    to_explore += [arc for arc in self.arcs(arc.start, incoming=True)]
+                    visited.add(arc.start)
 
     def compile(self, pdf_id_mapping=None):
         '''Compile the graph.'''
