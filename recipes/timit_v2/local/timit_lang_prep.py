@@ -14,7 +14,6 @@ def main():
     phone_48_file = os.path.join(args.outdir, 'phones.txt')
     phone_39_file = os.path.join(args.outdir, 'phones_39.txt')
     phone_map_file = os.path.join(args.outdir, 'phones_48_to_39.txt')
-    phone_map_int_file = os.path.join(args.outdir, 'phones_48_to_39.int')
 
     dict_phone_47 = {}
     dict_map = {}
@@ -31,15 +30,12 @@ def main():
     phone_39 = ['sil'] + phone_39
     dict_39_id = dict((j, i) for i, j in enumerate(phone_39))
 
-    with open(phone_48_file, 'w') as f1, open(phone_map_file, 'w') as f2, \
-         open(phone_map_int_file, 'w') as f3:
+    with open(phone_48_file, 'w') as f1, open(phone_map_file, 'w') as f2:
             print('sil 0', file=f1)
             print('sil sil', file=f2)
-            print('0 0', file=f3)
             for i, k in enumerate(sorted(dict_phone_47.keys())):
                  print(k, str(i+1), file=f1)
                  print(k, dict_map[k], file=f2)
-                 print(str(i+1), dict_39_id[dict_map[k]], file=f3)
     with open(phone_39_file, 'w') as f4:
         for k in dict_39_id.keys():
             print(k, dict_39_id[k], file=f4)
