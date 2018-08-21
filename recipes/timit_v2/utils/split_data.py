@@ -5,36 +5,37 @@ import numpy as np
 import os
 import argparse
 
-def split_data(data, n_job):
+def split_data(data, chunks):
     keys = list(data.keys())
-    tot_keys = len(keys)
-    key_chunks = np.array_split(np.array(range(tot_keys)), n_job)
-    for k in key_chunks:
+    for k in chunks:
         yield dict((keys[i], data[keys[i]]) for i in k)
 
 
 def main():
     parser = argparse.ArgumentParser(description='Split data into N subsets')
     parser.add_argument('srcdir', help='Source directory')
+    parser.add_argument('tgtdir', help='Target directory')
     parser.add_argument('num_job', type=int, help='Number of subsets')
     args = parser.parse_args()
 
     srcdir = args.srcdir
+    tgtdir = args.tgtdir
     num_job = args.num_job
     src_feats_file = os.path.join(srcdir, 'feats.npz')
     src_trans = os.path.join(srcdir, 'trans')
     src_phone_file = os.path.join(srcdir, 'phones.int.npz')
     src_feats = np.load(src_feats_file)
     src_phones = np.load(src_phone_file)
+    src_keys = list(src_feats.keys())
+    src_keys_chunk = np.array_split(np.array(range(len(src_keys))), num_job)
     with open(src_trans, 'r') as f:
         seqs = [l.rstrip('\n') for l in f]
     dict_src_trans = {s.split()[0]: ' '.join(s.split()[1:]) for s in seqs}
-    tgtdir = os.path.join(srcdir, 'split' + str(num_job))
 
     # Split data
-    split_feats = split_data(src_feats, num_job)
-    split_phones = split_data(src_phones, num_job)
-    split_trans = split_data(dict_src_trans, num_job)
+    split_feats = split_data(src_feats, src_keys_chunk)
+    split_phones = split_data(src_phones, src_keys_chunk)
+    split_trans = split_data(dict_src_trans, src_keys_chunk)
 
     for i, (ft, ph, tr) in enumerate(zip(split_feats, split_phones, split_trans)):
         sub_dir = os.path.join(tgtdir, str(i+1))
