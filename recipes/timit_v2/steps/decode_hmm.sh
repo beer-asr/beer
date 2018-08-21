@@ -1,18 +1,18 @@
 #!/bin/bash
 
-if [ $# -ne 3 ];then
-    echo "$0 <setup.sh> <date-test-dir> <decode-dir>"
+if [ $# -ne 4 ];then
+    echo "$0 <setup.sh> <date-test-dir> <decode-model> <decode-dir>"
     exit 1
 fi
 
 setup=$1
 data_test_dir=$2
-decode_dir=$3
+mdl=$3
+decode_dir=$4
 stage=0
 
 [ -f $setup ] && . $setup
-mdldir=$(dirname $decode_dir)
-mdl=$mdldir/final.mdl
+mdldir=$(dirname $mdl)
 emission_conf=$mdldir/emissions.yml
 
 mkdir -p $decode_dir/log

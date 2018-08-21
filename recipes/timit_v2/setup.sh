@@ -28,15 +28,23 @@ vae_hmm_training_type=viterbi
 vae_hmm_lrate=1e-1
 vae_hmm_lrate_nnet=1e-3
 vae_hmm_batch_size=400
-vae_hmm_epochs=2
-vae_hmm_opts="--fast-eval --use-gpu"
+vae_hmm_epochs=50
+vae_hmm_opts="--fast-eval"
+#vae_hmm_opts='--fast-eval --use-gpu'
 
 # HMM-GMM model parameters.
 hmm_emission_conf=$confdir/hmm_gmm/emissions.yml
 hmm_infer_type='viterbi'
 hmm_lrate=0.1
 hmm_batch_size=400
-hmm_epochs=10
+hmm_epochs=50
 hmm_fast_eval="--fast-eval"
 use_gpu=""
 hmm_gamma=0.5 # HMM transition probability between phones
+
+
+# Score options.
+remove_sym="sil" # Support multiple symbol, e.g. "sil spn nsn"
+duplicate="no" # Do not allow adjacent duplicated phones. Only effective at scoring stage.
+#phone_48_to_39_map=""
+phone_48_to_39_map=$langdir/phones_48_to_39.txt
