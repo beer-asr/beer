@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 import torch
-from ..utils import logsumexp
+from .utils import logsumexp
 
 class Arc:
     '''Arc between to state (i.e. node) of a graph with a weight.
@@ -41,28 +41,30 @@ class State:
         pdf_id (int): Idenitifier of the probability density function
             associated with this state.
     '''
-    __repr_str = 'State(unit_id={}, state_id={}, pdf_id={})'
+    __repr_str = 'State(state_id={}, pdf_id={})'
 
-    def __init__(self, unit_id, state_id, pdf_id):
-        self.unit_id = unit_id
+    def __init__(self, state_id, pdf_id):
         self.state_id = state_id
         self.pdf_id = pdf_id
 
-    @property
-    def name(self):
-        return str(self.unit_id) + '_' + str(self.state_id)
-
     def __hash__(self):
-        return hash('{}:{}'.format(self.unit_id, self.state_id))
+        return hash(self.state_id)
 
     def __repr__(self):
-        return self.__repr_str.format(self.unit_id, self.state_id, self.pdf_id)
+        return self.__repr_str.format(self.state_id, self.pdf_id)
 
     def __eq__(self, other):
         if isinstance(other, State):
             return hash(self) == hash(other)
         return NotImplemented
 
+
+def _state_name(symbols, state_id):
+    try:
+        name = str(symbols[state_id])
+    except KeyError:
+        name = str(state_id)
+    return name
 
 class Graph:
     '''Graph.
@@ -73,20 +75,12 @@ class Graph:
     '''
 
     def __init__(self):
-        start = State(unit_id='<s>', state_id=0, pdf_id=None)
-        end = State(unit_id='</s>', state_id=0, pdf_id=None)
-        self._states = {
-            start.name: start, end.name: end
-        }
+        self._state_count = 0
+        self._states = {}
         self._arcs = set()
-
-    @property
-    def start_state(self):
-        return self._states['<s>_0']
-
-    @property
-    def end_state(self):
-        return self._states['</s>_0']
+        self.symbols = {}
+        self.start_state = None
+        self.end_state = None
 
     def __repr__(self):
         retval = ''
@@ -102,116 +96,87 @@ class Graph:
         import graphviz
         dot = graphviz.Digraph()
         dot.graph_attr['rankdir'] = 'LR'
-        for state in self._states.values():
+        for state_id in self.states():
             attrs = {'shape': 'circle'}
-            if state.unit_id == '</s>':
-                attrs.update(shape='doublecircle')
-            if state.unit_id == '<s>':
+            if state_id == self.start_state:
                 attrs.update(penwidth='2.0')
-            dot.node(state.name, **attrs)
+            if state_id == self.end_state:
+                attrs.update(shape='doublecircle')
+            dot.node(_state_name(self.symbols, state_id), **attrs)
         for arc in self.arcs():
-            dot.edge(str(arc.start), str(arc.end), label=str(round(arc.weight, 3)))
+            dot.edge(_state_name(self.symbols, arc.start),
+                     _state_name(self.symbols, arc.end),
+                     label=str(round(arc.weight, 3)))
         return graphviz.Source(dot.source)._repr_svg_()
 
-    def arcs(self, state=None, outgoing=True):
+    def states(self):
+        '''Iterate over the states.'''
+        return self._states.keys()
+
+    def arcs(self, state_id=None, incoming=False):
         '''Iterates over the arcs. If state is provided enumerate the
-        outgoing args from "state"
+        outgoing args from "state_id"
         '''
         for arc in self._arcs:
-            if outgoing:
-                if state is None or arc.start == state.name:
+            if not incoming:
+                if arc.start == state_id or state_id is None:
                     yield arc
             else:
-                if state is None or arc.end == state.name:
+                if arc.end == state_id or state_id is None:
                     yield arc
 
-    def add_state(self, unit_id, pdf_id, state_id=0):
-        new_state = State(unit_id, state_id, pdf_id)
-        self._states[new_state.name] = new_state
-        return new_state
+    def add_state(self, pdf_id=None):
+        state_id = self._state_count
+        self._state_count += 1
+        new_state = State(state_id, pdf_id)
+        self._states[new_state.state_id] = new_state
+        return state_id
 
     def add_arc(self, start, end, weight=1.0):
-        new_arc = Arc(start.name, end.name, weight)
+        new_arc = Arc(start, end, weight)
         self._arcs.add(new_arc)
         return new_arc
 
-    def join(self, graphs):
-        'Concatenate a set of graphs into one big graph.'
-        for graph in graphs:
-            self.add_graph(graph)
-
-    def add_graph(self, graph):
-        self._states.update(graph._states)
-        self._arcs.update(graph._arcs)
-
     def normalize(self):
-        for state in self._states.values():
+        for state_id in self.states():
             sum_out_weights = 0.
-            for arc in self.arcs(state):
+            for arc in self.arcs(state_id):
                 sum_out_weights += arc.weight
-            for arc in self.arcs(state):
+            for arc in self.arcs(state_id):
                 arc.weight /= sum_out_weights
 
-    def _get_unit_states(self, unit_id):
-        retval = []
-        for state in self._states.values():
-            if state.unit_id == unit_id:
-                retval.append(state)
-        return retval
+    def replace_state(self, old_state_id, graph):
+        '''Replace a state with a graph.'''
 
-    def _get_unit_arcs(self, unit_states):
-        unit_ids = [state.unit_id for state in unit_states]
-        retval = []
-        for arc in self.arcs():
-            s_state = self._states[arc.start]
-            e_state = self._states[arc.end]
-            if s_state.unit_id in unit_ids or e_state.unit_id in unit_ids:
-                retval.append(arc)
-        return retval
+        # Copy the states.
+        new_states = {}
+        for state_id in graph.states():
+            pdf_id = graph._states[state_id].pdf_id
+            new_state_id = self.add_state(pdf_id=pdf_id)
+            new_states[state_id] = new_state_id
 
-    def graph_from_unit_path(self, unit_path):
-        unit_s_counts = defaultdict(int)
-        pdf_count = 0
-        pdf_id_mapping = []
-        ali_graph = Graph()
+        # Copy the arcs.
+        for arc in graph.arcs():
+            self.add_arc(new_states[arc.start], new_states[arc.end], arc.weight)
 
-        last_state = ali_graph.start_state
-        for i, unit in enumerate(unit_path):
-            start = last_state
-            if i < len(unit_path) - 1:
-                unit_s_counts['<>'] += 1
-                state_id = unit_s_counts['<>']
-                joint_state = ali_graph.add_state(unit_id='<>', state_id=state_id,
-                                                pdf_id=None)
-                end = joint_state
-            else:
-                end = ali_graph.end_state
+        # Connect the unit graph to the main graph.
+        to_delete = []
+        new_arcs = []
+        for arc in self.arcs(old_state_id):
+            to_delete.append(arc)
+            new_arcs.append((new_states[graph.end_state], arc.end, arc.weight))
+        for arc in self.arcs(old_state_id, incoming=True):
+            to_delete.append(arc)
+            new_arcs.append((arc.start, new_states[graph.start_state], arc.weight))
 
-            mapping = {
-                self.start_state.name: start,
-                self.end_state.name: end
-            }
+        # Add the new arcs.
+        for start, end, weight in new_arcs:
+            self.add_arc(start, end, weight)
 
-            states = self._get_unit_states(unit)
-            arcs = self._get_unit_arcs(states)
-
-            # Copy the states.
-            for state in states:
-                unit_s_counts[state.unit_id] += 1
-                state_id = unit_s_counts[state.unit_id]
-                s = ali_graph.add_state(unit_id=state.unit_id, state_id=state_id,
-                                        pdf_id=pdf_count)
-                pdf_count += 1
-                mapping[state.name] = s
-                pdf_id_mapping.append(state.pdf_id)
-
-            # Copy the arcs.
-            for arc in arcs:
-                ali_graph.add_arc(mapping[arc.start], mapping[arc.end], arc.weight)
-            last_state = end
-
-        return ali_graph, pdf_id_mapping
-
+        # Remove the old arcs and the replaced state.
+        for arc in to_delete:
+            self._arcs.remove(arc)
+        del self._states[old_state_id]
 
     def _find_next_pdf_ids(self, start_state, init_weight):
         for arc in self.arcs(start_state):
@@ -219,8 +184,16 @@ class Graph:
             if pdf_id is not None:
                 yield pdf_id, init_weight * arc.weight
             else:
-                yield from self._find_next_pdf_ids(self._states[arc.end],
-                                                   init_weight * arc.weight)
+                yield from self._find_next_pdf_ids(arc.end, init_weight * arc.weight)
+
+    def _find_previous_pdf_ids(self, start_state, init_weight):
+        for arc in self.arcs(start_state, incoming=True):
+            pdf_id = self._states[arc.start].pdf_id
+            if pdf_id is not None:
+                yield pdf_id, init_weight * arc.weight
+            else:
+                yield from self._find_previous_pdf_ids(arc.start,
+                                                       init_weight * arc.weight)
 
     def compile(self, pdf_id_mapping=None):
         '''Compile the graph.'''
@@ -235,14 +208,13 @@ class Graph:
         trans_probs = torch.zeros(tot_n_states, tot_n_states)
 
         # Init probs.
-        for arc in self.arcs(state=self.start_state):
-            pdf_id = self._states[arc.end].pdf_id
-            init_probs[pdf_id] = arc.weight
+        for pdf_id, weight in self._find_next_pdf_ids(self.start_state, 1.0):
+            init_probs[pdf_id] += weight
+        init_probs /= init_probs.sum()
 
         # Init probs.
-        for arc in self.arcs(state=self.end_state, outgoing=False):
-            pdf_id = self._states[arc.start].pdf_id
-            final_probs[pdf_id] = arc.weight
+        for pdf_id, weight in self._find_previous_pdf_ids(self.end_state, 1.0):
+            final_probs[pdf_id] += weight
         final_probs /= final_probs.sum()
 
         # Transprobs
@@ -257,11 +229,10 @@ class Graph:
 
             # We need to follow the path until the next valid pdf_id
             if pdf_id2 is None:
-                for pdf_id2, weight in self._find_next_pdf_ids(self._states[arc.end],
-                                                               weight):
-                    trans_probs[pdf_id1, pdf_id2] = weight
+                for pdf_id2, weight in self._find_next_pdf_ids(arc.end, weight):
+                    trans_probs[pdf_id1, pdf_id2] += weight
             else:
-                trans_probs[pdf_id1, pdf_id2] = weight
+                trans_probs[pdf_id1, pdf_id2] += weight
         trans_probs /= trans_probs.sum(dim=1)[:, None]
 
         return CompiledGraph(init_probs, final_probs, trans_probs,
