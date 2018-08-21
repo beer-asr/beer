@@ -30,12 +30,14 @@ def filter_text(text, remove=[0], duplicate='no', phone_map=None):
     '''
     if phone_map is not None:
        if remove is not None:
+           remove = remove.split()
            filter_text = [phone_map[i] for i in text if (i not in remove) and
                           phone_map[i] not in remove]
        else:
            filter_text = [phone_map[i] for i in text]
     else:
         if remove is not None:
+            remove = remove.split()
             filter_text = [i for i in text if i not in remove]
         else:
             filter_text = text
@@ -55,13 +57,11 @@ def main():
     parser.add_argument('--phone_map', help='For TIMIT only: 48 to 39 phoneme map')
     parser.add_argument('reference', help='Transcription file')
     parser.add_argument('hypothesis', help='Decoded hypothesis result file')
-    parser.add_argument('result', help='File to write scoring results')
     args = parser.parse_args()
 
     all_ref = read_text(args.reference)
     all_hyp = read_text(args.hypothesis)
-    result = args.result
-    remove_unit = args.remove.split()
+    remove_unit = args.remove
     duplicate = args.duplicate
     phone_map = read_phone_map(args.phone_map)
     ref_keys = list(all_ref.keys())
@@ -73,7 +73,6 @@ def main():
     tot_len = 0
     tot_err = 0
     for k in ref_keys:
-        print('Processing', k)
         ref = filter_text(all_ref[k], remove=remove_unit, duplicate=duplicate,
             phone_map=phone_map)
         hyp = filter_text(all_hyp[k], remove=remove_unit, duplicate=duplicate,
@@ -92,8 +91,7 @@ def main():
                 mtrix[j, i] = min(err)
         tot_err += mtrix[-1, -1]
         tot_len += len(ref)
-    with open(result, 'w') as f:
-        print( 'Error rate is ', str(tot_err / tot_len), file=f)
+    print(tot_err/tot_len)
 
 if __name__ == "__main__":
     main()

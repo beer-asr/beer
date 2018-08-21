@@ -32,7 +32,7 @@ if [ $stage -le 1 ];then
     echo "Merging states into phones"
     python utils/convert_states_to_phone.py \
         $decode_dir/decode_states.txt \
-        $decode_dir/decode_phone_ids.npz \
+        $decode_dir/decode_results.txt \
         $langdir/phones.txt \
         $emission_conf > $decode_dir/log/convert_state_to_phone.log 2>&1 || exit 1
 fi
@@ -40,7 +40,9 @@ fi
 if [ $stage -le 2 ];then
     echo "DTW scoring"
     python utils/score.py \
-        $data_test_dir/phones.int.npz \
-        $decode_dir/decode_phone_ids.npz \
-        $decode_dir/decode_result.txt > $decode_dir/log/score.log 2>&1 || exit 1
+        --remove=$remove_sym \
+        --duplicate=$duplicate \
+        --phone_map=$phone_48_to_39_map \
+        $data_test_dir/trans \
+        $decode_dir/decode_results.txt > $decode_dir/log/score.log 2>&1 || exit 1
 fi

@@ -109,7 +109,7 @@ fi
 if [ ! -f $mdl_dir/final.mdl ]; then
     echo "Training..."
 
-    python -u -m cProfile -s cumtime utils/train_vae_hmm.py \
+    python -u utils/train_vae_hmm.py \
         --training_type $vae_hmm_training_type \
         --lrate $vae_hmm_lrate \
         --lrate-nnet $vae_hmm_lrate_nnet \

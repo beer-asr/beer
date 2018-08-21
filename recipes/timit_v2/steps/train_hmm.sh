@@ -47,7 +47,7 @@ fi
 
 if [ ! -f $mdl_dir/final.mdl ];then
     echo "Training HMM-GMM model"
-    python -u -m cProfile -s cumtime utils/train_hmm.py \
+    python -u utils/train_hmm.py \
         --infer_type $hmm_infer_type \
         --lrate $hmm_lrate \
         --batch_size $hmm_batch_size \
