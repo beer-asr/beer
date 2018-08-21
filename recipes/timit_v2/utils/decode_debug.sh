@@ -12,10 +12,10 @@ decode_dir=$mdl_dir/decode_test
 [ -f $mdl_dir/decode_all_result.txt ] && rm $mdl_dir/decode_all_result.txt
 touch $mdl_dir/decode_all_result.txt
 
-for n in $(seq 1 49); do
+for n in $(seq 1 29); do
     echo "Decoding with model $n"
     mdl=$mdl_dir/$n.mdl
     dir=${decode_dir}_${n}
-    #steps/decode_vae_hmm.sh $setup $data_test_dir $mdl $dir
+    steps/decode_vae_hmm.sh $setup $data_test_dir $mdl $dir
     cut -d " " -f 5 $dir/decode_result.txt >> $mdl_dir/decode_all_result.txt
 done
