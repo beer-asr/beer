@@ -78,7 +78,6 @@ def main():
                 fast_eval=fast_eval)
             batch_nutt = len(batch_keys)
             for utt in batch_keys:
-                logging.info("Training with utterance %s", utt)
                 ft = torch.from_numpy(feats[utt]).float().to(device)
                 lab = labels[utt]
                 init_state = torch.tensor([0]).to(device)
