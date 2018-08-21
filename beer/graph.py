@@ -1,6 +1,6 @@
 'Acoustic graph for the HMM.'
 
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import torch
 from .utils import logsumexp
 
@@ -76,7 +76,7 @@ class Graph:
 
     def __init__(self):
         self._state_count = 0
-        self._states = {}
+        self._states = OrderedDict()
         self._arcs = set()
         self.symbols = {}
         self.start_state = None
@@ -204,13 +204,18 @@ class Graph:
                     to_explore += [arc for arc in self.arcs(arc.start, incoming=True)]
                     visited.add(arc.start)
 
-    def compile(self, pdf_id_mapping=None):
+    def compile(self):
         '''Compile the graph.'''
         # Total number of emitting states.
         tot_n_states = 0
+        pdf_id_mapping = []
+        r_pdf_id_mapping = {}
         for state in self._states.values():
             if state.pdf_id is not None:
                 tot_n_states += 1
+                r_pdf_id_mapping[state.pdf_id] = len(pdf_id_mapping)
+                pdf_id_mapping.append(state.pdf_id)
+
 
         init_probs = torch.zeros(tot_n_states)
         final_probs = torch.zeros(tot_n_states)
@@ -218,12 +223,12 @@ class Graph:
 
         # Init probs.
         for pdf_id, weight in self._find_next_pdf_ids(self.start_state, 1.0):
-            init_probs[pdf_id] += weight
+            init_probs[r_pdf_id_mapping[pdf_id]] += weight
         init_probs /= init_probs.sum()
 
         # Init probs.
         for pdf_id, weight in self._find_previous_pdf_ids(self.end_state, 1.0):
-            final_probs[pdf_id] += weight
+            final_probs[r_pdf_id_mapping[pdf_id]] += weight
         final_probs /= final_probs.sum()
 
         # Transprobs
@@ -239,9 +244,9 @@ class Graph:
             # We need to follow the path until the next valid pdf_id
             if pdf_id2 is None:
                 for pdf_id2, weight in self._find_next_pdf_ids(arc.end, weight):
-                    trans_probs[pdf_id1, pdf_id2] += weight
+                    trans_probs[r_pdf_id_mapping[pdf_id1], r_pdf_id_mapping[pdf_id2]] += weight
             else:
-                trans_probs[pdf_id1, pdf_id2] += weight
+                trans_probs[r_pdf_id_mapping[pdf_id1], r_pdf_id_mapping[pdf_id2]] += weight
 
         # Normalize the transition matrix withouth changing its diagonal.
         diag = trans_probs.diag()
@@ -250,8 +255,7 @@ class Graph:
         idxs = torch.arange(0, len(trans_probs)).long()
         trans_probs[idxs, idxs] =  diag
 
-        return CompiledGraph(init_probs, final_probs, trans_probs,
-                             pdf_id_mapping)
+        return CompiledGraph(init_probs, final_probs, trans_probs, pdf_id_mapping)
 
 
 class CompiledGraph:
