@@ -215,7 +215,6 @@ class Graph:
                 state2pdf_id[state_id] = tot_n_states
                 pdf_id_mapping.append(state.pdf_id)
                 tot_n_states += 1
-        print(state2pdf_id)
 
         init_probs = torch.zeros(tot_n_states)
         final_probs = torch.zeros(tot_n_states)
