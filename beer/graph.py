@@ -185,7 +185,7 @@ class Graph:
             arc = to_explore.pop()
             pdf_id = self._states[arc.end].pdf_id
             if pdf_id is not None:
-                yield pdf_id, init_weight * arc.weight
+                yield arc.end, init_weight * arc.weight
             else:
                 if arc.end not in visited:
                     to_explore += [arc for arc in self.arcs(arc.end)]
@@ -198,7 +198,7 @@ class Graph:
             arc = to_explore.pop()
             pdf_id = self._states[arc.start].pdf_id
             if pdf_id is not None:
-                yield pdf_id, init_weight * arc.weight
+                yield arc.start, init_weight * arc.weight
             else:
                 if arc.start not in visited:
                     to_explore += [arc for arc in self.arcs(arc.start, incoming=True)]
@@ -209,26 +209,26 @@ class Graph:
         # Total number of emitting states.
         tot_n_states = 0
         pdf_id_mapping = []
-        r_pdf_id_mapping = {}
-        for state in self._states.values():
+        state2pdf_id = {}
+        for state_id, state in self._states.items():
             if state.pdf_id is not None:
-                tot_n_states += 1
-                r_pdf_id_mapping[state.pdf_id] = len(pdf_id_mapping)
+                state2pdf_id[state_id] = tot_n_states
                 pdf_id_mapping.append(state.pdf_id)
-
+                tot_n_states += 1
+        print(state2pdf_id)
 
         init_probs = torch.zeros(tot_n_states)
         final_probs = torch.zeros(tot_n_states)
         trans_probs = torch.zeros(tot_n_states, tot_n_states)
 
         # Init probs.
-        for pdf_id, weight in self._find_next_pdf_ids(self.start_state, 1.0):
-            init_probs[r_pdf_id_mapping[pdf_id]] += weight
+        for state_id, weight in self._find_next_pdf_ids(self.start_state, 1.0):
+            init_probs[state2pdf_id[state_id]] += weight
         init_probs /= init_probs.sum()
 
         # Init probs.
-        for pdf_id, weight in self._find_previous_pdf_ids(self.end_state, 1.0):
-            final_probs[r_pdf_id_mapping[pdf_id]] += weight
+        for state_id, weight in self._find_previous_pdf_ids(self.end_state, 1.0):
+            final_probs[state2pdf_id[state_id]] += weight
         final_probs /= final_probs.sum()
 
         # Transprobs
@@ -242,11 +242,12 @@ class Graph:
                 continue
 
             # We need to follow the path until the next valid pdf_id
+            pdf_id1 = state2pdf_id[arc.start]
             if pdf_id2 is None:
-                for pdf_id2, weight in self._find_next_pdf_ids(arc.end, weight):
-                    trans_probs[r_pdf_id_mapping[pdf_id1], r_pdf_id_mapping[pdf_id2]] += weight
+                for state_id, weight in self._find_next_pdf_ids(arc.end, weight):
+                    trans_probs[pdf_id1, state2pdf_id[state_id]] += weight
             else:
-                trans_probs[r_pdf_id_mapping[pdf_id1], r_pdf_id_mapping[pdf_id2]] += weight
+                trans_probs[pdf_id1, state2pdf_id[arc.end]] += weight
 
         # Normalize the transition matrix withouth changing its diagonal.
         diag = trans_probs.diag()
