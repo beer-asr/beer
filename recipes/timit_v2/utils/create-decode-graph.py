@@ -28,18 +28,18 @@ def main():
             phones.append(tokens[0])
     phones = phones
 
-    joint_state = '%1'
+    joint_state = '_1'
 
     if args.use_silence:
         silence = phones[0]
         del phones[0]
-        print('<s>', silence)
-        print(silence, '</s>')
+        print('[s]', silence)
+        print(silence, '[/s]')
         print(silence, joint_state)
         print(joint_state, silence)
     else:
-        print('<s>', joint_state)
-        print(joint_state, '</s>')
+        print('[s]', joint_state)
+        print(joint_state, '[/s]')
 
     for phone in phones:
         print(joint_state, phone)
