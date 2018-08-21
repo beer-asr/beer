@@ -242,7 +242,13 @@ class Graph:
                     trans_probs[pdf_id1, pdf_id2] += weight
             else:
                 trans_probs[pdf_id1, pdf_id2] += weight
-        trans_probs /= trans_probs.sum(dim=1)[:, None]
+
+        # Normalize the transition matrix withouth changing its diagonal.
+        diag = trans_probs.diag()
+        norms = trans_probs.sum(dim=1) - diag
+        trans_probs /= (norms / (1 - diag))[:, None]
+        idxs = torch.arange(0, len(trans_probs)).long()
+        trans_probs[idxs, idxs] =  diag
 
         return CompiledGraph(init_probs, final_probs, trans_probs,
                              pdf_id_mapping)
