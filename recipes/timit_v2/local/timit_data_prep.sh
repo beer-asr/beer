@@ -100,6 +100,7 @@ for x in train dev test; do
 done
 
 python $local/timit_lang_prep.py $langdir "$conf/phones.60-48-39.map"
+python utils/create-decode-graph.py --use-silence $langdir/phones.txt > $langdir/phone_graph.txt
 
 echo "Data preparation succeeded"
 
