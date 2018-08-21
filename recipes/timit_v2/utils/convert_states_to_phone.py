@@ -65,7 +65,6 @@ def main():
         for line in f:
             tokens = line.strip().split()
             uttid = tokens.pop(0)
-            logging.info('Processing utterance %s', uttid)
             utt_phones = convert_state_to_phone(tokens, end_states,
                          dict_state_phone)
             print(uttid, ' '.join(utt_phones), file=f2)
