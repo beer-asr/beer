@@ -1,7 +1,7 @@
 # Raw signal pre-processing.
 srate: 16000        # sampling rate of the signal (Hz)
 preemph: 0.98       # Pre-emphasis filter coefficient.
-window_len: 0.25    # size of the window for the FFT analysis (second)
+window_len: 0.025   # size of the window for the FFT analysis (second)
 framerate: 0.01     # Frame rate of the features (second)
 
 # Filterbank.
