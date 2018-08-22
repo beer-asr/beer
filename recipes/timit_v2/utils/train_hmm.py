@@ -77,7 +77,6 @@ def main():
             elbo = beer.evidence_lower_bound(datasize=tot_counts)
             batch_nutt = len(batch_keys)
             for utt in batch_keys:
-                logging.info("Training with utterance %s", utt)
                 ft = torch.from_numpy(feats[utt]).float().to(device)
                 graph = ali[utt][0].to(device)
                 telbo = beer.evidence_lower_bound(model, ft,

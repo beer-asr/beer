@@ -14,7 +14,7 @@ def read_phonelist(infile):
     with open(infile, 'r') as p:
         for line in p:
             tokens = line.strip().split()
-            dict_map[int(tokens[1])] = 0
+            dict_map[int(tokens[1])] = tokens[0]
     return dict_map
 
 def convert_state_to_phone(state_ids, end_states, dict_state_phone):
@@ -36,7 +36,7 @@ def convert_state_to_phone(state_ids, end_states, dict_state_phone):
 def main():
     parser = argparse.ArgumentParser(description='Convert state ids into phone ids')
     parser.add_argument('hyp_states', help='File of decoding state ids in integer')
-    parser.add_argument('hyp_phone', help='Output file of decoding phone ids in integer')
+    parser.add_argument('hyp_phone', help='Output file of decoding phoneme sequence')
     parser.add_argument('phone_map', help='File: phones.txt')
     parser.add_argument('hmm_conf', type=str, help='Configuration file of hmm')
     args = parser.parse_args()
@@ -56,20 +56,18 @@ def main():
     # Create a state-id to phone-id map
     for i in dict_phone_map.keys():
         for j in range(n_state_per_unit):
-            dict_state_phone[i * n_state_per_unit + j] = i
+            dict_state_phone[i * n_state_per_unit + j] = dict_phone_map[i]
 
     end_states = [i + n_state_per_unit - 1 for i in dict_state_phone.keys()
                   if i % n_state_per_unit == 0]
     dict_phone_ids = {}
-    with open(hyp_states, 'r') as f:
+    with open(hyp_states, 'r') as f, open(hyp_phone, 'w') as f2:
         for line in f:
             tokens = line.strip().split()
             uttid = tokens.pop(0)
-            logging.info('Processing utterance %s', uttid)
             utt_phones = convert_state_to_phone(tokens, end_states,
                          dict_state_phone)
-            dict_phone_ids[uttid] = utt_phones
-    np.savez(hyp_phone, **dict_phone_ids)
+            print(uttid, ' '.join(utt_phones), file=f2)
 
 if __name__ == '__main__':
     main()
