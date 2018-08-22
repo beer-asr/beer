@@ -19,6 +19,7 @@ langdir=$2
 conf=$3
 dir=$(pwd)/data/local/data
 mkdir -p $dir
+[ -f $dir/.done ] && echo "Data already prepared, skipping ..." && exit 0;
 
 [ -f $conf/test_spk.list ] || error_exit "$PROG: Eval-set speaker list not found.";
 [ -f $conf/dev_spk.list ] || error_exit "$PROG: dev-set speaker list not found.";
@@ -102,5 +103,6 @@ done
 python $local/timit_lang_prep.py $langdir "$conf/phones.60-48-39.map"
 python utils/create-decode-graph.py --use-silence $langdir/phones.txt > $langdir/phone_graph.txt
 
+date > $dir/.done 
 echo "Data preparation succeeded"
 
