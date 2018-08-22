@@ -40,6 +40,7 @@ hmm_batch_size=400
 hmm_epochs=100
 hmm_fast_eval="--fast-eval"
 #use_gpu="--use-gpu"
+hmm_train_sge_opts=""
 hmm_gamma=0.5 # HMM transition probability between phones
 
 
