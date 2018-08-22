@@ -1,12 +1,3 @@
-##########################
-# Previous configuration #
-#########################
-#n_units: 48
-#n_state_per_unit: 3
-#n_normal_per_state: 8
-#cov_type: diagonal
-#shared_cov: no
-
 #####################
 # New configuration #
 #####################
@@ -18,7 +9,7 @@
   noise_std: 0.1
   cov_type: diagonal
   shared_cov: no
-  share_emissions: false
+  shared_emissions: false
   topology:
   - {start_id: 0, end_id: 1, trans_prob: 1.0}
 
@@ -53,7 +44,7 @@
   noise_std: 0.1
   cov_type: diagonal
   shared_cov: no
-  share_emissions: false
+  shared_emissions: false
   topology:
   - {start_id: 0, end_id: 1, trans_prob: 1.0}
   - {start_id: 1, end_id: 1, trans_prob: 0.75}
