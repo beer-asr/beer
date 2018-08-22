@@ -9,7 +9,7 @@ if [ $# -ne 1 ]; then
 fi
 setup=$(pwd)/$1
 . $setup
-stage=3
+stage=1
 
 if [ $stage -le 0 ]; then
     echo ======================================================================

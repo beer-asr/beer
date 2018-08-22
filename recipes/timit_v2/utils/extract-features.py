@@ -46,6 +46,7 @@ def compute_dct_bases(nfilters, n_dct_coeff):
         dct_bases[:, m] = np.cos((m+1) * np.pi / nfilters * (np.arange(nfilters) + 0.5))
     return dct_bases
 
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('feaconf', help='configuration file of the '
@@ -109,7 +110,8 @@ def main():
             # Liftering.
             l_coeff = feaconf['lifter_coeff']
             lifter = 1 + (l_coeff / 2) * np.sin(np.pi * \
-                (1 + np.arange(feaconf['nfilters'])) / l_coeff)
+                (1 + np.arange(feaconf['n_dct_coeff'])) / l_coeff)
+            features *= lifter
 
         # Deltas.
         delta_order = feaconf['delta_order']
@@ -123,9 +125,9 @@ def main():
             features -= features.mean(axis=0)[None, :]
 
         # Make sure the length of the features is odd.
-        features = np.pad(features,
-                          pad_width=(((len(features) + 1) % 2, 0), (0, 0)),
-                          mode='edge')
+        #features = np.pad(features,
+        #                  pad_width=(((len(features) + 1) % 2, 0), (0, 0)),
+        #                  mode='edge')
 
         # Store the features as a numpy file.
         path = os.path.join(args.outdir, uttid)

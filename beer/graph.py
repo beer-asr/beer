@@ -281,7 +281,7 @@ class CompiledGraph:
         'Total number of states in the graph.'
         return len(self.trans_probs)
 
-    def _baum_welch_forward(self, lhs):
+    def _baum_welch_forward(self, lhs, eps=1e-6):
         alphas = torch.zeros_like(lhs)
         consts = torch.zeros(len(lhs), dtype=lhs.dtype, device=lhs.device)
         trans_mat = self.trans_probs
@@ -289,28 +289,28 @@ class CompiledGraph:
         consts[0] = res.sum()
         alphas[0] = res / consts[0]
         for i in range(1, lhs.shape[0]):
-            res = lhs[i] * (trans_mat.t() @ alphas[i-1])
+            res = lhs[i] * (trans_mat.t() @ (alphas[i-1] + eps))
             consts[i] = res.sum()
             alphas[i] = res / consts[i]
         return alphas, consts
 
-    def _baum_welch_backward(self, lhs, consts):
+    def _baum_welch_backward(self, lhs, consts, eps=1e-6):
         betas = torch.zeros_like(lhs)
         trans_mat = self.trans_probs
         betas[-1] = self.final_probs
         for i in reversed(range(lhs.shape[0] - 1)):
-            res = trans_mat @ (lhs[i+1] * betas[i+1])
+            res = trans_mat @ (lhs[i+1] * (betas[i+1] + eps))
             betas[i] = res / consts[i+1]
         return betas
 
-    def posteriors(self, llhs, eps=1e-5):
+    def posteriors(self, llhs, eps=1e-6):
         # Scale the log-likelihoods to avoid overflow.
         max_val = llhs.max()
         lhs = (llhs - max_val).exp() + eps
 
         # Scaled forward-backward algorithm.
-        alphas, consts = self._baum_welch_forward(lhs)
-        betas = self._baum_welch_backward(lhs, consts + eps)
+        alphas, consts = self._baum_welch_forward(lhs, eps)
+        betas = self._baum_welch_backward(lhs, consts + eps, eps)
         posts = (alphas + eps) * (betas + eps)
         norm = posts.sum(dim=1)
         posts /= norm[:, None]

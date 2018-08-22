@@ -40,12 +40,18 @@ if [ ! -f $mdl_dir/init.mdl ]; then
          $mdl_dir/phones_hmm \
          $mdl_dir/emissions || exit 1
 
+    # Create the pdf to phone mapping (used for decoding).
+    python utils/hmm-pdf-id-mapping.py $mdl_dir/phones_hmm \
+        > $mdl_dir/pdf_mapping.txt
+
     # Create the HMM model.
     python utils/hmm-create.py \
         $mdl_dir/decode_graph \
         $mdl_dir/phones_hmm \
         $mdl_dir/emissions \
         $mdl_dir/init.mdl || exit 1
+
+
 else
     echo "Using previous created HMM: $mdl_dir/init.mdl"
 fi
@@ -70,7 +76,7 @@ fi
 if [ ! -f $mdl_dir/final.mdl ];then
     echo "Training HMM-GMM model"
     rm -fr $mdl_dir/log/sge.log
-    cmd="python -u -m cProfile -s cumtime utils/train_hmm.py \
+    cmd="python -u utils/train_hmm.py \
         --infer-type $hmm_infer_type \
         --lrate $hmm_lrate \
         --batch-size $hmm_batch_size \

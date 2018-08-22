@@ -32,11 +32,11 @@ vae_hmm_epochs=2
 vae_hmm_opts="--fast-eval --use-gpu"
 
 # HMM-GMM model parameters.
-hmm_emission_conf=$confdir/hmm_gmm/emissions.yml
+hmm_emission_conf=$confdir/hmm_gmm/hmm.yml
 hmm_infer_type=baum_welch
 hmm_lrate=0.1
 hmm_batch_size=400
-hmm_epochs=1
+hmm_epochs=10
 hmm_fast_eval="--fast-eval"
 #use_gpu="--use-gpu"
 hmm_gamma=0.5 # HMM transition probability between phones
