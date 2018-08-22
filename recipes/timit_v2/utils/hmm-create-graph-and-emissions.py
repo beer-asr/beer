@@ -26,7 +26,6 @@ def create_unit_graph(n_states, arcs, start_pdf_id):
     states = []
     current_pdf_id = start_pdf_id
     for i in range(n_states):
-        states = []
         if i == 0 or i == n_states - 1:
             pdf_id = None
         else:
@@ -53,7 +52,6 @@ def main():
     parser.add_argument('phones', help='list of phones')
     parser.add_argument('hmm_graphs', help='hmm graph for each unit')
     parser.add_argument('emissions', help='outout emissions')
-
     args = parser.parse_args()
 
     # Load the HMM configuration.
@@ -95,7 +93,7 @@ def main():
 
         # Create emissions.
         tot_states = group['n_units'] * group['n_state_per_unit']
-        if group['share_emissions']:
+        if group['shared_emissions']:
             modelset = beer.NormalSet.create(
                 mean, var,
                 size=group['n_normal_per_state'],

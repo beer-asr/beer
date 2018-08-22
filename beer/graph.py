@@ -303,15 +303,15 @@ class CompiledGraph:
             betas[i] = res / consts[i+1]
         return betas
 
-    def posteriors(self, llhs):
+    def posteriors(self, llhs, eps=1e-5):
         # Scale the log-likelihoods to avoid overflow.
         max_val = llhs.max()
-        lhs = (llhs - max_val).exp() + 1e-9
+        lhs = (llhs - max_val).exp() + eps
 
         # Scaled forward-backward algorithm.
         alphas, consts = self._baum_welch_forward(lhs)
-        betas = self._baum_welch_backward(lhs, consts)
-        posts = alphas * betas * torch.exp(max_val)
+        betas = self._baum_welch_backward(lhs, consts + eps)
+        posts = (alphas + eps) * (betas + eps)
         norm = posts.sum(dim=1)
         posts /= norm[:, None]
 

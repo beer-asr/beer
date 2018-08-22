@@ -9,7 +9,7 @@ if [ $# -ne 1 ]; then
 fi
 setup=$(pwd)/$1
 . $setup
-stage=0
+stage=3
 
 if [ $stage -le 0 ]; then
     echo ======================================================================
@@ -25,8 +25,8 @@ if [ $stage -le 1 ]; then
         cp $datadir/local/data/${s}_wav.scp $datadir/$s/wav.scp
         cp $datadir/local/data/$s.uttids $datadir/$s/uttids
         cp $datadir/local/data/$s.text $datadir/$s/trans
-        python utils/prepare_trans.py \
-            $datadir/$s/trans $langdir/phones.txt $datadir/$s
+        cat $datadir/$s/trans | python utils/prepare_trans.py \
+            $langdir/phones.txt $datadir/$s/phones.int.npz
     done
 fi
 
@@ -44,8 +44,7 @@ if [ $stage -le 3 ]; then
     echo ======================================================================
     echo "                         HMM-GMM Training and decoding              "
     echo ======================================================================
-    steps/train_hmm.sh $setup
-    steps/decode_hmm.sh $setup
-
+    steps/train_hmm.sh $setup $datadir/train test_hmm_gmm || exit 1
+    steps/decode_hmm.sh $setup test_hmm_gmm $datadir/test test_hmm_gmm/decode || exit 1
 fi
 

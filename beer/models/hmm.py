@@ -42,10 +42,22 @@ class HMM(DiscreteLatentBayesianModel):
         super().__init__(modelset)
         self.graph = ConstantParameter(graph)
 
-    def decode(self, data):
+    def decode(self, data, inference_graph=None):
+        # Prepare the inference graph.
+        if inference_graph is None:
+            inference_graph = self.graph.value
+
+        # Eventual re-mapping of the pdfs.
+        if inference_graph.pdf_id_mapping is not None:
+            emissions = AlignModelSet(self.modelset,
+                                      inference_graph.pdf_id_mapping)
+        else:
+            emissions = self.modelset
+
         stats = self.sufficient_statistics(data)
-        pc_llhs = self.modelset.expected_log_likelihood(stats)
-        best_path = self.graph.value.best_path(pc_llhs)
+        pc_llhs = emissions.expected_log_likelihood(stats)
+
+        best_path = inference_graph.best_path(pc_llhs)
         return best_path
 
 
@@ -64,7 +76,6 @@ class HMM(DiscreteLatentBayesianModel):
         # Prepare the inference graph.
         if inference_graph is None:
             inference_graph = self.graph.value
-            # TODOs change the emissions to map the ids of the graph.
 
         # Eventual re-mapping of the pdfs.
         if inference_graph.pdf_id_mapping is not None:

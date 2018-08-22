@@ -18,7 +18,7 @@
   noise_std: 0.1
   cov_type: diagonal
   shared_cov: no
-  share_emissions: true
+  share_emissions: false
   topology:
   - {start_id: 0, end_id: 1, trans_prob: 1.0}
 

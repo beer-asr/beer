@@ -15,6 +15,8 @@ class JointModelSet(BayesianModelSet):
         '''
         super().__init__()
         self.modelsets = modelsets
+        for i, modelset in enumerate(self.modelsets):
+            self._register_submodel('smodel' + str(i), modelset)
 
     ####################################################################
     # BayesianModel interface.
