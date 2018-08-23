@@ -19,7 +19,7 @@ for f in $mdl $pdf_mapping ; do
     [ ! -f $f ] && echo "No such file: $f" && exit 1;
 done
 
-if [ ! -f $decode_dir/decode_phone_ids.npz ];then
+if [ ! -f $decode_dir/decode_results.txt ];then
     echo "Decoding"
     python utils/decode_hmm.py $mdl $data_test_dir/feats.npz | \
         python utils/pdf2unit.py --phone-level $pdf_mapping  \
