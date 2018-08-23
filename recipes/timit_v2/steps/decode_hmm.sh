@@ -9,7 +9,6 @@ setup=$1
 mdldir=$2
 data_test_dir=$3
 decode_dir=$4
-stage=0
 
 [ -f $setup ] && . $setup
 mkdir -p $decode_dir/log
@@ -25,7 +24,6 @@ if [ ! -f $decode_dir/decode_phone_ids.npz ];then
     python utils/decode_hmm.py $mdl $data_test_dir/feats.npz | \
         python utils/pdf2unit.py --phone-level $pdf_mapping  \
         > $decode_dir/decode_results.txt
-fi
 
 if [ ! -f $decode_dir/decode_result.txt ];then
     python utils/score.py \
