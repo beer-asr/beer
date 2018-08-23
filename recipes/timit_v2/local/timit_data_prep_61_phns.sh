@@ -67,11 +67,11 @@ else
 fi
 
 for x in train dev test; do
-    # First, find the list of audio files (use only si & sx
-    # utterances). Note: train & test sets are under different
+    # First, find the list of audio files
+    # Note: train & test sets are under different
     # directories, but doing find on both and grepping for the speakers
     # will work correctly.
-    find $rootdir/{$train_dir,$test_dir} -not \( -iname 'SA*' \) -iname '*.WAV' \
+    find $rootdir/{$train_dir,$test_dir} -iname '*.WAV' \
          | grep -f $tmpdir/${x}_spk > $dir/${x}_sph.flist
 
          sed -e 's:.*/\(.*\)/\(.*\).WAV$:\1_\2:i' $dir/${x}_sph.flist \
@@ -84,7 +84,7 @@ for x in train dev test; do
     # Now, Convert the transcripts into our format (no normalization
     # yet) Get the transcripts: each line of the output contains an
     # utterance ID followed by the transcript.
-     find $rootdir/{$train_dir,$test_dir} -not \( -iname 'SA*' \) -iname '*.PHN' \
+     find $rootdir/{$train_dir,$test_dir}  -iname '*.PHN' \
          | grep -f $tmpdir/${x}_spk > $tmpdir/${x}_phn.flist
      sed -e 's:.*/\(.*\)/\(.*\).PHN$:\1_\2:i' $tmpdir/${x}_phn.flist \
          > $tmpdir/${x}_phn.uttids
@@ -96,9 +96,7 @@ for x in train dev test; do
          | sort -k1,1 > $dir/${x}.trans
 
     # Do normalization steps.
-    cat $dir/${x}.trans | python $local/timit-norm-trans.py \
-        --map-60-48  $conf_dir/phones.60-48-39.map \
-        | sort > $dir/${x}.text || exit 1;
+    sort $dir/${x}.trans > $dir/${x}.text || exit 1;
 
     # Create wav.scp
     awk '{printf("%s sph2pipe -f wav %s |\n", $1, $2);}' < $dir/${x}_sph.scp \
@@ -109,7 +107,7 @@ echo "Preparing lang"
 python $local/timit_lang_prep.py \
     $langdir \
     $conf_dir/phones.60-48-39.map || error_exit "Failed to prepare lang"
-cp $langdir/phones_48.txt $langdir/phones.txt
+cp $langdir/phones_61.txt $langdir/phones.txt
 
 python utils/create-decode-graph.py \
     --use-silence \
