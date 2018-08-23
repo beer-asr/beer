@@ -26,6 +26,7 @@ if [ ! -f $decode_dir/decode_phone_ids.npz ];then
         > $decode_dir/decode_results.txt
 
 if [ ! -f $decode_dir/decode_result.txt ];then
+    echo "Scoring"
     python utils/score.py \
         --remove=$remove_sym \
         --duplicate=$duplicate \
