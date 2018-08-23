@@ -9,6 +9,24 @@ if [ $# -ne 1 ]; then
 fi
 setup=$(pwd)/$1
 . $setup
+num_phns=$2
+stage=-1
+
+if [ $stage -le 0 ]; then
+    echo ======================================================================
+    echo "                         Data Preparation                           "
+    echo ======================================================================
+    if [ $num_phns == "48" ]; then
+        echo "Default: preparing data with 48 phonemes"
+        local/timit_data_prep.sh "$timit" "$datadir" "$confdir" || exit 1
+    elif [ $num_phns == "61" ]; then
+        echo "Preparing data with 61 phonemes"
+        local/timit_data_prep_61_phns.sh "$timit" "$datadir" "$confdir" || exit 1
+    else
+        echo "Wrong number of phonemes: 48 or 61 !"
+        exit 1
+    fi
+fi
 
 
 # Set the stage you want to start from.
