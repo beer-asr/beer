@@ -28,13 +28,13 @@ feaconf = {
     'preemph': 0.97,
     'window_len': 0.025,
     'framerate': 0.01,
-    'nfilters': 15,
+    'nfilters': 26,
     'cutoff_hfreq': 8000,
     'cutoff_lfreq': 20,
     'delta_order': 2,
     'delta_winlen': 2,
     'apply_dct': False,
-    'n_dct_coeff': 12,
+    'n_dct_coeff': 13,
     'lifter_coeff': 22,
     'utt_mnorm': True,
 }
@@ -105,7 +105,7 @@ def main():
 
             # HTK compatibility steps (probably doesn't change
             # the accuracy of the recognition).
-            #features *= np.sqrt(2. / feaconf['nfilters'])
+            features *= np.sqrt(2. / feaconf['nfilters'])
 
             # Liftering.
             l_coeff = feaconf['lifter_coeff']

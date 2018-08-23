@@ -12,7 +12,7 @@ setup=$(pwd)/$1
 
 
 # Set the stage you want to start from.
-stage=0
+stage=3
 
 
 # Data preparation. Organize the data directory as:

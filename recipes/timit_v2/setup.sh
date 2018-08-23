@@ -1,7 +1,7 @@
 
 # Directory structure.
-timit=/export/corpora/LDC/LDC93S1/timit/TIMIT  # @JHU
-#timit=/mnt/matylda2/data/TIMIT/timit  # @BUT
+#timit=/export/corpora/LDC/LDC93S1/timit/TIMIT  # @JHU
+timit=/mnt/matylda2/data/TIMIT/timit  # @BUT
 confdir=$(pwd)/conf
 datadir=$(pwd)/data
 langdir=$datadir/lang
@@ -34,13 +34,16 @@ vae_hmm_opts="--fast-eval"
 
 # HMM-GMM model parameters.
 hmm_emission_conf=$confdir/hmm_gmm/hmm.yml
-hmm_n_align=2
-hmm_ali_njobs=10
+hmm_align_njobs=10
+hmm_align_sge_opts=""
+hmm_align_epochs="0 1 2 3 4 5 6 7 8 9 10 12 14 16 18 20 23 26 29 32 35 38"
+hmm_train_epochs=40
 hmm_train_emissions_lrate=0.1
 hmm_train_emissions_batch_size=400
 hmm_train_emissions_epochs=10
-hmm_train_emissions_opts="--fast-eval"
-hmm_train_emissions_sge_opts="-l hostname=b1[123456789]*|c*"
+hmm_train_emissions_opts="--fast-eval --use-gpu"
+#hmm_train_emissions_sge_opts="-l hostname=b1[123456789]*|c*"
+hmm_train_emissions_sge_opts="-l gpu=1"
 
 
 # Score options.

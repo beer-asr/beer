@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+echo $SGE_O_WORKDIR
+cd ${SGE_O_WORKDIR} || exit 1
 
 if [ $# -ne 2 ]; then
     echo "usage: <command> <splitdir>"
