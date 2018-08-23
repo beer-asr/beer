@@ -118,7 +118,7 @@ if [ ! -f $mdl_dir/final.mdl ];then
                 --batch-size $hmm_train_emissions_batch_size \
                 --lrate $hmm_train_emissions_lrate \
                 $hmm_train_emissions_opts \
-                $mdl_dir/$((epoch - 1)) \
+                $mdl_dir/$((epoch - 1)).mdl \
                 $mdl_dir/alis.npz \
                 $data_train_dir/feats.npz \
                 $data_train_dir/feats.stats.npz \
