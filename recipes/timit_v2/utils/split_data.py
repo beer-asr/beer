@@ -50,6 +50,7 @@ def main():
             for utt in tr.keys():
                 print(utt, tr[utt], file=f)
 
+
 if __name__ == "__main__":
     main()
 

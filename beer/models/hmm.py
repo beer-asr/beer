@@ -56,8 +56,11 @@ class HMM(DiscreteLatentBayesianModel):
 
         stats = self.sufficient_statistics(data)
         pc_llhs = emissions.expected_log_likelihood(stats)
-
         best_path = inference_graph.best_path(pc_llhs)
+        if inference_graph.pdf_id_mapping is not None:
+            best_path = [inference_graph.pdf_id_mapping[state]
+                         for state in best_path]
+            best_path = torch.LongTensor(best_path)
         return best_path
 
 
@@ -72,7 +75,7 @@ class HMM(DiscreteLatentBayesianModel):
         return self.modelset.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats, inference_graph=None,
-                                inference_type='baum_welch'):
+                                inference_type='baum_welch', state_path=None):
         # Prepare the inference graph.
         if inference_graph is None:
             inference_graph = self.graph.value
@@ -89,7 +92,10 @@ class HMM(DiscreteLatentBayesianModel):
 
         # Estimate the probability of the states given the sequence of
         # features.
-        if inference_type == 'baum_welch':
+        if state_path is not None:
+            resps = onehot(state_path, inference_graph.n_states,
+                           dtype=pc_exp_llh.dtype, device=pc_exp_llh.device)
+        elif inference_type == 'baum_welch':
             resps = inference_graph.posteriors(pc_exp_llh)
         elif inference_type == 'viterbi':
             resps = onehot(inference_graph.best_path(pc_exp_llh), inference_graph.n_states,

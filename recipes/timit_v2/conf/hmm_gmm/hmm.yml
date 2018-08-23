@@ -1,7 +1,4 @@
-#####################
-# New configuration #
-#####################
-# non-speech phone.
+# Non-speech phone.
 - n_units: 1  # for TIMIT we have only the silence phone.
   n_state_per_unit: 7
   n_normal_per_state: 10

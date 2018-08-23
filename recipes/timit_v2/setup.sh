@@ -34,13 +34,13 @@ vae_hmm_opts="--fast-eval"
 
 # HMM-GMM model parameters.
 hmm_emission_conf=$confdir/hmm_gmm/hmm.yml
-hmm_infer_type=viterbi
-hmm_lrate=0.1
-hmm_batch_size=400
-hmm_epochs=20
-hmm_fast_eval="--fast-eval"
-#use_gpu="--use-gpu"
-hmm_train_sge_opts="-l hostname=b*|c*"
+hmm_n_align=2
+hmm_ali_njobs=10
+hmm_train_emissions_lrate=0.1
+hmm_train_emissions_batch_size=400
+hmm_train_emissions_epochs=10
+hmm_train_emissions_opts="--fast-eval"
+hmm_train_emissions_sge_opts="-l hostname=b1[123456789]*|c*"
 
 
 # Score options.

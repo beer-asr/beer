@@ -53,7 +53,7 @@ fi
 step=3
 if [ $stage -le $step ]; then
     echo "---------- HMM-GMM system ----------"
-    steps/train_hmm.sh $setup $datadir/train test_hmm_gmm || exit 1
+    steps/train_hmm2.sh $setup $datadir/train test_hmm_gmm || exit 1
     steps/decode_hmm.sh $setup test_hmm_gmm $datadir/test test_hmm_gmm/decode || exit 1
 fi
 

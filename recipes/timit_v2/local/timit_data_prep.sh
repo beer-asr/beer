@@ -32,7 +32,7 @@ if [ ! -d $rootdir/TRAIN -o ! -d $rootdir/TEST ] \
     echo "$0: Spot check of command line argument failed"
     echo "Command line argument must be absolute pathname to TIMIT directory"
     echo "with name like /export/corpora5/LDC/LDC93S1/timit/TIMIT"
-    exit 1;
+    exit 1
 fi
 
 # Now check what case the directory structure is
@@ -103,6 +103,6 @@ done
 python $local/timit_lang_prep.py $langdir "$conf/phones.60-48-39.map"
 python utils/create-decode-graph.py --use-silence $langdir/phones.txt > $langdir/phone_graph.txt
 
-date > $dir/.done 
+date > $dir/.done
 echo "Data preparation succeeded"
 

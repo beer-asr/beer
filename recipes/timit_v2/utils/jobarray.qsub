@@ -28,3 +28,4 @@ shopt -s extglob
 cat "$splitdir"/x*(0)${SGE_TASK_ID} | $cmd || exit 1
 
 echo "job succeeded on date $(date)"
+

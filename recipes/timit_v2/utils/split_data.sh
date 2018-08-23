@@ -14,6 +14,6 @@ done
 mkdir -p $srcdir/split_${num_job}
 python utils/split_data.py \
     $srcdir $srcdir/split_${num_job} \
-    $num_job || exit "Split failed"
+    $num_job || exit 1
 
 
