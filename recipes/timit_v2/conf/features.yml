@@ -5,7 +5,7 @@ window_len: 0.025   # size of the window for the FFT analysis (second)
 framerate: 0.01     # Frame rate of the features (second)
 
 # Filterbank.
-nfilters: 15        # Number of filters in the filterbank.
+nfilters: 26        # Number of filters in the filterbank.
 cutoff_hfreq: 8000  # high cut-off frequency of the filterbank (Hz)
 cutoff_lfreq: 20    # low cut-off frequency of the filterbank (Hz)
                     # center of the filters.

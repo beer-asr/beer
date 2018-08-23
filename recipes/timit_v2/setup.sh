@@ -34,18 +34,16 @@ vae_hmm_opts="--fast-eval"
 
 # HMM-GMM model parameters.
 hmm_emission_conf=$confdir/hmm_gmm/hmm.yml
-hmm_infer_type=baum_welch
+hmm_infer_type=viterbi
 hmm_lrate=0.1
 hmm_batch_size=400
-hmm_epochs=100
+hmm_epochs=20
 hmm_fast_eval="--fast-eval"
 #use_gpu="--use-gpu"
-hmm_train_sge_opts=""
-hmm_gamma=0.5 # HMM transition probability between phones
+hmm_train_sge_opts="-l hostname=b*|c*"
 
 
 # Score options.
 remove_sym="sil" # Support multiple symbol, e.g. "sil spn nsn"
 duplicate="no" # Do not allow adjacent duplicated phones. Only effective at scoring stage.
-#phone_48_to_39_map=""
 phone_48_to_39_map=$langdir/phones_48_to_39.txt

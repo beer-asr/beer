@@ -23,7 +23,7 @@ done
 if [ ! -f $decode_dir/decode_phone_ids.npz ];then
     echo "Decoding"
     python utils/decode_hmm.py $mdl $data_test_dir/feats.npz | \
-        python utils/pdf2unit.py --phone-level $pdf_mapping | \
+        python utils/pdf2unit.py --phone-level $pdf_mapping  \
         > $decode_dir/decode_results.txt
 fi
 
@@ -35,6 +35,4 @@ if [ ! -f $decode_dir/decode_result.txt ];then
         $data_test_dir/trans \
         $decode_dir/decode_results.txt > $decode_dir/log/score.log 2>&1 || exit 1
 fi
-
-cat $decode_dir/decode_result.txt
 

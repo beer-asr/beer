@@ -19,6 +19,7 @@ mkdir -p $mdl_dir/log
 
 [ -f "$hmm_emission_conf" ] || exit_msg "File not found: $hmm_emission_conf"
 
+# Copy the configuration files for information.
 if [ ! -d $mdl_dir ];then
     mkdir -p $mdl_dir/log
     cp $setup $mdl_dir
@@ -49,12 +50,13 @@ if [ ! -f $mdl_dir/init.mdl ]; then
         $mdl_dir/decode.graph \
         $mdl_dir/phones_hmm.graphs \
         $mdl_dir/emissions.mdl \
-        $mdl_dir/init.mdl || exit 1
+        $mdl_dir/0.mdl || exit 1
 else
     echo "Using previous created HMM: $mdl_dir/init.mdl"
 fi
 
 
+# Prepare the alignments.
 if [ ! -f $mdl_dir/ali_graphs.npz ]; then
     echo "Preparing the alignment graph..."
 
@@ -73,21 +75,33 @@ fi
 
 if [ ! -f $mdl_dir/final.mdl ];then
     echo "Training HMM-GMM model"
+
+    # Retrieve the last model (ordered by number) and use it as
+    # initial model for the training.
+    start_mdl=$(find $mdl_dir -name "[0-9]*mdl" -exec basename {} \; | \
+        sort -t '.' -k 1 -g | tail -1)
+
     rm -fr $mdl_dir/log/sge.log
-    cmd="python -u utils/train_hmm.py \
-        --infer-type $hmm_infer_type \
-        --lrate $hmm_lrate \
-        --batch-size $hmm_batch_size \
-        --epochs $hmm_epochs \
-        $use_gpu $hmm_fast_eval \
-        $data_train_dir/feats.npz \
-        $mdl_dir/ali_graphs.npz \
-        $mdl_dir/init.mdl \
-        $data_train_dir/feats.stats.npz \
-        $mdl_dir"
-    qsub -N "beer-hmm-gmm" -cwd -j y -o $mdl_dir/log/sge.log -sync y \
+
+    cmd="python -u utils/hmm-train.py \
+            --alignments $mdl_dir/ali_graphs.npz \
+            --batch-size $hmm_batch_size \
+            --epochs $hmm_epochs \
+            --infer-type $hmm_infer_type \
+            --lrate $hmm_lrate \
+            --tmpdir $mdl_dir \
+            $use_gpu $hmm_fast_eval \
+            $mdl_dir/$start_mdl \
+            $data_train_dir/feats.npz \
+            $data_train_dir/feats.stats.npz \
+            $mdl_dir/final.mdl"
+    qsub \
+        -N "beer-hmm-gmm" \
+        -cwd -j y \
+        -o $mdl_dir/log/sge.log -sync y \
         $hmm_train_sge_opts \
         utils/job.qsub "$cmd" || exit 1
 else
     echo "Model already trained: $mdl_dir/final.mdl"
 fi
+

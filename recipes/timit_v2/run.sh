@@ -9,16 +9,23 @@ if [ $# -ne 1 ]; then
 fi
 setup=$(pwd)/$1
 . $setup
-stage=1
 
-if [ $stage -le 0 ]; then
-    echo ======================================================================
-    echo "                         Data Preparation                           "
-    echo ======================================================================
+
+# Set the stage you want to start from.
+stage=0
+
+
+# Data preparation. Organize the data directory as:
+#   data/
+#     lang/
+#       files related to the "language" (mostly phonetic information).
+#     dataset/
+#       files related to the dataset (features, transcription, ...)
+step=1
+if [ $stage -le $step ]; then
+    echo "---------- Data preparation ----------"
+
     local/timit_data_prep.sh "$timit" "$langdir" "$confdir" || exit 1
-fi
-
-if [ $stage -le 1 ]; then
     for s in train test dev; do
         echo "Preparing for $datadir/$s"
         mkdir -p $datadir/$s
@@ -30,20 +37,22 @@ if [ $stage -le 1 ]; then
     done
 fi
 
-if [ $stage -le 2 ]; then
-    echo ======================================================================
-    echo "                         Features Extraction                        "
-    echo ======================================================================
+
+# Extract the featuures for each dataset.
+step=2
+if [ $stage -le $step ]; then
+    echo "---------- Features extraction ----------"
     for s in train test dev; do
         echo "Extracting features for: $s"
         steps/extract_features.sh $setup $datadir/$s || exit 1
     done
 fi
 
-if [ $stage -le 3 ]; then
-    echo ======================================================================
-    echo "                         HMM-GMM Training and decoding              "
-    echo ======================================================================
+
+# HMM-GMM monophone.
+step=3
+if [ $stage -le $step ]; then
+    echo "---------- HMM-GMM system ----------"
     steps/train_hmm.sh $setup $datadir/train test_hmm_gmm || exit 1
     steps/decode_hmm.sh $setup test_hmm_gmm $datadir/test test_hmm_gmm/decode || exit 1
 fi
