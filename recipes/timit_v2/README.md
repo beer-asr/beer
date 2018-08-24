@@ -7,7 +7,7 @@ at the word or phonetic level) is used. This recipe is mainly
 intended to test models designed for under-resourced languages, when
 few or no transcribed data is used.
 
-Suggestion / Pull request are welcome !
+Suggestions / Pull requests are welcome !
 
 
 Results
