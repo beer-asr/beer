@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Extract the features of a data set.
 
 
 if [ $# -ne 2 ]; then
@@ -11,8 +12,6 @@ setup=$1
 . $setup
 datadir=$2
 scp="$datadir"/wav.scp
-logdir="$datadir"/log
-mkdir -p "$logdir"
 
 # Check if we got the configuration and the scp files.
 if [ ! -f "$fea_conf" ]; then
@@ -28,32 +27,18 @@ fi
 
 # If the features are already created, do nothing.
 if [ ! -f "$datadir"/feats.npz ]; then
-    # Split the scp file into chunks to parallelize the features
-    # extraction.
-    mkdir -p "$datadir"/split
-    pushd "$datadir"/split > /dev/null
-    cp ../wav.scp ./
-    split --numeric-suffixes=1 -n l/$fea_njobs ./wav.scp
-    popd > /dev/null
-    trap 'rm -rf "$datadir/split"' EXIT
-
-    # Cleanup the log files.
-    rm -f "$logdir"/extract-features.out.*
 
     tmpdir=$(mktemp -d "$datadir"/beer.XXXX);
     trap 'rm -rf "$tmpdir"' EXIT
 
-    # Extract the features on the SGE.
-    cmd="python utils/extract-features.py $fea_conf $tmpdir"
-    qsub \
-        -N "beer-extract-features" \
-        -cwd \
-        -j y \
-        -o "$logdir"/extract-features.out.'$TASK_ID' \
-        -t 1-$fea_njobs \
-        -sync y \
-        $fea_sge_opts \
-        utils/jobarray.qsub "$cmd" "$datadir"/split || exit 1
+    utils/parallel/submit_parallel.sh \
+        $parallel_env \
+        "beer-extract-features" \
+        "$fea_parallel_opts" \
+        $fea_njobs \
+        $datadir/wav.scp \
+        "python utils/extract-features.py $fea_conf $tmpdir" \
+        $datadir || exit 1
 
     # Create the "npz" archives.
     find "$tmpdir" -name '*npy' | zip -j -@ "$datadir"/feats.npz > /dev/null
@@ -68,3 +53,4 @@ if [ ! -f "$datadir"/feats.stats.npz ]; then
 else
    echo "Features statistics already computed in: $datadir/feats.stats.npz"
 fi
+

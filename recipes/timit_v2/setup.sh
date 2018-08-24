@@ -8,9 +8,13 @@ langdir=$datadir/lang
 expdir=$(pwd)/exp
 
 
+# Parallel environment.
+parallel_env=sge
+
+
 # Features extraction.
 fea_njobs=10
-fea_sge_opts="-l mem_free=100M,ram_free=100M"
+fea_parallel_opts="-l mem_free=100M,ram_free=100M"
 fea_conf=$confdir/features.yml
 
 

@@ -24,6 +24,9 @@ if [ $stage -le 0 ]; then
         echo "Wrong number of phonemes: 48 or 61 !"
         exit 1
     fi
+
+    # Split the list of utterances for the parallel tasks.
+    utils/parallel/split.sh $datadir/
 fi
 
 
