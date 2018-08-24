@@ -16,9 +16,9 @@ rm -fr results.md
 
 printf "| %-50s | %-20s |\n" "MODEL" "PER (%)" >> results.md
 printf "|" >> results.md
-printf '=%.0s' {1..52} >> results.md
+printf '=%.0s' {1..52} | tr "=" "-">> results.md
 printf "|" >> results.md
-printf "=%.0s" {1..22} >> results.md
+printf "=%.0s" {1..22} | tr "=" "-" >> results.md
 printf "|\n" >> results.md
 
 for trans in $(find $expdir -path '*/decode/trans') ; do
