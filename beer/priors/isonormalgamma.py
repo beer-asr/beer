@@ -69,7 +69,19 @@ class IsotropicNormalGammaPrior(ExpFamilyPrior):
             shape / precision
         )
 
-    def to_std_parameters(self, natural_parameters=None):
+    def expected_value(self):
+        mean, _, shape, rate = self.to_std_parameters()
+        return mean, shape / rate
+
+    def to_natural_parameters(self, mean, scale, shape, rate):
+        return torch.cat([
+            (-.5 * scale * torch.sum(mean * mean) - rate).view(1),
+            scale * mean,
+            -.5 * scale.view(1),
+            shape.view(1) - 1 + .5 * len(mean),
+        ])
+
+    def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         dim = len(natural_parameters) - 3
@@ -82,15 +94,7 @@ class IsotropicNormalGammaPrior(ExpFamilyPrior):
         rate = -np1 - .5 * scale * torch.sum(mean * mean)
         return mean, scale, shape, rate
 
-    def to_natural_parameters(self, mean, scale, shape, rate):
-        return torch.cat([
-            (-.5 * scale * torch.sum(mean * mean) - rate).view(1),
-            scale * mean,
-            -.5 * scale.view(1),
-            shape.view(1) - 1 + .5 * len(mean),
-        ])
-
-    def expected_sufficient_statistics(self):
+    def _expected_sufficient_statistics(self):
         mean, scale, shape, rate = self.to_std_parameters()
         dim = len(mean)
         precision = shape / rate
@@ -102,11 +106,7 @@ class IsotropicNormalGammaPrior(ExpFamilyPrior):
             logdet.view(1)
         ])
 
-    def expected_value(self):
-        mean, _, shape, rate = self.to_std_parameters()
-        return mean, shape / rate
-
-    def log_norm(self, natural_parameters=None):
+    def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         mean, scale, shape, rate = self.to_std_parameters(natural_parameters)
@@ -163,7 +163,19 @@ class JointIsotropicNormalGammaPrior(ExpFamilyPrior):
             shape={shape}, rate={rate}
         )
 
-    def to_std_parameters(self, natural_parameters=None):
+    def expected_value(self):
+        means, _, shape, rate = self.to_std_parameters()
+        return means, shape / rate
+
+    def to_natural_parameters(self, means, scales, shape, rate):
+        return torch.cat([
+            (-.5 * (scales * (means * means).sum(dim=-1)).sum() - rate).view(1),
+            (scales[:, None] * means).view(-1),
+            -.5 * scales.view(-1),
+            shape.view(1) - 1 + .5 * means.shape[1] * self._ncomp,
+        ])
+
+    def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         dim = (len(natural_parameters) - 2 - self._ncomp) // self._ncomp
@@ -177,15 +189,7 @@ class JointIsotropicNormalGammaPrior(ExpFamilyPrior):
         rate = -np1 - .5 * (scales * (means * means).sum(dim=-1)).sum()
         return means, scales, shape, rate
 
-    def to_natural_parameters(self, means, scales, shape, rate):
-        return torch.cat([
-            (-.5 * (scales * (means * means).sum(dim=-1)).sum() - rate).view(1),
-            (scales[:, None] * means).view(-1),
-            -.5 * scales.view(-1),
-            shape.view(1) - 1 + .5 * means.shape[1] * self._ncomp,
-        ])
-
-    def expected_sufficient_statistics(self):
+    def _expected_sufficient_statistics(self):
         means, scales, shape, rate = self.to_std_parameters()
         dim = means.shape[1]
         precision = shape / rate
@@ -197,11 +201,7 @@ class JointIsotropicNormalGammaPrior(ExpFamilyPrior):
             logdet.view(1)
         ])
 
-    def expected_value(self):
-        means, _, shape, rate = self.to_std_parameters()
-        return means, shape / rate
-
-    def log_norm(self, natural_parameters=None):
+    def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         means, scales, shape, rate = self.to_std_parameters(natural_parameters)

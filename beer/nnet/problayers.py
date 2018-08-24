@@ -56,11 +56,12 @@ class ProbabilisticLayer(torch.nn.Module, metaclass=abc.ABCMeta):
 class NormalDiagonalCovarianceLayer(ProbabilisticLayer):
     'Normal distribution with diagonal covariance matrix layer.'
 
-    def __init__(self, dim_in, dim_out,
-                variance_nonlinearity=torch.nn.functional.softplus):
+    def __init__(self, dim_in, dim_out, variance_nonlinearity=None):
         super().__init__()
         self.mean = torch.nn.Linear(dim_in, dim_out)
         self.logvar = torch.nn.Linear(dim_in, dim_out)
+        if variance_nonlinearity is None:
+            variance_nonlinearity = torch.nn.Softplus()
         self.variance_nonlinearity = variance_nonlinearity
 
     def forward(self, inputs):
@@ -90,10 +91,12 @@ class NormalIsotropicCovarianceLayer(NormalDiagonalCovarianceLayer):
     'Normal distribution with isotropic covariance matrix layer.'
 
     def __init__(self, dim_in, dim_out,
-                variance_nonlinearity=torch.nn.functional.softplus):
+                variance_nonlinearity=None):
         super().__init__(dim_in, dim_out)
         self.mean = torch.nn.Linear(dim_in, dim_out)
         self.logvar = torch.nn.Linear(dim_in, 1)
+        if variance_nonlinearity is None:
+            variance_nonlinearity = torch.nn.Softplus()
         self.variance_nonlinearity = variance_nonlinearity
 
     def forward(self, inputs):

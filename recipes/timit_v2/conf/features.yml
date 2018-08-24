@@ -1,0 +1,25 @@
+# Raw signal pre-processing.
+srate: 16000        # sampling rate of the signal (Hz)
+preemph: 0.98       # Pre-emphasis filter coefficient.
+window_len: 0.025   # size of the window for the FFT analysis (second)
+framerate: 0.01     # Frame rate of the features (second)
+
+# Filterbank.
+nfilters: 26        # Number of filters in the filterbank.
+cutoff_hfreq: 8000  # high cut-off frequency of the filterbank (Hz)
+cutoff_lfreq: 20    # low cut-off frequency of the filterbank (Hz)
+                    # center of the filters.
+
+# Deltas
+delta_order: 2      # Number of deltas added to the features (0 means
+                    # no deltas).
+delta_winlen: 2     # Window length to compute the delta features.
+
+# MFCC features.
+apply_dct: yes      # Set to 'yes' to get MFCC features.
+n_dct_coeff: 13     # Number of DCT coefficent to keep (if appy_dct: yes).
+lifter_coeff: 22    # Liftering coefficient (if appy_dct: yes).
+
+# Post-processing.
+utt_mnorm: yes      # Per-utterance mean normalization.
+

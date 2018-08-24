@@ -8,3 +8,4 @@ from .mixtureset import *
 from .hmm import *
 #from .marginalpldaset import *
 from .vae import *
+from .modelset import *

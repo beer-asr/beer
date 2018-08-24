@@ -72,10 +72,6 @@ class MixtureSet(BayesianModelSet):
         'Number of components per mixture'
         return len(self.modelset) // len(self)
 
-    def _local_kl_divergence(self, log_weights, log_resps):
-        retval = torch.sum(log_resps.exp() * (log_resps - log_weights), dim=-1)
-        return retval
-
     ####################################################################
     # BayesianModel interface.
     ####################################################################
@@ -99,8 +95,10 @@ class MixtureSet(BayesianModelSet):
         self.cache['resps'] = resps
 
         # expected llh.
-        local_kl_div = self._local_kl_divergence(log_weights, log_resps)
         exp_llh = (pc_exp_llhs * resps).sum(dim=-1)
+
+        # Local KL divergence.
+        local_kl_div = torch.sum(resps * (log_resps - log_weights), dim=-1)
 
         return exp_llh - local_kl_div
 

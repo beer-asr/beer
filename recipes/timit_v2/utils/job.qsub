@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+
+echo $SGE_O_WORKDIR
+cd ${SGE_O_WORKDIR} || exit 1
+
+if [ $# -ne 1 ]; then
+    echo "usage: <command>"
+    exit 1
+fi
+
+cmd=$1
+
+# Set the environment.
+. path.sh
+
+echo "# hostname: $(hostname)"
+echo "# CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}"
+echo "# ${cmd}"
+echo ""
+
+# Run the command.
+time $cmd
+

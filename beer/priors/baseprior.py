@@ -45,6 +45,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
                 the distribution.
         '''
         self._natural_params = natural_parameters.detach()
+        self.cache = {}
 
     def __repr__(self):
         return self.__repr_str.format(
@@ -72,11 +73,22 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
     @natural_parameters.setter
     def natural_parameters(self, value):
         self._natural_params = value.detach()
+        self.cache = {}
 
-    @abc.abstractmethod
+    def _to_std_parameters(self, natural_parameters=None):
+        pass
+
     def to_std_parameters(self, natural_parameters=None):
         'Convert the natural parameters to their standard form.'
-        pass
+        if natural_parameters is not None:
+            return self._to_std_parameters(natural_parameters)
+
+        try:
+            std_params = self.cache['std_params']
+        except KeyError:
+            std_params = self._to_std_parameters(natural_parameters)
+            self.cache['std_params'] = std_params
+        return std_params
 
     @abc.abstractmethod
     def to_natural_parameters(self, std_parameters=None):
@@ -85,6 +97,9 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
 
 
     @abc.abstractmethod
+    def _expected_sufficient_statistics(self):
+        pass
+
     def expected_sufficient_statistics(self):
         '''Expected value of the sufficient statistics of the
         distribution. This corresponds to the gradient of the
@@ -93,7 +108,12 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         Returns:
             ``torch.Tensor``
         '''
-        pass
+        try:
+            exp_stats = self.cache['exp_stats']
+        except KeyError:
+            exp_stats = self._expected_sufficient_statistics()
+            self.cache['exp_stats'] = exp_stats
+        return exp_stats
 
     def expected_value(self):
         '''Mean value of the random variable w.r.t. to the distribution.
@@ -108,6 +128,9 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         return copied_tensor.grad.detach()
 
     @abc.abstractmethod
+    def _log_norm(self, natural_parameters=None):
+        pass
+
     def log_norm(self, natural_parameters=None):
         '''Abstract method to be implemented by subclasses of
         ``beer.ExpFamilyPrior``.
@@ -124,7 +147,15 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             ``torch.Tensor[1]`` : Log-normalization value.
 
         '''
-        pass
+        if natural_parameters is not None:
+            return self._log_norm(natural_parameters)
+
+        try:
+            lnorm = self.cache['lnorm']
+        except KeyError:
+            lnorm = self._log_norm()
+            self.cache['lnorm'] = lnorm
+        return lnorm
 
 
 __all__ = ['ExpFamilyPrior']

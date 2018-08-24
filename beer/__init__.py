@@ -5,3 +5,4 @@ from .vbi import *
 from . import features
 from . import nnet
 from . import priors
+from . import graph

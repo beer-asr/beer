@@ -51,7 +51,19 @@ class NormalGammaPrior(ExpFamilyPrior):
             shape={shape}, rates={rates}
         )
 
-    def to_std_parameters(self, natural_parameters=None):
+    def expected_value(self):
+        mean, _, shape, rates = self.to_std_parameters()
+        return mean, shape / rates
+
+    def to_natural_parameters(self, mean, scale, shape, rates):
+        return torch.cat([
+            -.5 * scale * mean * mean - rates,
+            scale * mean,
+            -.5 * scale.view(1),
+            shape.view(1) - .5,
+        ])
+
+    def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         dim = (len(natural_parameters) - 2) // 2
@@ -66,15 +78,7 @@ class NormalGammaPrior(ExpFamilyPrior):
 
         return mean, scale, shape, rates
 
-    def to_natural_parameters(self, mean, scale, shape, rates):
-        return torch.cat([
-            -.5 * scale * mean * mean - rates,
-            scale * mean,
-            -.5 * scale.view(1),
-            shape.view(1) - .5,
-        ])
-
-    def expected_sufficient_statistics(self):
+    def _expected_sufficient_statistics(self):
         mean, scale, shape, rates = self.to_std_parameters()
         dim = len(mean)
         diag_precision = shape / rates
@@ -86,11 +90,7 @@ class NormalGammaPrior(ExpFamilyPrior):
             logdet.view(1)
         ])
 
-    def expected_value(self):
-        mean, _, shape, rates = self.to_std_parameters()
-        return mean, shape / rates
-
-    def log_norm(self, natural_parameters=None):
+    def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         mean, scale, shape, rates = self.to_std_parameters(natural_parameters)
@@ -147,7 +147,19 @@ class JointNormalGammaPrior(ExpFamilyPrior):
             shape={shape}, rates={rates}
         )
 
-    def to_std_parameters(self, natural_parameters=None):
+    def expected_value(self):
+        means, _, shape, rates = self.to_std_parameters()
+        return means, shape / rates
+
+    def to_natural_parameters(self, means, scales, shape, rates):
+        return torch.cat([
+            -.5 * ((scales[:, None] * means) * means).sum(dim=0) - rates,
+            (scales[:, None] * means).view(-1),
+            -.5 * scales.view(-1),
+            shape.view(1) - 1. + .5 * self._ncomp
+        ])
+
+    def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         ncomp, dim = self._ncomp, self._dim
@@ -163,15 +175,7 @@ class JointNormalGammaPrior(ExpFamilyPrior):
 
         return means, scales, shape, rates
 
-    def to_natural_parameters(self, means, scales, shape, rates):
-        return torch.cat([
-            -.5 * ((scales[:, None] * means) * means).sum(dim=0) - rates,
-            (scales[:, None] * means).view(-1),
-            -.5 * scales.view(-1),
-            shape.view(1) - 1. + .5 * self._ncomp
-        ])
-
-    def expected_sufficient_statistics(self):
+    def _expected_sufficient_statistics(self):
         means, scales, shape, rates = self.to_std_parameters()
         dim = self._dim
         diag_precision = shape / rates
@@ -184,11 +188,7 @@ class JointNormalGammaPrior(ExpFamilyPrior):
             logdet.view(1)
         ])
 
-    def expected_value(self):
-        means, _, shape, rates = self.to_std_parameters()
-        return means, shape / rates
-
-    def log_norm(self, natural_parameters=None):
+    def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         _, scales, shape, rates = self.to_std_parameters(natural_parameters)

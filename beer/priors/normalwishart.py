@@ -57,7 +57,21 @@ class NormalWishartPrior(ExpFamilyPrior):
             mean_precision={mean_precision}, dof={dof}
         )
 
-    def to_std_parameters(self, natural_parameters=None):
+    def expected_value(self):
+        mean, _, mean_precision, dof = self.to_std_parameters()
+        return mean, dof * mean_precision
+
+    def to_natural_parameters(self, mean, scale, mean_precision, dof):
+        dim = len(mean)
+        inv_mean_prec = mean_precision.inverse()
+        return torch.cat([
+            -.5 * (scale * torch.ger(mean, mean) + inv_mean_prec).reshape(-1),
+            scale * mean,
+            -.5 * scale.view(1),
+            .5 * (dof - dim).view(1),
+        ])
+
+    def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         dim = int(-1 + math.sqrt(1 - 4 * (2 - len(natural_parameters)))) // 2
@@ -72,17 +86,7 @@ class NormalWishartPrior(ExpFamilyPrior):
 
         return mean, scale, mean_precision, dof
 
-    def to_natural_parameters(self, mean, scale, mean_precision, dof):
-        dim = len(mean)
-        inv_mean_prec = mean_precision.inverse()
-        return torch.cat([
-            -.5 * (scale * torch.ger(mean, mean) + inv_mean_prec).reshape(-1),
-            scale * mean,
-            -.5 * scale.view(1),
-            .5 * (dof - dim).view(1),
-        ])
-
-    def expected_sufficient_statistics(self):
+    def _expected_sufficient_statistics(self):
         mean, scale, mean_precision, dof = self.to_std_parameters()
         dtype, device = mean.dtype, mean.device
         dim = len(mean)
@@ -99,11 +103,7 @@ class NormalWishartPrior(ExpFamilyPrior):
             (sum_digamma + dim * math.log(2) + logdet).view(1)
         ])
 
-    def expected_value(self):
-        mean, _, mean_precision, dof = self.to_std_parameters()
-        return mean, dof * mean_precision
-
-    def log_norm(self, natural_parameters=None):
+    def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
 
@@ -175,7 +175,22 @@ class JointNormalWishartPrior(ExpFamilyPrior):
             mean_precision={mean_precision}, dof={dof}
         )
 
-    def to_std_parameters(self, natural_parameters=None):
+    def expected_value(self):
+        means, _, mean_precision, dof = self.to_std_parameters()
+        return means, dof * mean_precision
+
+    def to_natural_parameters(self, means, scales, mean_precision, dof):
+        ncomp, dim = self._ncomp, self._dim
+        inv_mean_prec = mean_precision.inverse()
+        quad_means = (scales[:, None] * means).t() @ means
+        return torch.cat([
+            -.5 * (quad_means + inv_mean_prec).view(-1),
+            (scales[:, None] * means).view(-1),
+            -.5 * scales.view(-1),
+            .5 * (dof - dim - 1 + ncomp).view(1),
+        ])
+
+    def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         ncomp, dim = self._ncomp, self._dim
@@ -192,18 +207,7 @@ class JointNormalWishartPrior(ExpFamilyPrior):
 
         return means, scales, mean_precision, dof
 
-    def to_natural_parameters(self, means, scales, mean_precision, dof):
-        ncomp, dim = self._ncomp, self._dim
-        inv_mean_prec = mean_precision.inverse()
-        quad_means = (scales[:, None] * means).t() @ means
-        return torch.cat([
-            -.5 * (quad_means + inv_mean_prec).view(-1),
-            (scales[:, None] * means).view(-1),
-            -.5 * scales.view(-1),
-            .5 * (dof - dim - 1 + ncomp).view(1),
-        ])
-
-    def expected_sufficient_statistics(self):
+    def _expected_sufficient_statistics(self):
         means, scales, mean_precision, dof = self.to_std_parameters()
         dtype, device = means.dtype, means.device
         ncomp, dim = self._ncomp, self._dim
@@ -222,11 +226,7 @@ class JointNormalWishartPrior(ExpFamilyPrior):
             (sum_digamma + dim * math.log(2) + logdet).view(1)
         ])
 
-    def expected_value(self):
-        means, _, mean_precision, dof = self.to_std_parameters()
-        return means, dof * mean_precision
-
-    def log_norm(self, natural_parameters=None):
+    def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
 
@@ -245,3 +245,4 @@ class JointNormalWishartPrior(ExpFamilyPrior):
 
 
 __all__ = ['NormalWishartPrior', 'JointNormalWishartPrior']
+

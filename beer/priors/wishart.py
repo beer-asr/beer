@@ -65,13 +65,9 @@ class WishartPrior(ExpFamilyPrior):
         nparams[-1] = .5 * (new_dof - dim - 1)
         self.natural_parameters = nparams
 
-    def to_std_parameters(self, natural_parameters):
-        dim = math.sqrt(len(natural_parameters) - 1)
-        np1 = natural_parameters[:-1].reshape((dim, dim))
-        np2 = natural_parameters[-1]
-        scale = torch.inverse(-2 * np1)
-        dof = 2 * np2 + dim + 1
-        return scale.contiguous().view((dim, dim)), dof
+    def expected_value(self):
+        scale, dof = self.to_std_parameters(self.natural_parameters)
+        return dof * scale
 
     def to_natural_parameters(self, scale, dof):
         dim = len(scale)
@@ -80,7 +76,15 @@ class WishartPrior(ExpFamilyPrior):
             .5 * (dof - dim - 1).view(1),
         ])
 
-    def expected_sufficient_statistics(self):
+    def _to_std_parameters(self, natural_parameters):
+        dim = math.sqrt(len(natural_parameters) - 1)
+        np1 = natural_parameters[:-1].reshape((dim, dim))
+        np2 = natural_parameters[-1]
+        scale = torch.inverse(-2 * np1)
+        dof = 2 * np2 + dim + 1
+        return scale.contiguous().view((dim, dim)), dof
+
+    def _expected_sufficient_statistics(self):
         scale, dof = self.to_std_parameters(self.natural_parameters)
         dtype, device = scale.dtype, scale.device
         dim = len(scale)
@@ -92,11 +96,7 @@ class WishartPrior(ExpFamilyPrior):
             (sum_digamma + dim * math.log(2) + scale_logdet).view(1)
         ])
 
-    def expected_value(self):
-        scale, dof = self.to_std_parameters(self.natural_parameters)
-        return dof * scale
-
-    def log_norm(self, natural_parameters=None):
+    def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
 
@@ -114,3 +114,4 @@ class WishartPrior(ExpFamilyPrior):
 
 
 __all__ = ['WishartPrior']
+

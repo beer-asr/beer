@@ -119,7 +119,7 @@ def AutoRegressiveNetwork(dim_in, flow_params_dim, depth, width, activation):
         else:
             arch.append(MergeTransform(MaskedLinear(mask, ltrans),
                                     torch.nn.Linear(flow_params_dim, width)))
-        arch.append(activation())
+        arch.append(activation)
         previous_dim = width
         previous_ordering = layer_connections[i]
 
