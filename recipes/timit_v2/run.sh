@@ -1,49 +1,32 @@
-#!/bin/sh
+#!/bin/bash
 
 
 # Load the configuration.
 if [ $# -ne 1 ]; then echo "$0 <setup.sh>"
     exit 1
 fi
+
+
 setup=$(pwd)/$1
-. $setup
-num_phns=$2
-stage=-1
-
-if [ $stage -le 0 ]; then
-    echo ======================================================================
-    echo "                         Data Preparation                           "
-    echo ======================================================================
-    if [ $num_phns == "48" ]; then
-        echo "Default: preparing data with 48 phonemes"
-        local/timit_data_prep.sh "$timit" "$datadir" "$confdir" || exit 1
-    elif [ $num_phns == "61" ]; then
-        echo "Preparing data with 61 phonemes"
-        local/timit_data_prep_61_phns.sh "$timit" "$datadir" "$confdir" || exit 1
-    else
-        echo "Wrong number of phonemes: 48 or 61 !"
-        exit 1
-    fi
-
-    # Split the list of utterances for the parallel tasks.
-    utils/parallel/split.sh $datadir/
-fi
+. $setup || { echo "Could not load the $setup file." ; exit 1; }
 
 
-# Set the stage you want to start from.
+
+# Set the stage you want to start from. Keep in mind that some steps
+# depends on previous ones !!
 stage=0
 
 
 # Data preparation. Organize the data directory as:
+#
 #   data/
 #     lang/
 #       files related to the "language" (mostly phonetic information).
 #     dataset/
 #       files related to the dataset (features, transcription, ...)
-step=1
-if [ $stage -le $step ]; then
-    echo "---------- Data preparation ----------"
-
+#
+if [ $stage -le 0 ]; then
+    echo "--> Data preparation"
     local/timit_data_prep.sh "$timit" "$langdir" "$confdir" || exit 1
     for s in train test dev; do
         echo "Preparing for $datadir/$s"
@@ -58,9 +41,9 @@ fi
 
 
 # Extract the featuures for each dataset.
-step=2
-if [ $stage -le $step ]; then
-    echo "---------- Features extraction ----------"
+# Features for each data set will be store in "data/setname/feats.npz".
+if [ $stage -le 1 ]; then
+    echo "--> Features extraction"
     for s in train test dev; do
         echo "Extracting features for: $s"
         steps/extract_features.sh $setup $datadir/$s || exit 1
@@ -69,10 +52,10 @@ fi
 
 
 # HMM-GMM monophone.
-step=3
-if [ $stage -le $step ]; then
-    echo "---------- HMM-GMM system ----------"
-    steps/train_hmm2.sh $setup $datadir/train test_hmm_gmm || exit 1
-    steps/decode_hmm.sh $setup test_hmm_gmm $datadir/test test_hmm_gmm/decode || exit 1
+if [ $stage -le 2 ]; then
+    echo "--> HMM-GMM system"
+    steps/train_hmm2.sh $setup $datadir/train $hmm_dir || exit 1
+    steps/decode_hmm.sh $setup test_hmm_gmm $datadir/test \
+        $hmm_dir/decode || exit 1
 fi
 

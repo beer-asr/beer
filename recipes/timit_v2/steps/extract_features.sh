@@ -13,30 +13,26 @@ setup=$1
 datadir=$2
 scp="$datadir"/wav.scp
 
-# Check if we got the configuration and the scp files.
-if [ ! -f "$fea_conf" ]; then
-    echo "\"$fea_conf\" not found."
-    exit 1
-else
-    cp $fea_conf $datadir
-fi
-if [ ! -f "$scp" ]; then
-    echo "\"$scp\" not found."
-    exit 1
-fi
+
+[[ -f $fea_conf ]] || { echo "File not found: $fea_conf" >2; exit 1; }
+[[ -f $scp ]] || { echo "File not found: $fea_conf" >2; exit 1; }
 
 # If the features are already created, do nothing.
 if [ ! -f "$datadir"/feats.npz ]; then
 
+    # Copy the configuration file to keep track of what kind of
+    # features were extracted.
+    cp $fea_conf $datadir/
+
     tmpdir=$(mktemp -d "$datadir"/beer.XXXX);
     trap 'rm -rf "$tmpdir"' EXIT
-
     utils/parallel/submit_parallel.sh \
         $parallel_env \
         "beer-extract-features" \
         "$fea_parallel_opts" \
         $fea_njobs \
-        $datadir/wav.scp \
+        $scp \
+        datadir/wav.scp \
         "python utils/extract-features.py $fea_conf $tmpdir" \
         $datadir || exit 1
 
