@@ -2,9 +2,7 @@
 
 
 # Load the configuration.
-
-if [ $# -ne 1 ]; then
-    echo "$0 <setup.sh>"
+if [ $# -ne 1 ]; then echo "$0 <setup.sh>"
     exit 1
 fi
 setup=$(pwd)/$1
@@ -12,7 +10,7 @@ setup=$(pwd)/$1
 
 
 # Set the stage you want to start from.
-stage=3
+stage=0
 
 
 # Data preparation. Organize the data directory as:

@@ -1,45 +1,33 @@
 #!/bin/bash
 
 if [ $# -ne 4 ];then
-    echo "$0 <setup.sh> <date-test-dir> <decode-model> <decode-dir>"
+    echo "$0 <setup.sh> <model-dir> <date-test-dir> <decode-dir> "
     exit 1
 fi
 
 setup=$1
-data_test_dir=$2
-mdl=$3
+mdl=$2
+data_test_dir=$3
 decode_dir=$4
+mdldir=$(dirname $mdl)
 stage=0
 
 [ -f $setup ] && . $setup
-mdldir=$(dirname $mdl)
-emission_conf=$mdldir/emissions.yml
-
 mkdir -p $decode_dir/log
-for f in $mdl $emission_conf; do
+
+pdf_mapping=$mdldir/pdf_mapping.txt
+for f in $mdl $pdf_mapping ; do
     [ ! -f $f ] && echo "No such file: $f" && exit 1;
 done
 
-if [ $stage -le 0 ];then
+if [ ! -f $decode_dir/decode_phone_ids.npz ];then
     echo "Decoding"
-    python utils/decode_vae_hmm.py \
-        --gamma $hmm_gamma \
-        $mdl $decode_dir \
-        $data_test_dir/feats.npz $emission_conf \
-        > $decode_dir/log/decode.log 2>&1 || exit 1
+    python utils/vae-hmm-decode.py $mdl $data_test_dir/feats.npz | \
+        python utils/pdf2unit.py --phone-level $pdf_mapping  \
+        > $decode_dir/decode_results.txt
 fi
 
-if [ $stage -le 1 ];then
-    echo "Merging states into phones"
-    python utils/convert_states_to_phone.py \
-        $decode_dir/decode_states.txt \
-        $decode_dir/decode_results.txt \
-        $langdir/phones.txt \
-        $emission_conf > $decode_dir/log/convert_state_to_phone.log 2>&1 || exit 1
-fi
-
-if [ $stage -le 2 ];then
-    echo "DTW scoring"
+if [ ! -f $decode_dir/decode_result.txt ];then
     python utils/score.py \
         --remove=$remove_sym \
         --duplicate=$duplicate \
@@ -47,3 +35,4 @@ if [ $stage -le 2 ];then
         $data_test_dir/trans \
         $decode_dir/decode_results.txt > $decode_dir/log/score.log 2>&1 || exit 1
 fi
+

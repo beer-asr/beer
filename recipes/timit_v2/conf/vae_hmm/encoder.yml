@@ -2,32 +2,10 @@
 
 nnet_structure:
 
-# Reshaping the input so that an utterance will be presented as one
-# input with 1 channel of LxD dimension where L is the number of frames
-# and D is the features dimension.
 - block_structure:
-  - ReshapeLayer:shape=(1, 1, -1, {dim_in})
-
-# Convolutive block consisting of 2 stacks convolution layers with
-# a residual connection (avg pooling to match the down sampling).
-- block_structure:
-  - Conv2d:in_channels=1;out_channels={dim_out};kernel_size=(11,{dim_in});padding=(5,0);stride=2
+  - Linear:in_features={dim_in};out_features={dim_out}
   - ELU
-  - Conv2d:in_channels={dim_out};out_channels={dim_out};kernel_size=(11,1);padding=(5,0)
+  - Linear:in_features={dim_out};out_features={dim_out}
   - ELU
-  residual: AvgPool2d:kernel_size=(11,39);stride=2;padding=(5,0)
-
-# After the convolutive block, reshape the data so to be processed
-# by standard feed-forward layer.
-- block_structure:
-  - ReshapeLayer:shape=({dim_out}, -1)
-  - TransposeLayer
-
-# Final block of the encoder: 2 fully connected layers  with a
-# residual connection.
-- block_structure:
-  - Linear:in_features={dim_out};out_features=512
-  - ELU
-  - Linear:in_features=512;out_features={dim_out}
-  residual: IdentityLayer
+  residual: Linear:in_features={dim_in};out_features={dim_out}
 

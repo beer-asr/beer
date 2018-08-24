@@ -2,36 +2,10 @@
 # "encoder.yml" in the same directory.
 
 nnet_structure:
-
-# The first layer is just a linear transformation to change the
-# dimension of the the input to the decoder.
 - block_structure:
-  - Linear:in_features={latent_dim}; out_features={encoder_out_dim}
-
-# Feed-forward block with a residual connection.
-- block_structure:
-  - Linear:in_features={encoder_out_dim};out_features=512
+  - Linear:in_features={dim_in};out_features={width}
   - ELU
-  - Linear:in_features=512;out_features={encoder_out_dim}
+  - Linear:in_features={width};out_features={dim_out}
   - ELU
-  residual: IdentityLayer
-
-# Prepare the data to be processed by the convolutive block.
-- block_structure:
-  - TransposeLayer
-  - ReshapeLayer:shape=(1, {encoder_out_dim}, -1, 1)
-
-# Convolutive block. Note that we use the "transposed" convolution
-# to up-sample the signal.
-- block_structure:
-  - Conv2d:in_channels={encoder_out_dim};out_channels={encoder_out_dim};kernel_size=(11,1);padding=(5,0)
-  - ELU
-  - ConvTranspose2d:in_channels={encoder_out_dim};out_channels=1;kernel_size=(11,{dim_out});padding=(5,0);stride=2
-  - ELU
-  residual: ConvTranspose2d:in_channels={encoder_out_dim};out_channels=1;kernel_size=(11,{dim_out});padding=(5,0);stride=2
-
-# Final reshaping to get the exact same dimension as the output
-# utterance.
-- block_structure:
-  - ReshapeLayer:shape=(-1, {dim_out})
+  residual: Linear:in_features={dim_in};out_features={dim_out}
 

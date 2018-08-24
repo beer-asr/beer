@@ -131,7 +131,7 @@ if [ ! -f $mdl_dir/final.mdl ];then
             $hmm_train_emissions_sge_opts \
             utils/job.qsub "$cmd" || exit 1
 
-        mdl=$mdl_dir/${epoch}.mdl
+        mdl=${epoch}.mdl
     done
 
     cp $mdl_dir/$mdl $mdl_dir/final.mdl
