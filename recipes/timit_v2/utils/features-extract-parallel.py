@@ -124,11 +124,6 @@ def main():
         if feaconf['utt_mnorm']:
             features -= features.mean(axis=0)[None, :]
 
-        # Make sure the length of the features is odd.
-        #features = np.pad(features,
-        #                  pad_width=(((len(features) + 1) % 2, 0), (0, 0)),
-        #                  mode='edge')
-
         # Store the features as a numpy file.
         path = os.path.join(args.outdir, uttid)
         np.save(path, features)

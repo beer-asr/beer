@@ -9,13 +9,15 @@ if [[ "$hostname" == *".fit.vutbr.cz" ]]; then
     server=matylda5
     parallel_env=sge
     parallel_opts="-l mem_free=200M,ram_free=200M,$server=1"
+    parallel_opts_gpu="-l gpu=1,mem_free=1G,ram_free=1G"
 elif [[ "$hostname" = *"clsp.jhu.edu" ]]; then
     timit=/export/corpora5/LDC/LDC93S1/timit/TIMIT
     parallel_env=sge
     parallel_opts="-l mem_free=200M,ram_free=200M,hostname=b*|c*"
-    parallel_opts_gpu="-l gpu=1,hostname=b1[123456789]*|c*"
+    parallel_opts_gpu="-l gpu=1,mem_free=1G,ram_free=1G,hostname=b1[123456789]*|c*"
 else
-    echo "Unkown location configuration. Please update the \"setup.sh\" file."
+    echo "Unkown location configuration. Please update the"
+    echo "\"setup.sh\" file."
     exit 1
 fi
 
@@ -43,14 +45,17 @@ fea_conf=$confdir/features.yml
 hmm_emission_conf=$confdir/hmm_gmm/hmm.yml
 hmm_dir=$expdir/hmm_gmm
 hmm_align_njobs=20
-hmm_align_sge_opts="$parallel_opts"
-hmm_align_epochs="1 2 3 4 5 6 7 8 9 10 12 14 16 18 20 23 26 29"
-hmm_train_epochs=30
+hmm_align_parallel_opts="$parallel_opts"
+hmm_align_iters="1 2 3 4 5 6 7 8 9 10 12 14 16 18 20 23 26 29"
+hmm_train_iters=30
 hmm_train_emissions_lrate=0.1
 hmm_train_emissions_batch_size=400
 hmm_train_emissions_epochs=10
 hmm_train_emissions_opts="--fast-eval --use-gpu"
-hmm_train_emissions_sge_opts="$parallel_opts_gpu"
+hmm_train_parallel_opts="$parallel_opts_gpu"
+hmm_decode_njobs=2
+hmm_decode_parallel_opts="$parallel_opts"
+
 
 
 #######################################################################

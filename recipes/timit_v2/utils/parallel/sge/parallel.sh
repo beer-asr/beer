@@ -14,8 +14,9 @@ split_dir=$3
 cmd=$4
 log_dir=$5
 
+rm -fr $log_dir/${name}.out.*
 qsub -N "$name"  -cwd  -j y -sync y\
-    -o $log_dir/${name}.out'$TASK_ID' \
+    -o $log_dir/${name}.out'.$TASK_ID' \
     -t 1-$(ls $split_dir | wc -l) \
     $opts utils/parallel/sge/jobarray.qsub "$cmd" $split_dir || exit 1
 

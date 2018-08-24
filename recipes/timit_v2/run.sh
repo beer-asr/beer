@@ -14,7 +14,7 @@ setup=$(pwd)/$1
 
 # Set the stage you want to start from. Keep in mind that some steps
 # depends on previous ones !!
-stage=0
+stage=3
 
 
 # Data preparation. Organize the data directory as:
@@ -25,7 +25,7 @@ stage=0
 #     dataset/
 #       files related to the dataset (features, transcription, ...)
 #
-if [ $stage -le 0 ]; then
+if [ $stage -le 1 ]; then
     echo "--> Data preparation"
     local/timit_data_prep.sh "$timit" "$langdir" "$confdir" || exit 1
     for s in train test dev; do
@@ -42,7 +42,7 @@ fi
 
 # Extract the featuures for each dataset.
 # Features for each data set will be store in "data/setname/feats.npz".
-if [ $stage -le 1 ]; then
+if [ $stage -le 2 ]; then
     echo "--> Features extraction"
     for s in train test dev; do
         echo "Extracting features for: $s"
@@ -52,10 +52,18 @@ fi
 
 
 # HMM-GMM monophone.
-if [ $stage -le 2 ]; then
+if [ $stage -le 3 ]; then
     echo "--> HMM-GMM system"
     steps/train_hmm2.sh $setup $datadir/train $hmm_dir || exit 1
-    steps/decode_hmm.sh $setup test_hmm_gmm $datadir/test \
+
+    steps/decode_hmm.sh $setup $hmm_dir $datadir/test \
         $hmm_dir/decode || exit 1
+fi
+
+
+# Score all the models.
+if [ $stage -le 4 ]; then
+    echo "--> Scoring ..."
+    steps/score.sh $setup
 fi
 
