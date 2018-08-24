@@ -42,16 +42,16 @@ vae_hmm_train_emissions_sge_opts="-l gpu=1,hostname=*face*"
 
 # HMM-GMM model parameters.
 hmm_emission_conf=$confdir/hmm_gmm/hmm.yml
-hmm_align_njobs=10
-hmm_align_sge_opts=""
-hmm_align_epochs="1 2 3 4 5 6 7 8 9 10 12 14 16 18 20 23 26 29 32 35 38"
-hmm_train_epochs=40
+hmm_align_njobs=20
+hmm_align_sge_opts="-l hostname=b*|c*"
+hmm_align_epochs="0 1 2 3 4 5 6 7 8 9 10 12 14 16 18 20 23 26 29"
+hmm_train_epochs=30
 hmm_train_emissions_lrate=0.1
 hmm_train_emissions_batch_size=400
 hmm_train_emissions_epochs=10
 hmm_train_emissions_opts="--fast-eval --use-gpu"
-#hmm_train_emissions_sge_opts="-l hostname=b1[123456789]*|c*"
-hmm_train_emissions_sge_opts="-l gpu=1,hostname=*face*"
+hmm_train_emissions_sge_opts="-l gpu=1,hostname=b1[123456789]*|c*"
+#hmm_train_emissions_sge_opts="-l gpu=1"
 
 
 # Score options.

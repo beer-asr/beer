@@ -9,7 +9,6 @@ setup=$1
 mdldir=$2
 data_test_dir=$3
 decode_dir=$4
-stage=0
 
 [ -f $setup ] && . $setup
 mkdir -p $decode_dir/log
@@ -20,14 +19,14 @@ for f in $mdl $pdf_mapping ; do
     [ ! -f $f ] && echo "No such file: $f" && exit 1;
 done
 
-if [ ! -f $decode_dir/decode_phone_ids.npz ];then
+if [ ! -f $decode_dir/decode_results.txt ];then
     echo "Decoding"
     python utils/decode_hmm.py $mdl $data_test_dir/feats.npz | \
         python utils/pdf2unit.py --phone-level $pdf_mapping  \
         > $decode_dir/decode_results.txt
-fi
 
 if [ ! -f $decode_dir/decode_result.txt ];then
+    echo "Scoring"
     python utils/score.py \
         --remove=$remove_sym \
         --duplicate=$duplicate \

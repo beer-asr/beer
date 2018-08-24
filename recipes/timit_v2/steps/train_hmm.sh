@@ -22,10 +22,10 @@ mkdir -p $mdl_dir/log
 # Copy the configuration files for information.
 if [ ! -d $mdl_dir ];then
     mkdir -p $mdl_dir/log
-    cp $setup $mdl_dir
-    cp $fea_conf $mdl_dir
-    cp $hmm_emission_conf $mdl_dir
 fi
+cp $setup $mdl_dir/setup.sh
+cp $fea_conf $mdl_dir/feats.conf
+cp $hmm_emission_conf $mdl_dir/emissions.yml
 
 if [ ! -f $mdl_dir/init.mdl ]; then
     echo "Building the HMM model..."
