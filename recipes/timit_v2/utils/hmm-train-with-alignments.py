@@ -26,6 +26,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch-size', type=int, default=-1,
                         help='utterance number in each batch')
+    parser.add_argument('--epochs', type=int, default=1,
+                        help='number of epochs')
     parser.add_argument('--fast-eval', action='store_true')
     parser.add_argument('--lrate', type=float, default=1.,
                         help='learning rate')
@@ -67,36 +69,40 @@ def main():
 
 
     tot_counts = int(stats['nframes'])
+    for epoch in range(1, args.epochs + 1):
+        # Shuffle the order of the utterance.
+        keys = list(feats.keys())
+        random.shuffle(keys)
+        batches = [keys[i: i + batch_size]
+                   for i in range(0, len(keys), batch_size)]
+        logging.debug('Data shuffled into {} batches'.format(len(batches)))
 
-    # Shuffle the order of the utterance.
-    keys = list(feats.keys())
-    random.shuffle(keys)
-    batches = [keys[i: i + batch_size]
-               for i in range(0, len(keys), batch_size)]
-    logging.debug('Data shuffled into {} batches'.format(len(batches)))
+        for batch_no, batch_keys in enumerate(batches, start=1):
+            # Reset the gradients.
+            optimizer.zero_grad()
 
-    for batch_no, batch_keys in enumerate(batches, start=1):
-        # Reset the gradients.
-        optimizer.zero_grad()
+            # Load the batch data.
+            ft, labels = load_batch(feats, alis, batch_keys)
+            ft, labels = ft.to(device), labels.to(device)
 
-        # Load the batch data.
-        ft, labels = load_batch(feats, alis, batch_keys)
-        ft, labels = ft.to(device), labels.to(device)
+            # Compute the objective function.
+            elbo = beer.evidence_lower_bound(model, ft, state_path=labels,
+                                             datasize=tot_counts,
+                                             fast_eval=args.fast_eval)
 
-        # Compute the objective function.
-        elbo = beer.evidence_lower_bound(model, ft, state_path=labels,
-                                         datasize=tot_counts,
-                                         fast_eval=args.fast_eval)
+            # Compute the gradient of the model.
+            elbo.natural_backward()
 
-        # Compute the gradient of the model.
-        elbo.natural_backward()
+            # Update the parameters.
+            optimizer.step()
 
-        # Update the parameters.
-        optimizer.step()
-
-        elbo_value = float(elbo) / tot_counts
-        log_msg = 'Evidence Lower Bound: {}'
-        logging.info(log_msg.format(round(elbo_value, 3)))
+            elbo_value = float(elbo) / tot_counts
+            log_msg = 'epoch={}/{} batch={}/{} elbo={}'
+            logging.info(log_msg.format(
+                epoch, args.epochs,
+                batch_no, len(batches),
+                round(elbo_value, 3))
+            )
 
 
     with open(args.out, 'wb') as fh:

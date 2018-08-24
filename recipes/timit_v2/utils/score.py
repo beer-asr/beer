@@ -93,7 +93,7 @@ def main():
         tot_len += len(ref)
 
     per = 100 * tot_err / tot_len
-    print('Phone Error Rate:', round(per, 3), '%')
+    print(round(per, 2))
 
 if __name__ == "__main__":
     main()

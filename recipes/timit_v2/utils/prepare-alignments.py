@@ -5,6 +5,8 @@ import argparse
 import pickle
 import logging
 import os
+import sys
+
 import numpy as np
 import beer
 
@@ -41,7 +43,6 @@ def main():
     parser.add_argument('--verbose', action='store_true',
                         help='show debug messages')
     parser.add_argument('hmm_graphs', help='hmm graph for each unit')
-    parser.add_argument('trans', help='phone_transcriptions')
     parser.add_argument('outdir', help='output directory')
     args = parser.parse_args()
 
@@ -51,17 +52,16 @@ def main():
     with open(args.hmm_graphs, 'rb') as fid:
         hmm_graphs = pickle.load(fid)
 
-    with open(args.trans, 'r') as fid:
-        graph = beer.graph.Graph()
-        for line in fid:
-            tokens = line.split()
-            uttid, phones = tokens[0], tokens[1:]
-            logging.debug('Create alignment graph for utterance: {}'.format(uttid))
-            graph = create_graph_from_seq(phones, hmm_graphs)
+    graph = beer.graph.Graph()
+    for line in sys.stdin:
+        tokens = line.strip().split()
+        uttid, phones = tokens[0], tokens[1:]
+        logging.debug('Create alignment graph for utterance: {}'.format(uttid))
+        graph = create_graph_from_seq(phones, hmm_graphs)
 
-            path = os.path.join(args.outdir, uttid + '.npy')
-            graph = np.array([graph])
-            np.save(path, graph)
+        path = os.path.join(args.outdir, uttid + '.npy')
+        graph = np.array([graph])
+        np.save(path, graph)
 
     with open('test.pkl', 'wb') as fid:
         pickle.dump(graph, fid)
