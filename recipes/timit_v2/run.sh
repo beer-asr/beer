@@ -61,6 +61,18 @@ if [ $stage -le 3 ]; then
 fi
 
 
+# VAE-HMM monophone system. We use the alignment of the HMM system
+# to initialize the model.
+if [ $stage -le 3 ]; then
+    echo "--> VAE-HMM system"
+    steps/train_vae_hmm2.sh $setup $hmm_dir/alis.npz \
+        $datadir/train $vae_hmm_dir || exit 1
+
+    steps/decode_vae_hmm2.sh $setup $vae_hmm_dir $datadir/test \
+        $vae_hmm_dir/decode || exit 1
+fi
+
+
 # Score all the models.
 if [ $stage -le 4 ]; then
     echo "--> Scoring ..."
