@@ -71,17 +71,17 @@ vae_hmm_latent_dim=30
 vae_hmm_hmm_conf=$vae_hmm_confdir/hmm.yml
 vae_hmm_encoder_cov_type=isotropic
 vae_hmm_decoder_cov_type=diagonal
-vae_hmm_align_njobs=10
-vae_hmm_align_sge_opts=""
-vae_hmm_align_epochs="2 3 4 5 6 7 8 9 10"
-vae_hmm_train_iters=10
+vae_hmm_align_njobs=20
+vae_hmm_align_parallel_opts="$parallel_opts"
+vae_hmm_align_iters="2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"
+vae_hmm_train_iters=20
 vae_hmm_train_epochs_per_iter=50
-vae_hmm_train_warmup_iters=1
-vae_hmm_train_emissions_lrate=1e-1
-vae_hmm_train_emissions_nnet_lrate=1e-3
-vae_hmm_train_emissions_batch_size=400
-vae_hmm_train_emissions_opts="--fast-eval --use-gpu"
-vae_hmm_train_emissions_sge_opts="-l gpu=1,hostname=*face*"
+vae_hmm_train_warmup_iters=0
+vae_hmm_train_lrate=1e-1
+vae_hmm_train_nnet_lrate=1e-3
+vae_hmm_train_batch_size=400
+vae_hmm_train_opts="--fast-eval --use-gpu"
+vae_hmm_train_parallel_opts="$parallel_opts_gpu"
 
 
 #######################################################################

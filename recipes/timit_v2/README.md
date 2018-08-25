@@ -18,3 +18,4 @@ Best results so far:
 | MODEL                                              | PER (%)              |
 |----------------------------------------------------|----------------------|
 | [hmm_gmm](conf/hmm_gmm)                            | 47.01                |
+| [vae_hmm](conf/vae_hmm)                            | 42.26                |

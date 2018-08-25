@@ -55,7 +55,7 @@ else
 fi
 
 
-# Make sure all temporary directory will be cleaned up whatever
+# Make sure all temporary directories will be cleaned up whatever
 # happens.
 trap 'rm -rf "beer.tmp*"' EXIT
 
@@ -105,7 +105,6 @@ if [ ! -f $mdl_dir/final.mdl ];then
             echo "Aligning data"
 
             tmpdir=$(mktemp -d $mdl_dir/tmp.XXXX);
-
             cmd="python utils/hmm-align.py \
                 --utt-graphs $mdl_dir/ali_graphs.npz \
                 $mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir"
