@@ -52,9 +52,7 @@ class HMM(DiscreteLatentBayesianModel):
         elif align_type == 'baum_welch':
             ali = inference_graph.posteriors(pc_llhs)
         elif align_type == 'sample':
-            ali = inference_graph.sample(pc_llhs)
-            ali = onehot(ali, inference_graph.n_states, pc_llhs.dtype,
-                         pc_llhs.device)
+            raise NotImplementedError
         else:
             raise ValueError('Unknown alignment type: {}'.format(align_type))
 
