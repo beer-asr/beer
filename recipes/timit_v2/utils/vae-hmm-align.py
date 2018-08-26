@@ -21,6 +21,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ali-graphs', help='aligment graph for each ' \
                                              'utterance')
+    parser.add_argument('--ali-type', choices=['viterbi', 'baum_welch'],
+                        default='viterbi', help='alignment type')
     parser.add_argument('hmm', help='hmm model to train')
     parser.add_argument('feats', help='Feature file')
     parser.add_argument('outdir', help='output directory')
@@ -29,9 +31,9 @@ def main():
     # Load the data for the training.
     feats = np.load(args.feats)
 
-    utt_graphs = None
-    if args.utt_graphs:
-        utt_graphs = np.load(args.utt_graphs)
+    ali_graphs = None
+    if args.ali_graphs:
+        ali_graphs = np.load(args.ali_graphs)
 
     with open(args.hmm, 'rb') as fh:
         model = pickle.load(fh)
@@ -40,14 +42,15 @@ def main():
         uttid = line.strip()
         ft = torch.from_numpy(feats[uttid]).float()
         graph = None
-        if utt_graphs is not None:
-            graph = utt_graphs[uttid][0]
+        if ali_graphs is not None:
+            graph = ali_graphs[uttid][0]
         enc_states = model.encoder(ft)
         post_params = model.encoder_problayer(enc_states)
         samples, _ = model.encoder_problayer.samples_and_llh(post_params)
-        best_path = model.latent_model.decode(samples, inference_graph=graph)
+        ali = model.latent_model.align(samples, inference_graph=graph,
+                                       align_type=args.ali_type)
         path = os.path.join(args.outdir, uttid + '.npy')
-        np.save(path, best_path.numpy())
+        np.save(path, ali.numpy())
 
 
 if __name__ == "__main__":

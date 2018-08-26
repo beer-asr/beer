@@ -14,7 +14,7 @@ setup=$(pwd)/$1
 
 # Set the stage you want to start from. Keep in mind that some steps
 # depends on previous ones !!
-stage=3
+stage=5
 
 
 # Data preparation. Organize the data directory as:
@@ -77,5 +77,23 @@ fi
 if [ $stage -le 4 ]; then
     echo "--> Scoring ..."
     steps/score.sh $setup
+fi
+
+#######################################################################
+## Acoustic Unit Discovery
+
+
+if [ $stage -le 5 ]; then
+    echo "--> Acoustic Unit Discovery (HMM)"
+    utils/prepare_aud_lang.sh $aud_hmm_n_units $datadir/lang_aud_hmm || exit 1
+
+    steps/aud_hmm.sh $setup $datadir/lang_aud_hmm $datadir/train \
+        $aud_hmm_dir || exit 1
+
+    steps/decode_hmm.sh $setup $aud_hmm_dir $datadir/train \
+        $aud_hmm_dir/decode_train || exit 1
+
+    steps/decode_hmm.sh $setup $aud_hmm_dir $datadir/test \
+        $aud_hmm_dir/decode_test || exit 1
 fi
 

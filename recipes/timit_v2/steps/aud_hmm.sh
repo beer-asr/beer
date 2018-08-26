@@ -1,42 +1,57 @@
 #!/bin/bash
 
-# Acoustic Unit Discovery with a HMM based system.
+# Acoustic Unit Discvoery.
 
 
-if [ $# -ne 3 ];then
-    echo "$0: <setup.sh> <data-train-dir> <mdl-dir>"
+if [ $# -ne 4 ];then
+    echo "$0: <setup.sh> <lang-dir> <data-train-dir> <mdl-dir>"
     exit 1
 fi
 
 setup=$1
-data_train_dir=$2
-mdl_dir=$3
+lang_dir=$2
+data_train_dir=$3
+mdl_dir=$4
 mkdir -p $mdl_dir
 
 
 . $setup
-[[ -f "$hmm_emission_conf" ]] || \
-    { echo "File not found: $hmm_emission_conf"; exit 1; }
+[[ -f "$aud_hmm_conf" ]] || \
+    { echo "File not found: $aud_hmm_conf"; exit 1; }
 
 
 
 if [ ! -f $mdl_dir/0.mdl ]; then
-    echo "Building the HMM model..."
+    echo "Building the AUD model..."
 
     # Copy the configuration files for information.
     cp $setup $mdl_dir
     cp $fea_conf $mdl_dir
-    cp $hmm_emission_conf $mdl_dir
+
+    cat $aud_hmm_conf | sed s/{n_units}/$aud_hmm_n_units/g \
+        > $mdl_dir/hmm.yml || exit 1
+
+    # Creete the unigral LM of the acoustic units.
+    python utils/lm-unigram-create.py \
+        --concentration $aud_hmm_lm_concentration \
+        $(cat $lang_dir/phones.txt | wc -l) \
+        $mdl_dir/lm.mdl || exit 1
+
+    # Create the definition of the decoding graph.
+    python utils/create-decode-graph.py \
+       --unigram-lm $mdl_dir/lm.mdl \
+       --use-silence \
+       $lang_dir/phones.txt > $mdl_dir/decode_graph.txt || exit 1
 
     # Build the decoding graph.
     python utils/prepare-decode-graph.py \
-        $langdir/phone_graph.txt $mdl_dir/decode.graph || exit 1
+        $mdl_dir/decode_graph.txt $mdl_dir/decode_graph.pkl || exit 1
 
     # Create the phones' hmm graph and their respective emissions.
     python utils/hmm-create-graph-and-emissions.py \
         --stats $data_train_dir/feats.stats.npz \
-         $hmm_emission_conf \
-         $langdir/phones.txt \
+         $mdl_dir/hmm.yml  \
+         $lang_dir/phones.txt \
          $mdl_dir/phones_hmm.graphs \
          $mdl_dir/emissions.mdl || exit 1
 
@@ -46,7 +61,7 @@ if [ ! -f $mdl_dir/0.mdl ]; then
 
     # Create the HMM model.
     python utils/hmm-create.py \
-        $mdl_dir/decode.graph \
+        $mdl_dir/decode_graph.pkl \
         $mdl_dir/phones_hmm.graphs \
         $mdl_dir/emissions.mdl \
         $mdl_dir/0.mdl || exit 1
@@ -57,7 +72,7 @@ fi
 
 # Make sure all temporary directories will be cleaned up whatever
 # happens.
-trap 'rm -rf "beer.tmp*"' EXIT
+trap "rm -rf \"$mdl_dir/beer.tmp*\"" EXIT
 
 
 # Train the model.
@@ -79,7 +94,7 @@ if [ ! -f $mdl_dir/final.mdl ];then
         if echo $hmm_align_iters | grep -w $iter >/dev/null; then
             echo "Aligning data"
 
-            tmpdir=$(mktemp -d $mdl_dir/tmp.XXXX);
+            tmpdir=$(mktemp -d $mdl_dir/beer.tmp.XXXX);
             cmd="python utils/hmm-align.py \
                 $mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir"
             utils/parallel/submit_parallel.sh \
@@ -93,7 +108,39 @@ if [ ! -f $mdl_dir/final.mdl ];then
             find $tmpdir -name '*npy' | \
                   zip -j -@ $mdl_dir/alis.npz > /dev/null || exit 1
 
-            # Re-estimate the units (unigram) language model.
+            echo "Re-estimating the unigram LM of the units..."
+
+            # Convert the alignments into units best paths.
+            tmpdir=$(mktemp -d $mdl_dir/beer.tmp.XXXX);
+            python utils/convert-ali-to-best-path.py \
+                $mdl_dir/alis.npz \
+                $mdl_dir/pdf_mapping.txt \
+                $lang_dir/phones.txt \
+                $tmpdir || exit 1
+            find $tmpdir -name '*npy' | \
+                  zip -j -@ $mdl_dir/best_paths.npz > /dev/null || exit 1
+
+            # Re-estimate the language model.
+            python utils/lm-unigram-reestimate.py \
+                $mdl_dir/lm.mdl \
+                $mdl_dir/best_paths.npz \
+                $mdl_dir/lm.mdl || exit 1
+
+            # Create the definition of the decoding graph.
+            python utils/create-decode-graph.py \
+               --unigram-lm $mdl_dir/lm.mdl \
+               --use-silence \
+               $lang_dir/phones.txt > $mdl_dir/decode_graph.txt || exit 1
+
+            # Build the decoding graph.
+            python utils/prepare-decode-graph.py \
+                $mdl_dir/decode_graph.txt $mdl_dir/decode_graph.pkl || exit 1
+
+            # Update the HMM model.
+            python utils/hmm-set-decoding-graph.py \
+                $mdl_dir/$mdl \
+                $mdl_dir/decode_graph.pkl \
+                $mdl_dir/$mdl || exit
         fi
 
         # Clean up the tmp directory to avoid the disk usage to

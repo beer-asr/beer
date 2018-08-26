@@ -15,7 +15,7 @@ class ConstantParameter:
         self.value = tensor
 
     def __repr__(self):
-        return self.__repr_str.format(self.__class__.__name, value=self.value)
+        return self.__repr_str.format(self.__class__.__name__, value=self.value)
 
     def float_(self):
         'Convert value of the parameter to float precision.'

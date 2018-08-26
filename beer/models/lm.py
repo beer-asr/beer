@@ -44,14 +44,17 @@ class UnigramLM(BayesianModel):
     ####################################################################
 
     def sufficient_statistics(self, data):
-        return onehot(data, self.voc_size, data.dtype, data.device)
+        if len(data.shape) == 1:
+            return onehot(data, self.voc_size, data.dtype, data.device)
+        return data
 
     def mean_field_factorization(self):
         return [[self.weights]]
 
     def expected_log_likelihood(self, stats):
         log_weight = self.weights.expected_natural_parameters()
-        return log_weight[stats]
+        return torch.sum(log_weight[None, :] * stats.type(log_weight.dtype),
+                         dim=1)
 
     def accumulate(self, stats):
         dtype = self.weights.expected_natural_parameters().dtype
