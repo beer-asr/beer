@@ -106,7 +106,7 @@ if [ ! -f $mdl_dir/final.mdl ];then
 
             tmpdir=$(mktemp -d $mdl_dir/tmp.XXXX);
             cmd="python utils/hmm-align.py \
-                --utt-graphs $mdl_dir/ali_graphs.npz \
+                --ali-graphs $mdl_dir/ali_graphs.npz \
                 $mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir"
             utils/parallel/submit_parallel.sh \
                 "$parallel_env" \
