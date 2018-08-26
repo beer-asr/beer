@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Train a context independent HMM based Phone Recognizer.
+# Acoustic Unit Discovery with a HMM based system.
 
 
 if [ $# -ne 3 ];then
@@ -60,31 +60,6 @@ fi
 trap 'rm -rf "beer.tmp*"' EXIT
 
 
-# Prepare the alignments the alignemnts graphs.
-if [ ! -f $mdl_dir/ali_graphs.npz ]; then
-    echo "Preparing alignment graphs..."
-
-    tmpdir=$(mktemp -d $mdl_dir/beer.tmp.XXXX);
-
-    cmd="python utils/prepare-alignments.py \
-            $mdl_dir/phones_hmm.graphs $tmpdir"
-    utils/parallel/submit_parallel.sh \
-        "$parallel_env" \
-        "prepare-align" \
-        "$hmm_align_parallel_opts" \
-        "$hmm_align_njobs" \
-        "$data_train_dir/trans" \
-        "$cmd" \
-        $mdl_dir || exit 1
-
-    find $tmpdir -name '*npy' \
-        | zip -j -@ $mdl_dir/ali_graphs.npz > /dev/null || exit 1
-
-else
-    echo "Alignment graphs already prepared: $mdl_dir/ali_graphs.npz"
-fi
-
-
 # Train the model.
 if [ ! -f $mdl_dir/final.mdl ];then
     echo "Training HMM-GMM model"
@@ -106,7 +81,6 @@ if [ ! -f $mdl_dir/final.mdl ];then
 
             tmpdir=$(mktemp -d $mdl_dir/tmp.XXXX);
             cmd="python utils/hmm-align.py \
-                --ali-graphs $mdl_dir/ali_graphs.npz \
                 $mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir"
             utils/parallel/submit_parallel.sh \
                 "$parallel_env" \
@@ -118,6 +92,8 @@ if [ ! -f $mdl_dir/final.mdl ];then
                 $mdl_dir || exit 1
             find $tmpdir -name '*npy' | \
                   zip -j -@ $mdl_dir/alis.npz > /dev/null || exit 1
+
+            # Re-estimate the units (unigram) language model.
         fi
 
         # Clean up the tmp directory to avoid the disk usage to

@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format=log_format)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--utt-graphs', help='aligment graph for each ' \
+    parser.add_argument('--ali-graphs', help='aligment graph for each ' \
                                              'utterance')
     parser.add_argument('hmm', help='hmm model to train')
     parser.add_argument('feats', help='Feature file')
