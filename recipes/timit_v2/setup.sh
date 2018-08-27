@@ -85,6 +85,26 @@ vae_hmm_train_parallel_opts="$parallel_opts_gpu"
 
 
 #######################################################################
+# AUD (HMM) model parameters.
+
+aud_hmm_conf=$confdir/aud_hmm/hmm.yml
+aud_hmm_dir=$expdir/aud_hmm
+aud_hmm_n_units=100
+aud_hmm_lm_concentration=1.
+aud_hmm_align_njobs=20
+aud_hmm_align_parallel_opts="$parallel_opts"
+aud_hmm_align_iters="1 2 3 4 5 6 7 8 9 10 12 14 16 18 20 23 26 29"
+aud_hmm_train_iters=30
+aud_hmm_train_emissions_lrate=0.1
+aud_hmm_train_emissions_batch_size=400
+aud_hmm_train_emissions_epochs=10
+aud_hmm_train_emissions_opts="--fast-eval --use-gpu"
+aud_hmm_train_parallel_opts="$parallel_opts_gpu"
+aud_hmm_decode_njobs=2
+aud_hmm_decode_parallel_opts="$parallel_opts"
+
+
+#######################################################################
 # Score options.
 
 remove_sym="" # Support multiple symbol, e.g. "sil spn nsn"
