@@ -75,39 +75,28 @@ class HMM(DiscreteLatentBayesianModel):
         return self.modelset.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats, inference_graph=None,
-                                inference_type='baum_welch', state_path=None):
-        # Prepare the inference graph.
+                                inference_type='viterbi', state_path=None):
         if inference_graph is None:
             inference_graph = self.graph.value
-
-        # Eventual re-mapping of the pdfs.
-        if inference_graph.pdf_id_mapping is not None:
-            emissions = AlignModelSet(self.modelset,
-                                      inference_graph.pdf_id_mapping)
-        else:
-            emissions = self.modelset
-
-        # Emissions log-likelihood.
-        pc_exp_llh = emissions.expected_log_likelihood(stats)
-
-        # Estimate the probability of the states given the sequence of
-        # features.
+        emissions = AlignModelSet(self.modelset, inference_graph.pdf_id_mapping)
+        pc_llhs = emissions.expected_log_likelihood(stats)
         if state_path is not None:
             resps = onehot(state_path, inference_graph.n_states,
-                           dtype=pc_exp_llh.dtype, device=pc_exp_llh.device)
+                           dtype=pc_llhs.dtype, device=pc_llhs.device)
         elif inference_type == 'baum_welch':
-            resps = inference_graph.posteriors(pc_exp_llh)
+            resps = inference_graph.posteriors(pc_llhs)
         elif inference_type == 'viterbi':
-            resps = onehot(inference_graph.best_path(pc_exp_llh), inference_graph.n_states,
-                           dtype=pc_exp_llh.dtype, device=pc_exp_llh.device)
+            resps = onehot(inference_graph.best_path(pc_llhs),
+                           inference_graph.n_states,
+                           dtype=pc_llhs.dtype, device=pc_llhs.device)
         else:
             raise ValueError('Unknown inference type {} for the ' \
                              'HMM'.format(inference_type))
-        exp_llh = (pc_exp_llh * resps).sum(dim=-1)
+        exp_llh = (pc_llhs * resps).sum(dim=-1)
 
         # Needed to accumulate the statistics.
-        self.cache['resps'] = resps
         self.cache['emissions'] = emissions
+        self.cache['resps'] = resps
 
         # We ignore the KL divergence term. It biases the
         # lower-bound (it may decrease) a little bit but will not affect
@@ -124,10 +113,13 @@ class HMM(DiscreteLatentBayesianModel):
     # DiscreteLatentBayesianModel interface.
     ####################################################################
 
-    def posteriors(self, data, inference_type='viterbi'):
+    def posteriors(self, data, inference_graph=None):
+        if inference_graph is None:
+            inference_graph = self.graph.value
         stats = self.modelset.sufficient_statistics(data)
-        pc_exp_llh = self.modelset.expected_log_likelihood(stats)
-        return self.graph.value.posteriors(pc_exp_llh)
+        emissions = AlignModelSet(self.modelset, inference_graph.pdf_id_mapping)
+        pc_exp_llh = emissions.expected_log_likelihood(stats)
+        return inference_graph.posteriors(pc_exp_llh)
 
 
 class AlignModelSet(BayesianModelSet):

@@ -17,7 +17,6 @@ def main():
     parser.add_argument('graph', type=str, help='output graph')
     args = parser.parse_args()
 
-
     with open(args.graph_txt, 'r') as fid:
         states = set()
         arcs = set()
@@ -26,9 +25,10 @@ def main():
             start, end = tokens[0], tokens[1]
             states.add(start)
             states.add(end)
-            arcs.add((start, end, 1.0))
-
-
+            weight = 1.0
+            if len(tokens) == 3:
+                weight = float(tokens[2])
+            arcs.add((start, end, weight))
     # Create the states
     graph = beer.graph.Graph()
     id2sym, sym2id = {}, {}
@@ -54,3 +54,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

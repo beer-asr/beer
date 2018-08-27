@@ -1,34 +1,33 @@
 #!/bin/bash
 
-exit_msg (){
-    echo "$1"
-    exit 1
-}
+# Train a context independent HMM based Phone Recognizer.
 
-if [ $# -ne 3 ];then
-    echo "$0: <setup.sh> <data-train-dir> <mdl-dir>"
+
+if [ $# -ne 4 ];then
+    echo "$0: <setup.sh> <init-ali> <data-train-dir> <mdl-dir>"
     exit 1
 fi
 
 setup=$1
-data_train_dir=$2
-mdl_dir=$3
-mkdir -p $mdl_dir/log
+init_ali=$2
+data_train_dir=$3
+mdl_dir=$4
+mkdir -p $mdl_dir
+
 
 . $setup
+[[ -f "$hmm_emission_conf" ]] || \
+    { echo "File not found: $hmm_emission_conf"; exit 1; }
 
-[ -f "$hmm_emission_conf" ] || exit_msg "File not found: $hmm_emission_conf"
-
-# Copy the configuration files for information.
-if [ ! -d $mdl_dir ];then
-    mkdir -p $mdl_dir/log
-    cp $setup $mdl_dir
-    cp $fea_conf $mdl_dir
-    cp $hmm_emission_conf $mdl_dir
-fi
 
 if [ ! -f $mdl_dir/0.mdl ]; then
     echo "Building the VAE-HMM model..."
+
+    # Copy the configuration files for information.
+    cp $setup $mdl_dir
+    cp $fea_conf $mdl_dir
+    cp $hmm_emission_conf $mdl_dir
+
     # Get the dimension of the data.
     pycmd="import numpy as np; \
     utts = np.load('$data_train_dir/feats.npz'); \
@@ -38,7 +37,8 @@ if [ ! -f $mdl_dir/0.mdl ]; then
     # Build the decoding graph.
     python utils/prepare-decode-graph.py \
         $langdir/phone_graph.txt $mdl_dir/decode.graph || exit 1
-# Create the phones' hmm graph and their respective emissions.
+
+    # Create the phones' hmm graph and their respective emissions.
     python utils/hmm-create-graph-and-emissions.py \
         --dim $vae_hmm_latent_dim \
          $hmm_emission_conf \
@@ -88,66 +88,82 @@ if [ ! -f $mdl_dir/0.mdl ]; then
         $mdl_dir/decoder.mdl \
         $mdl_dir/0.mdl || exit_msg "Failed to create the VAE"
 else
-    echo "Using previous created HMM: $mdl_dir/0.mdl"
+    echo "Using previous created VAE-HMM: $mdl_dir/0.mdl"
 fi
 
 
-# Prepare the alignments.
+# Make sure all temporary directories will be cleaned up whatever
+# happens.
+trap 'rm -rf "beer.tmp*"' EXIT
+
+
+# Prepare the alignments the alignemnts graphs.
 if [ ! -f $mdl_dir/ali_graphs.npz ]; then
     echo "Preparing alignment graphs..."
 
-    tmpdir1=$(mktemp -d /tmp/beer.XXXX);
-    python utils/prepare-alignments.py \
-        $mdl_dir/phones_hmm.graphs \
-        $data_train_dir/trans \
-        $tmpdir1
-    find $tmpdir1 -name '*npy' \
+    tmpdir=$(mktemp -d $mdl_dir/beer.tmp.XXXX);
+
+    cmd="python utils/prepare-alignments.py \
+            $mdl_dir/phones_hmm.graphs $tmpdir"
+    utils/parallel/submit_parallel.sh \
+        "$parallel_env" \
+        "prepare-align" \
+        "$vae_hmm_align_parallel_opts" \
+        "$vae_hmm_align_njobs" \
+        "$data_train_dir/trans" \
+        "$cmd" \
+        $mdl_dir || exit 1
+    find $tmpdir -name '*npy' \
         | zip -j -@ $mdl_dir/ali_graphs.npz > /dev/null || exit 1
-    rm -fr $tmpdir1
+
 else
     echo "Alignment graphs already prepared: $mdl_dir/ali_graphs.npz"
 fi
 
+
+if [ ! -f $mdl_dir/alis.npz ]; then
+    echo "Using: $init_ali as initial alignments."
+    ln -s $init_ali $mdl_dir/alis.npz
+fi
+
+
+# Train the model.
 if [ ! -f $mdl_dir/final.mdl ];then
     echo "Training the VAE-HMM model"
-
-    rm -fr $mdl_dir/log/
-    mkdir -p $mdl_dir/log
-
-    # Split the utterances into X batches to parallelize the
-    # alignments.
-    mkdir -p $mdl_dir/split
-    cp $data_train_dir/uttids $mdl_dir/split/uttids
-    pushd $mdl_dir/split > /dev/null
-    split --numeric-suffixes=1 -n l/$vae_hmm_align_njobs ./uttids
-    popd > /dev/null
 
     # Retrieve the last model.
     mdl=$(find $mdl_dir -name "[0-9]*mdl" -exec basename {} \; | \
         sort -t '.' -k 1 -g | tail -1)
-    epoch="${mdl%.*}"
+    iter="${mdl%.*}"
 
-    while [ $((++epoch)) -le $vae_hmm_train_iters ]; do
-        echo "Iteration: $epoch"
+    while [ $((++iter)) -le $vae_hmm_train_iters ]; do
+        echo "Iteration: $iter"
 
-        if echo $vae_hmm_align_epochs | grep -w $epoch >/dev/null; then
+        if echo $vae_hmm_align_iters | grep -w $iter >/dev/null; then
             echo "Aligning data"
 
-            tmpdir2=$(mktemp -d $mdl_dir/tmp.XXXX);
+            tmpdir=$(mktemp -d $mdl_dir/tmp.XXXX);
             cmd="python utils/vae-hmm-align.py \
-                --utt-graphs $mdl_dir/ali_graphs.npz \
-                $mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir2"
-            qsub  -N "beer-align"  -cwd  -j y -sync y $vae_hmm_align_sge_opts \
-                -o $mdl_dir/log/align.${epoch}.out.'$TASK_ID' \
-                -t 1-$vae_hmm_align_njobs \
-                utils/jobarray.qsub "$cmd" $mdl_dir/split || exit 1
-            find $tmpdir2 -name '*npy' | \
+                --ali-graphs $mdl_dir/ali_graphs.npz \
+                $mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir"
+            utils/parallel/submit_parallel.sh \
+                "$parallel_env" \
+                "vae-align" \
+                "$vae_hmm_align_parallel_opts" \
+                "$vae_hmm_align_njobs" \
+                "$data_train_dir/uttids" \
+                "$cmd" \
+                $mdl_dir/iter$iter || exit 1
+            find $tmpdir -name '*npy' | \
                   zip -j -@ $mdl_dir/alis.npz > /dev/null || exit 1
-            rm -fr $tmpdir2
         fi
 
+        # Clean up the tmp directory to avoid the disk usage to
+        # grow without bound.
+        rm -fr $tmpdir &
+
         kl_div_weight="--kl-weight 1.0"
-        if [ $epoch -le $vae_hmm_train_warmup_iters ]; then
+        if [ $iter -le $vae_hmm_train_warmup_iters ]; then
             echo "pre-training (KL div. weight is 0.)"
             kl_div_weight="--kl-weight 0.0"
         fi
@@ -155,25 +171,25 @@ if [ ! -f $mdl_dir/final.mdl ];then
         echo "Training the emissions"
         cmd="python -u utils/vae-hmm-train-with-alignments.py \
                 --verbose \
-                --batch-size $vae_hmm_train_emissions_batch_size \
-                --lrate $vae_hmm_train_emissions_lrate \
+                --batch-size $vae_hmm_train_batch_size \
+                --lrate $vae_hmm_train_lrate \
                 --epochs $vae_hmm_train_epochs_per_iter \
+                --nnet-optim-state $mdl_dir/nnet_optim_state.pkl \
                 $kl_div_weight \
-                $vae_hmm_train_emissions_opts \
-                $mdl_dir/$((epoch - 1)).mdl \
+                $vae_hmm_train_opts \
+                $mdl_dir/$((iter - 1)).mdl \
                 $mdl_dir/alis.npz \
                 $data_train_dir/feats.npz \
                 $data_train_dir/feats.stats.npz \
-                $mdl_dir/${epoch}.mdl"
-        qsub \
-            -N "beer-train-emissions" \
-            -cwd -j y \
-            -o $mdl_dir/log/train_emissions.${epoch}.out \
-            -sync y \
-            $vae_hmm_train_emissions_sge_opts \
-            utils/job.qsub "$cmd" || exit 1
+                $mdl_dir/${iter}.mdl"
+        utils/parallel/submit_single.sh \
+            "$parallel_env" \
+            "vae-hmm-train" \
+            "$vae_hmm_train_parallel_opts" \
+            "$cmd" \
+            $mdl_dir/iter$iter || exit 1
 
-        mdl=${epoch}.mdl
+        mdl=${iter}.mdl
     done
 
     cp $mdl_dir/$mdl $mdl_dir/final.mdl

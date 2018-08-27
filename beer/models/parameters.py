@@ -8,14 +8,18 @@ from ..priors import ExpFamilyPrior
 class ConstantParameter:
     'Simple wrapper over ``torch.Tensor`` to handle fixed parameters.'
 
-    __repr_str = '{classname}}(value={value})'
+    __repr_str = '{classname}(value={value})'
 
     def __init__(self, tensor, fixed_dtype=False):
         self.fixed_dtype = fixed_dtype
         self.value = tensor
 
     def __repr__(self):
-        return self.__repr_str.format(self.__class__.__name, value=self.value)
+        return self.__repr_str.format(classname=self.__class__.__name__,
+                                      value=self.value)
+
+    def __hash__(self):
+        return hash(super().__repr__())
 
     def float_(self):
         'Convert value of the parameter to float precision.'

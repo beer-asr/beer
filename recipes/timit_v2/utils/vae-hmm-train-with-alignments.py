@@ -35,6 +35,9 @@ def main():
                         help='learning rate for the nnet components')
     parser.add_argument('--lrate', type=float, default=1.,
                         help='learning rate')
+    parser.add_argument('--nnet-optim-state',
+                        help='file where to load/save state of the nnet '
+                             'optimizer')
     parser.add_argument('--use-gpu', action='store_true')
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('model', help='model to train')
@@ -67,6 +70,11 @@ def main():
         lr=args.lrate_nnet,
         weight_decay=1e-2
     )
+
+    if args.nnet_optim_state and os.path.isfile(args.nnet_optim_state):
+        logging.debug('load nnet optimizer state: {}'.format(args.nnet_optim_state))
+        optim_state = torch.load(args.nnet_optim_state)
+        nnet_optim.load_state_dict(optim_state)
 
     # Prepare the optimizer for the training.
     params = model.mean_field_groups
@@ -102,9 +110,6 @@ def main():
                                              kl_weight=args.kl_weight,
                                              datasize=tot_counts,
                                              fast_eval=args.fast_eval)
-            elbo_value = float(elbo) / tot_counts
-            log_msg = 'Evidence Lower Bound: {}'
-            logging.info(log_msg.format(round(elbo_value, 3)))
 
             # Compute the gradient of the model.
             elbo.natural_backward()
@@ -113,8 +118,17 @@ def main():
             # Update the parameters.
             optimizer.step()
 
+            elbo_value = float(elbo) / tot_counts
+            log_msg = 'epoch={}/{} batch={}/{} elbo={}'
+            logging.info(log_msg.format(
+                epoch, args.epochs,
+                batch_no, len(batches),
+                round(elbo_value, 3))
+            )
 
 
+    if args.nnet_optim_state:
+        torch.save(nnet_optim.state_dict(), args.nnet_optim_state)
 
     with open(args.out, 'wb') as fh:
         pickle.dump(model.to(torch.device('cpu')), fh)
