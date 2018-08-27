@@ -24,6 +24,7 @@ if [ ! -f $decode_dir/decode_results.txt ];then
     python utils/decode_hmm.py $mdl $data_test_dir/feats.npz | \
         python utils/pdf2unit.py --phone-level $pdf_mapping  \
         > $decode_dir/decode_results.txt
+fi
 
 if [ ! -f $decode_dir/decode_result.txt ];then
     echo "Scoring"
