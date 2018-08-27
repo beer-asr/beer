@@ -100,8 +100,8 @@ if [ ! -f $mdl_dir/final.mdl ];then
             utils/parallel/submit_parallel.sh \
                 "$parallel_env" \
                 "align" \
-                "$hmm_align_parallel_opts" \
-                "$hmm_align_njobs" \
+                "$aud_hmm_align_parallel_opts" \
+                "$aud_hmm_align_njobs" \
                 "$data_train_dir/uttids" \
                 "$cmd" \
                 $mdl_dir || exit 1
@@ -140,6 +140,7 @@ if [ ! -f $mdl_dir/final.mdl ];then
             python utils/hmm-set-decoding-graph.py \
                 $mdl_dir/$mdl \
                 $mdl_dir/decode_graph.pkl \
+                $mdl_dir/phones_hmm.graphs \
                 $mdl_dir/$mdl || exit
         fi
 
@@ -149,9 +150,9 @@ if [ ! -f $mdl_dir/final.mdl ];then
 
         echo "Training the emissions"
         cmd="python -u utils/hmm-train-with-alignments.py \
-                --batch-size $hmm_train_emissions_batch_size \
-                --lrate $hmm_train_emissions_lrate \
-                $hmm_train_emissions_opts \
+                --batch-size $aud_hmm_train_emissions_batch_size \
+                --lrate $aud_hmm_train_emissions_lrate \
+                $aud_hmm_train_emissions_opts \
                 $mdl_dir/$((iter - 1)).mdl \
                 $mdl_dir/alis.npz \
                 $data_train_dir/feats.npz \
@@ -160,7 +161,7 @@ if [ ! -f $mdl_dir/final.mdl ];then
         utils/parallel/submit_single.sh \
             "$parallel_env" \
             "hmm-train" \
-            "$hmm_train_parallel_opts" \
+            "$aud_hmm_train_parallel_opts" \
             "$cmd" \
             $mdl_dir || exit 1
 

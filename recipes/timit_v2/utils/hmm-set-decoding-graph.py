@@ -13,7 +13,8 @@ logging.basicConfig(format='%(levelname)s: %(message)s')
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('model', help='input model')
-    parser.add_argument('graph', help='new decoding graph')
+    parser.add_argument('decoding_graph', help='new decoding graph')
+    parser.add_argument('hmm_graphs', help='hmm graph for each unit')
     parser.add_argument('out', help='ouptut model')
     args = parser.parse_args()
 
@@ -21,13 +22,16 @@ def main():
     with open(args.model, 'rb') as fid:
         model = pickle.load(fid)
 
-    # Load the new decoding graph.
-    with open(args.graph, 'rb') as fid:
-        graph = pickle.load(fid)
+    with open(args.decoding_graph, 'rb') as fid:
+        decoding_graph = pickle.load(fid)
+    with open(args.hmm_graphs, 'rb') as fid:
+        hmm_graphs = pickle.load(fid)
 
-    graph.normalize()
-    import pdb; pdb.set_trace()
-    model.graph = beer.ConstantParameter(graph.compile())
+    id2sym = decoding_graph.symbols
+    sym2id = {val: key for key, val in id2sym.items()}
+    for unit, unit_graph in hmm_graphs.items():
+        decoding_graph.replace_state(sym2id[unit], unit_graph)
+    model.graph = beer.ConstantParameter(decoding_graph.compile())
 
     # Save the updated hmm.
     with open(args.out, 'wb') as fh:

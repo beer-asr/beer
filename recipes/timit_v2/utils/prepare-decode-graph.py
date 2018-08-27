@@ -25,8 +25,10 @@ def main():
             start, end = tokens[0], tokens[1]
             states.add(start)
             states.add(end)
-            arcs.add((start, end, 1.0))
-
+            weight = 1.0
+            if len(tokens) == 3:
+                weight = float(tokens[2])
+            arcs.add((start, end, weight))
     # Create the states
     graph = beer.graph.Graph()
     id2sym, sym2id = {}, {}

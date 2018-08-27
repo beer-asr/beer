@@ -44,8 +44,8 @@ def main():
             units_id[tokens[0]] = int(tokens[1])
 
     for utt in ali:
-        best_state_path = [units_id[pdf_mapping[frame.argmax()]]
-                           for frame in ali[utt]]
+        best_state_path = [units_id[pdf_mapping[state]]
+                           for state in ali[utt]]
         best_path = np.asarray([s for s, _ in groupby(best_state_path)])
         path = os.path.join(args.outdir, utt + str('.npy'))
         np.save(path, best_path)

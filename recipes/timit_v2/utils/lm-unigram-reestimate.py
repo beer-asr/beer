@@ -39,6 +39,7 @@ def main():
     # Prepare the optimizer for the training.
     params = model.mean_field_groups
     optimizer = beer.BayesianModelCoordinateAscentOptimizer(params, lrate=1.)
+    optimizer.zero_grad()
 
     # Initialize the objective function.
     elbo = beer.evidence_lower_bound(datasize=tot_counts)
