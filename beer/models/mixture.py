@@ -70,28 +70,19 @@ class Mixture(DiscreteLatentBayesianModel):
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
-    def expected_log_likelihood(self, stats, labels=None):
+    def expected_log_likelihood(self, stats, resps=None):
         # Per-components weighted log-likelihood.
         log_weights = self.weights.expected_natural_parameters().view(1, -1)
         per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
 
         # Responsibilities and expected llh.
-        w_per_component_exp_llh = (per_component_exp_llh + log_weights).detach()
-        w_exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
-        log_resps = w_per_component_exp_llh.detach() - w_exp_llh.view(-1, 1)
-        local_kl_div = self._local_kl_divergence(log_resps)
-        resps = log_resps.exp()
+        if resps is None:
+            w_per_component_exp_llh = (per_component_exp_llh + log_weights).detach()
+            w_exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
+            log_resps = w_per_component_exp_llh.detach() - w_exp_llh.view(-1, 1)
+            local_kl_div = self._local_kl_divergence(log_resps)
+            resps = log_resps.exp()
         exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
-
-        # If some labels are provided, override the previous results.
-        if labels is not None:
-            idxs = labels > -1
-            if idxs.sum() > 0:
-                labels_resps = onehot(labels, len(self.modelset),
-                            dtype=log_weights.dtype, device=log_weights.device)
-                resps[idxs] = labels_resps[idxs]
-                local_kl_div[idxs] = 0.
-                exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
 
         # Store the responsibilites to accumulate the statistics.
         self.cache['resps'] = resps
