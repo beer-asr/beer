@@ -14,7 +14,7 @@ setup=$(pwd)/$1
 
 # Set the stage you want to start from. Keep in mind that some steps
 # depends on previous ones !!
-stage=5
+stage=0
 
 
 # Data preparation. Organize the data directory as:
