@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+
+if [ $# -ne 1 ]; then
+    echo "usage: <command>"
+    exit 1
+fi
+
+cmd=$1
+
+# Set the working directory to the one from where was call "qsub"
+cd ${SGE_O_WORKDIR} || exit 1
+
+echo "# hostname: $(hostname)"
+echo "# CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}"
+echo "# ${cmd}"
+
+. path.sh
+
+# Run the command.
+time $cmd
+
+echo "job succeeded on date $(date)"
+

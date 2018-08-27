@@ -39,6 +39,6 @@ for n in $(seq 1 $num_mdl); do
         --duplicate=$duplicate \
         --phone_map=$phone_48_to_39_map \
         $data_test_dir/trans \
-        $dir/decode_results.txt > $dir/log/score.log 
+        $dir/decode_results.txt > $dir/log/score.log
     cat $dir/log/score.log >> $mdl_dir/decode_all_result.txt
 done

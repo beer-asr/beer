@@ -92,7 +92,7 @@ def main():
             units[phones[unit_id]] = unit
 
         # Create emissions.
-        tot_states = group['n_units'] * group['n_state_per_unit']
+        tot_states = group['n_units'] * (group['n_state_per_unit'] - 2)
         if group['shared_emissions']:
             modelset = beer.NormalSet.create(
                 mean, var,
