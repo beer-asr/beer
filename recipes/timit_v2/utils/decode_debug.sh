@@ -10,12 +10,13 @@ setup=$1
 data_test_dir=$2
 mdl_dir=$3
 decode_type=$4
+num_mdl=29
 decode_dir=$mdl_dir/decode_test
 pdf_mapping=$mdl_dir/pdf_mapping.txt
 [ -f $mdl_dir/decode_all_result.txt ] && rm $mdl_dir/decode_all_result.txt
 touch $mdl_dir/decode_all_result.txt
 
-for n in $(seq 27 28); do
+for n in $(seq 1 $num_mdl); do
     mdl=$mdl_dir/$n.mdl
     dir=${decode_dir}_${n}
     mkdir -p $dir/log

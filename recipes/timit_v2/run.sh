@@ -39,11 +39,15 @@ if [ $stage -le 1 ]; then
     done
 fi
 
-
 # Extract the featuures for each dataset.
+<<<<<<< HEAD
+if [ $stage -le 2 ]; then
+    echo "---------- Features extraction ----------"
+=======
 # Features for each data set will be store in "data/setname/feats.npz".
 if [ $stage -le 2 ]; then
     echo "--> Features extraction"
+>>>>>>> master
     for s in train test dev; do
         echo "Extracting features for: $s"
         steps/extract_features.sh $setup $datadir/$s || exit 1

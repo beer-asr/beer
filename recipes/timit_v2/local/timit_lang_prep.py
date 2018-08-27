@@ -11,21 +11,25 @@ def main():
 
     if not os.path.exists(args.outdir):
         os.makedirs(args.outdir)
-    phone_48_file = os.path.join(args.outdir, 'phones.txt')
+    phone_61_file = os.path.join(args.outdir, 'phones_61.txt')
+    phone_48_file = os.path.join(args.outdir, 'phones_48.txt')
     phone_39_file = os.path.join(args.outdir, 'phones_39.txt')
     phone_map_file = os.path.join(args.outdir, 'phones_48_to_39.txt')
 
     dict_phone_47 = {}
-    dict_map = {}
+    map_48_to_39 = {}
+    phone_59 = []
     with open(args.phonelist, 'r') as f:
         for line in f:
             tokens = line.strip().split()
+            if tokens[0] != 'h#' and tokens[0] != 'pau':
+                phone_59.append(tokens[0])
             if tokens[0] != 'q' and tokens[1] != 'sil':
                 p_47 = tokens[1]
                 p_39 = tokens[2]
                 dict_phone_47[p_47] = 0
-                dict_map[p_47] = p_39
-    phone_39 = sorted(set(dict_map.values()))
+                map_48_to_39[p_47] = p_39
+    phone_39 = sorted(set(map_48_to_39.values()))
     phone_39.remove('sil')
     phone_39 = ['sil'] + phone_39
     dict_39_id = dict((j, i) for i, j in enumerate(phone_39))
@@ -35,10 +39,15 @@ def main():
             print('sil sil', file=f2)
             for i, k in enumerate(sorted(dict_phone_47.keys())):
                  print(k, str(i+1), file=f1)
-                 print(k, dict_map[k], file=f2)
+                 print(k, map_48_to_39[k], file=f2)
     with open(phone_39_file, 'w') as f4:
         for k in dict_39_id.keys():
             print(k, dict_39_id[k], file=f4)
+    with open(phone_61_file, 'w') as f5:
+        print('h# 0', file=f5)
+        print('pau 1', file=f5)
+        for i, j in enumerate(phone_59):
+            print(j, str(i+2), file=f5)
 
 if __name__ == '__main__':
     main()
