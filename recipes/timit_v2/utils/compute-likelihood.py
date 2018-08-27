@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+import os
 import pickle
 import numpy as np
 import torch
@@ -25,7 +26,7 @@ def read_pdf2phone(infile):
             tokens = line.strip().split()
             mapping[int(tokens[0])] = tokens[1]
             if tokens[1] != prev_unit:
-                start_pdfs.append(tokens[0])
+                start_pdfs.append(int(tokens[0]))
                 prev_unit = tokens[1]
     return mapping, start_pdfs
 
@@ -51,7 +52,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('model', type=str, help='Decoding model')
     parser.add_argument('feats', type=str, help='Features to process')
-    parser.add_argument('outfile', type=str, help='Output file')
+    parser.add_argument('outdir', type=str, help='Output file')
     parser.add_argument('--align', type=str,
         help='A npz file with per frame alignment. If not empty, use it \
         to merge per farme likelihood into phone level')
@@ -59,11 +60,11 @@ def main():
         help='File mapping pdf id(int) into phone symbols(str)')
     args = parser.parse_args()
     feats = np.load(args.feats)
-    outfile = args.outfile
+    outdir = args.outdir
     alignfile = args.align
     mapfile = args.pdf2phone
     smooth = None
-    print('main')
+
     if alignfile:
         if not mapfile:
             sys.exit('Pdf2phone mapping file needed if merging likelihood' +
@@ -74,17 +75,15 @@ def main():
             smooth = 1
     with open(args.model, 'rb') as m:
         model = pickle.load(m)
-    with open(outfile, 'w') as fid:
-        for k in feats.keys():
-            print(k)
-            ft = torch.from_numpy(feats[k]).float()
-            stats = model.sufficient_statistics(ft)
-            llhs = model.expected_log_likelihood(stats).tolist()
-            if smooth:
-                ref_path = aligns[k]
-                llhs = merge_llhs(llhs, ref_path, start_ids)
-                print(llhs)
-        print(k, llhs, file=fid)
+    for k in feats.keys():
+        ft = torch.from_numpy(feats[k]).float()
+        stats = model.sufficient_statistics(ft)
+        llhs = model.expected_log_likelihood(stats).tolist()
+        if smooth:
+            ref_path = aligns[k]
+            llhs = merge_llhs(llhs, ref_path, start_ids)
+        outfile = os.path.join(outdir, k + '.npy')
+        np.save(outfile, llhs)
 
 if __name__ == '__main__':
     main()

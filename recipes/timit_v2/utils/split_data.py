@@ -10,7 +10,6 @@ def split_data(data, chunks):
     for k in chunks:
         yield dict((keys[i], data[keys[i]]) for i in k)
 
-
 def main():
     parser = argparse.ArgumentParser(description='Split data into N subsets')
     parser.add_argument('srcdir', help='Source directory')
@@ -41,14 +40,16 @@ def main():
         sub_dir = os.path.join(tgtdir, str(i+1))
         if not os.path.exists(sub_dir):
             os.makedirs(sub_dir)
+        sub_uttids = os.path.join(sub_dir, 'uttids')
         sub_feats = os.path.join(sub_dir, 'feats.npz')
         sub_phones = os.path.join(sub_dir, 'phones.int.npz')
         sub_trans = os.path.join(sub_dir, 'trans')
         np.savez(sub_feats, **ft)
         np.savez(sub_phones, **ph)
-        with open(sub_trans, 'w') as f:
+        with open(sub_uttids, 'w') as f1, open(sub_trans, 'w') as f2:
             for utt in tr.keys():
-                print(utt, tr[utt], file=f)
+                print(utt, file=f1)
+                print(utt, tr[utt], file=f2)
 
 
 if __name__ == "__main__":

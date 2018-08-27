@@ -21,6 +21,7 @@ def main():
     src_feats_file = os.path.join(srcdir, 'feats.npz')
     src_trans = os.path.join(srcdir, 'trans')
     src_phone_int = os.path.join(srcdir, 'phones.int.npz')
+    tgt_uttids = os.path.join(tgtdir, 'uttids')
     tgt_feats_file = os.path.join(tgtdir, 'feats.npz')
     tgt_trans = os.path.join(tgtdir, 'trans')
     tgt_phone_int = os.path.join(tgtdir, 'phones.int.npz')
@@ -37,13 +38,14 @@ def main():
 
     dict_tgt_feat = {}
     dict_tgt_phones = {}
-    with open(tgt_trans, 'w') as f:
+    with open(tgt_trans, 'w') as f1, open(tgt_uttids, 'w') as f2:
         for i in range(n_utt):
             utt = src_keys[i]
             ft = src_feats[utt]
             phone_int = src_phones[utt]
             trans = ' '.join(dict_src_trans[utt])
-            print(utt, trans, file=f)
+            print(utt, trans, file=f1)
+            print(utt, file=f2)
             dict_tgt_feat[utt] = ft
             dict_tgt_phones[utt] = phone_int
     np.savez(tgt_feats_file, **dict_tgt_feat)
