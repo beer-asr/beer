@@ -42,43 +42,6 @@ class HMM(DiscreteLatentBayesianModel):
         super().__init__(modelset)
         self.graph = ConstantParameter(graph)
 
-
-    def _align(self, pc_llhs, inference_graph, align_type):
-        # Align the data.
-        if align_type == 'viterbi':
-            ali = inference_graph.best_path(pc_llhs)
-            ali = onehot(ali, inference_graph.n_states, pc_llhs.dtype,
-                         pc_llhs.device)
-        elif align_type == 'baum_welch':
-            ali = inference_graph.posteriors(pc_llhs)
-        elif align_type == 'sample':
-            raise NotImplementedError
-        else:
-            raise ValueError('Unknown alignment type: {}'.format(align_type))
-
-        return ali
-
-    def align(self, data, inference_graph=None, align_type='viterbi'):
-        '''Align input data to the HMM states.
-
-        Args:
-            data (``torch.Tensor``): Data to align.
-            inference_graph (:any:`CompiledGraph`): Alignment graph,
-                if none given, use the given graph.
-            align_type (string): Type of alignment ('viterbi', 'baum_welch',
-                or 'sample').
-
-        Returns:
-            alignments (``torch.Matrix``): Alignment matrix.
-
-        '''
-        if inference_graph is None:
-            inference_graph = self.graph.value
-        stats = self.sufficient_statistics(data)
-        emissions = AlignModelSet(self.modelset, inference_graph.pdf_id_mapping)
-        pc_llhs = emissions.expected_log_likelihood(stats)
-        return self._align(pc_llhs, inference_graph, align_type)
-
     def decode(self, data, inference_graph=None):
         # Prepare the inference graph.
         if inference_graph is None:
@@ -112,13 +75,23 @@ class HMM(DiscreteLatentBayesianModel):
         return self.modelset.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats, inference_graph=None,
-                                align_type='viterbi', resps=None):
+                                inference_type='viterbi', state_path=None):
         if inference_graph is None:
             inference_graph = self.graph.value
         emissions = AlignModelSet(self.modelset, inference_graph.pdf_id_mapping)
         pc_llhs = emissions.expected_log_likelihood(stats)
-        if resps is None:
-            resps = self._align(pc_llhs, inference_graph, align_type)
+        if state_path is not None:
+            resps = onehot(state_path, inference_graph.n_states,
+                           dtype=pc_llhs.dtype, device=pc_llhs.device)
+        elif inference_type == 'baum_welch':
+            resps = inference_graph.posteriors(pc_llhs)
+        elif inference_type == 'viterbi':
+            resps = onehot(inference_graph.best_path(pc_llhs),
+                           inference_graph.n_states,
+                           dtype=pc_llhs.dtype, device=pc_llhs.device)
+        else:
+            raise ValueError('Unknown inference type {} for the ' \
+                             'HMM'.format(inference_type))
         exp_llh = (pc_llhs * resps).sum(dim=-1)
 
         # Needed to accumulate the statistics.
@@ -141,7 +114,12 @@ class HMM(DiscreteLatentBayesianModel):
     ####################################################################
 
     def posteriors(self, data, inference_graph=None):
-        return self.align(data, inference_graph, align_type='baum_welch')
+        if inference_graph is None:
+            inference_graph = self.graph.value
+        stats = self.modelset.sufficient_statistics(data)
+        emissions = AlignModelSet(self.modelset, inference_graph.pdf_id_mapping)
+        pc_exp_llh = emissions.expected_log_likelihood(stats)
+        return inference_graph.posteriors(pc_exp_llh)
 
 
 class AlignModelSet(BayesianModelSet):

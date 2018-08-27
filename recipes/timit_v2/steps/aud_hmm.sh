@@ -72,7 +72,7 @@ fi
 
 # Make sure all temporary directories will be cleaned up whatever
 # happens.
-trap "rm -rf \"$mdl_dir/beer.tmp*\"" EXIT
+trap "rm -fr $mdl_dir/beer.tmp* &" EXIT
 
 
 # Train the model.

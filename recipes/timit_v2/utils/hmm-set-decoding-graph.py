@@ -26,7 +26,8 @@ def main():
         graph = pickle.load(fid)
 
     graph.normalize()
-    model.graph = beer.ConstantParameters(graph.compile())
+    import pdb; pdb.set_trace()
+    model.graph = beer.ConstantParameter(graph.compile())
 
     # Save the updated hmm.
     with open(args.out, 'wb') as fh:

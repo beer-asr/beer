@@ -82,11 +82,11 @@ def main():
             optimizer.zero_grad()
 
             # Load the batch data.
-            ft, labels = load_batch(feats, alis, batch_keys)
-            ft, labels = ft.to(device), labels.to(device)
+            ft, ali= load_batch(feats, alis, batch_keys)
+            ft, ali = ft.to(device), ali.to(device)
 
             # Compute the objective function.
-            elbo = beer.evidence_lower_bound(model, ft, state_path=labels,
+            elbo = beer.evidence_lower_bound(model, ft, state_path=ali,
                                              datasize=tot_counts,
                                              fast_eval=args.fast_eval)
 

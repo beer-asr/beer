@@ -21,8 +21,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ali-graphs', help='aligment graph for each ' \
                                              'utterance')
-    parser.add_argument('--ali-type', choices=['viterbi', 'baum_welch'],
-                        default='viterbi', help='alignment type')
     parser.add_argument('hmm', help='hmm model to train')
     parser.add_argument('feats', help='Feature file')
     parser.add_argument('outdir', help='output directory')
@@ -44,7 +42,7 @@ def main():
         graph = None
         if ali_graphs is not None:
             graph = ali_graphs[uttid][0]
-        ali = model.align(ft, inference_graph=graph, align_type=args.ali_type)
+        ali = model.decode(ft, inference_graph=graph)
         path = os.path.join(args.outdir, uttid + '.npy')
         np.save(path, ali.numpy())
 
