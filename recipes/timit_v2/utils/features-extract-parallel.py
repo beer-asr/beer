@@ -87,6 +87,9 @@ def main():
             logging.error(message.format(feaconf['srate'], sr))
             exit(1)
 
+        # Remove the DC.
+        signal = signal - signal.mean()
+
         # Log-mel spectrum.
         features = beer.features.fbank(
             signal,
