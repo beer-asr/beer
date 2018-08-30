@@ -85,7 +85,7 @@ if [ ! -f $mdl_dir/0.mdl ]; then
         $vae_hmm_nflow_conf \
         $mdl_dir/nflow.mdl || exit_msg "Failed to create the VAE norm. flow"
 
-    python utils/create_vae.py \
+    python utils/vae-hmm-create.py \
         --encoder-cov-type $vae_hmm_encoder_cov_type \
         --decoder-cov-type $vae_hmm_decoder_cov_type \
         $data_train_dir/feats.stats.npz \
