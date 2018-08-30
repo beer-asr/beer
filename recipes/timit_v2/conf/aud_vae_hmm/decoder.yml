@@ -1,0 +1,11 @@
+# Decoder of the VAE model. It is symmetric to the encoder. see
+# "encoder.yml" in the same directory.
+
+nnet_structure:
+- block_structure:
+  - Linear:in_features={dim_in};out_features={width}
+  - ELU
+  - Linear:in_features={width};out_features={dim_out}
+  - ELU
+  residual: Linear:in_features={dim_in};out_features={dim_out}
+

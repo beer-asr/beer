@@ -1,9 +1,7 @@
 #!/bin/bash
 
-exit_msg (){
-    echo "$1"
-    exit 1
-}
+# Train a context independent HMM based Phone Recognizer.
+
 
 if [ $# -ne 3 ];then
     echo "$0: <setup.sh> <data-train-dir> <mdl-dir>"
@@ -13,22 +11,23 @@ fi
 setup=$1
 data_train_dir=$2
 mdl_dir=$3
-mkdir -p $mdl_dir/log
+mkdir -p $mdl_dir
+
 
 . $setup
+[[ -f "$hmm_conf" ]] || \
+    { echo "File not found: $hmm_conf"; exit 1; }
 
-[ -f "$hmm_emission_conf" ] || exit_msg "File not found: $hmm_emission_conf"
 
-# Copy the configuration files for information.
-if [ ! -d $mdl_dir ];then
-    mkdir -p $mdl_dir/log
-fi
-cp $setup $mdl_dir/setup.sh
-cp $fea_conf $mdl_dir/feats.conf
-cp $hmm_emission_conf $mdl_dir/emissions.yml
 
-if [ ! -f $mdl_dir/init.mdl ]; then
+if [ ! -f $mdl_dir/0.mdl ]; then
     echo "Building the HMM model..."
+
+    # Copy the configuration files for information.
+    cp $setup $mdl_dir
+    cp $fea_conf $mdl_dir
+    cp $hmm_conf $mdl_dir
+
     # Build the decoding graph.
     python utils/prepare-decode-graph.py \
         $langdir/phone_graph.txt $mdl_dir/decode.graph || exit 1
@@ -36,7 +35,7 @@ if [ ! -f $mdl_dir/init.mdl ]; then
     # Create the phones' hmm graph and their respective emissions.
     python utils/hmm-create-graph-and-emissions.py \
         --stats $data_train_dir/feats.stats.npz \
-         $hmm_emission_conf \
+         $hmm_conf \
          $langdir/phones.txt \
          $mdl_dir/phones_hmm.graphs \
          $mdl_dir/emissions.mdl || exit 1
@@ -52,55 +51,98 @@ if [ ! -f $mdl_dir/init.mdl ]; then
         $mdl_dir/emissions.mdl \
         $mdl_dir/0.mdl || exit 1
 else
-    echo "Using previous created HMM: $mdl_dir/init.mdl"
+    echo "Using previously created HMM: $mdl_dir/0.mdl"
 fi
 
 
-# Prepare the alignments.
+# Make sure all temporary directories will be cleaned up whatever
+# happens.
+trap "rm -rf $mdl_dir/beer.tmp* &" EXIT
+
+
+# Prepare the alignments the alignemnts graphs.
 if [ ! -f $mdl_dir/ali_graphs.npz ]; then
-    echo "Preparing the alignment graph..."
+    echo "Preparing alignment graphs..."
 
-    tmpdir=$(mktemp -d /tmp/beer.XXXX);
-    trap 'rm -rf "$tmpdir"' EXIT
-
-    python utils/prepare-alignments.py \
-        $mdl_dir/phones_hmm.graphs \
-        $data_train_dir/trans \
-        $tmpdir
+    tmpdir=$(mktemp -d $mdl_dir/beer.tmp.XXXX);
+    cmd="python utils/prepare-alignments.py \
+            $mdl_dir/phones_hmm.graphs $tmpdir"
+    utils/parallel/submit_parallel.sh \
+        "$parallel_env" \
+        "prepare-align" \
+        "$hmm_align_parallel_opts" \
+        "$hmm_align_njobs" \
+        "$data_train_dir/trans" \
+        "$cmd" \
+        $mdl_dir || exit 1
     find $tmpdir -name '*npy' \
         | zip -j -@ $mdl_dir/ali_graphs.npz > /dev/null || exit 1
+
 else
-    echo "Alignment already prepared: $mdl_dir/ali.npz"
+    echo "Alignment graphs already prepared: $mdl_dir/ali_graphs.npz"
 fi
 
+
+# Train the model.
 if [ ! -f $mdl_dir/final.mdl ];then
     echo "Training HMM-GMM model"
 
-    # Retrieve the last model (ordered by number) and use it as
-    # initial model for the training.
-    start_mdl=$(find $mdl_dir -name "[0-9]*mdl" -exec basename {} \; | \
+    # Retrieve the last model.
+    mdl=$(find $mdl_dir -name "[0-9]*mdl" -exec basename {} \; | \
         sort -t '.' -k 1 -g | tail -1)
+    iter="${mdl%.*}"
 
-    rm -fr $mdl_dir/log/sge.log
+    if [ $iter -ge 1 ]; then
+        echo "Found existing model. Starting from iteration: $((iter + 1))"
+    fi
 
-    cmd="python -u utils/hmm-train.py \
-            --alignments $mdl_dir/ali_graphs.npz \
-            --batch-size $hmm_batch_size \
-            --epochs $hmm_epochs \
-            --infer-type $hmm_infer_type \
-            --lrate $hmm_lrate \
-            --tmpdir $mdl_dir \
-            $use_gpu $hmm_fast_eval \
-            $mdl_dir/$start_mdl \
-            $data_train_dir/feats.npz \
-            $data_train_dir/feats.stats.npz \
-            $mdl_dir/final.mdl"
-    qsub \
-        -N "beer-hmm-gmm" \
-        -cwd -j y \
-        -o $mdl_dir/log/sge.log -sync y \
-        $hmm_train_sge_opts \
-        utils/job.qsub "$cmd" || exit 1
+    while [ $((++iter)) -le $hmm_train_iters ]; do
+        echo "Iteration: $iter"
+
+        if echo $hmm_align_iters | grep -w $iter >/dev/null; then
+            echo "Aligning data"
+
+            tmpdir=$(mktemp -d $mdl_dir/tmp.XXXX);
+            cmd="python utils/hmm-align.py \
+                --ali-graphs $mdl_dir/ali_graphs.npz \
+                $mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir"
+            utils/parallel/submit_parallel.sh \
+                "$parallel_env" \
+                "hmm-align-iter$iter" \
+                "$hmm_align_parallel_opts" \
+                "$hmm_align_njobs" \
+                "$data_train_dir/uttids" \
+                "$cmd" \
+                $mdl_dir || exit 1
+            find $tmpdir -name '*npy' | \
+                  zip -j -@ $mdl_dir/alis.npz > /dev/null || exit 1
+        fi
+
+        # Clean up the tmp directory to avoid the disk usage to
+        # grow without bound.
+        rm -fr $tmpdir &
+
+        echo "Training the emissions"
+        cmd="python -u utils/hmm-train-with-alignments.py \
+                --batch-size $hmm_train_batch_size \
+                --lrate $hmm_train_lrate \
+                $hmm_train_opts \
+                $mdl_dir/$((iter - 1)).mdl \
+                $mdl_dir/alis.npz \
+                $data_train_dir/feats.npz \
+                $data_train_dir/feats.stats.npz \
+                $mdl_dir/${iter}.mdl"
+        utils/parallel/submit_single.sh \
+            "$parallel_env" \
+            "vae-hmm-train-iter$iter" \
+            "$hmm_train_parallel_opts" \
+            "$cmd" \
+            $mdl_dir || exit 1
+
+        mdl=${iter}.mdl
+    done
+
+    ln -s $mdl_dir/$mdl $mdl_dir/final.mdl
 else
     echo "Model already trained: $mdl_dir/final.mdl"
 fi

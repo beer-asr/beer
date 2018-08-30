@@ -14,7 +14,7 @@ setup=$(pwd)/$1
 
 # Set the stage you want to start from. Keep in mind that some steps
 # depends on previous ones !!
-stage=5
+stage=0
 
 
 # Data preparation. Organize the data directory as:
@@ -39,9 +39,8 @@ if [ $stage -le 1 ]; then
     done
 fi
 
-
-# Extract the featuures for each dataset.
-# Features for each data set will be store in "data/setname/feats.npz".
+# Extract the features for each dataset.
+# Features will be store in "data/setname/feats.npz".
 if [ $stage -le 2 ]; then
     echo "--> Features extraction"
     for s in train test dev; do
@@ -51,10 +50,13 @@ if [ $stage -le 2 ]; then
 fi
 
 
-# HMM-GMM monophone.
+# HMM monophone.
 if [ $stage -le 3 ]; then
-    echo "--> HMM-GMM system"
-    steps/train_hmm2.sh $setup $datadir/train $hmm_dir || exit 1
+    echo "--> HMM system"
+    steps/train_hmm.sh $setup $datadir/train $hmm_dir || exit 1
+
+    steps/decode_hmm.sh $setup $hmm_dir $datadir/train\
+        $hmm_dir/decode_train || exit 1
 
     steps/decode_hmm.sh $setup $hmm_dir $datadir/test \
         $hmm_dir/decode || exit 1
@@ -65,10 +67,10 @@ fi
 # to initialize the model.
 if [ $stage -le 3 ]; then
     echo "--> VAE-HMM system"
-    steps/train_vae_hmm2.sh $setup $hmm_dir/alis.npz \
+    steps/train_vae_hmm.sh $setup $hmm_dir/alis.npz \
         $datadir/train $vae_hmm_dir || exit 1
 
-    steps/decode_vae_hmm2.sh $setup $vae_hmm_dir $datadir/test \
+    steps/decode_vae_hmm.sh $setup $vae_hmm_dir $datadir/test \
         $vae_hmm_dir/decode || exit 1
 fi
 
@@ -95,5 +97,20 @@ if [ $stage -le 5 ]; then
 
     steps/decode_hmm.sh $setup $aud_hmm_dir $datadir/test \
         $aud_hmm_dir/decode_test || exit 1
+fi
+
+
+if [ $stage -le 6 ]; then
+    echo "--> Acoustic Unit Discovery (VAE-HMM)"
+    utils/prepare_aud_lang.sh $aud_vae_hmm_n_units $datadir/lang_aud_vae_hmm || exit 1
+
+    steps/aud_vae_hmm.sh $setup $datadir/lang_aud_vae_hmm $aud_hmm_dir/alis.npz \
+        $datadir/train $aud_vae_hmm_dir || exit 1
+
+    steps/decode_vae_hmm.sh $setup $aud_vae_hmm_dir $datadir/train \
+        $aud_vae_hmm_dir/decode_train || exit 1
+
+    steps/decode_vae_hmm.sh $setup $aud_vae_hmm_dir $datadir/test \
+        $aud_vae_hmm_dir/decode_test || exit 1
 fi
 
