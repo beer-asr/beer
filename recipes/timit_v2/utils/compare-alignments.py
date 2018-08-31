@@ -27,6 +27,8 @@ def main():
     parser.add_argument('--epsilon', type=float, default=1e-12,
                         help='small constant to add to the confusion ' \
                              'matrix to avoid overflow')
+    parser.add_argument('--groups', help='list of ref symbol group to be '\
+                                         'merged together')
     parser.add_argument('ref_alis', help='reference alignments')
     parser.add_argument('ref_pdf_mapping', help='pdf mapping for the ' \
                                                 'reference alignments')
@@ -64,17 +66,26 @@ def main():
             hyp_counts[hyp_sym] += 1
             joint_counts[ref_sym][hyp_sym] += 1
 
-    # Normalize the count to get a valid distribution.
-    total = np.sum([count for count in ref_counts.values()])
-    for ref_sym in ref_counts:
-        ref_counts[ref_sym] /= total
-    total = np.sum([count for count in hyp_counts.values()])
-    for hyp_sym in hyp_counts:
-        hyp_counts[hyp_sym] /= total
-    for ref_sym in ref_counts:
-        total = np.sum([count for count in joint_counts[ref_sym].values()])
-        for hyp_sym in joint_counts[ref_sym]:
-            joint_counts[ref_sym][hyp_sym] /= total
+    # Remap the confusion matrix.
+    if args.groups:
+        logging.debug(f'grouping the confusion matrix using: {args.groups}')
+        groups = {}
+        with open(args.groups, 'r') as f:
+            for line in f:
+                name, syms = line.strip().split(':')
+                groups[name] = tuple(syms.strip().split())
+        mapped_joint_counts = defaultdict(partial(defaultdict, partial(float, args.epsilon)))
+        mapped_ref_counts = defaultdict(partial(float, args.epsilon))
+        for name in groups:
+            for ref_sym in groups[name]:
+                for hyp_sym in joint_counts[ref_sym]:
+                    mapped_joint_counts[name][hyp_sym] += \
+                        joint_counts[ref_sym][hyp_sym]
+                mapped_ref_counts[name] += ref_counts[ref_sym]
+        joint_counts = mapped_joint_counts
+        ref_counts = mapped_ref_counts
+
+    #import pdb; pdb.set_trace()
 
     with open(args.out, 'wb') as f:
         pickle.dump((joint_counts, ref_counts, hyp_counts), f)

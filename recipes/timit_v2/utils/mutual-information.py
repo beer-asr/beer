@@ -6,7 +6,6 @@ This script is to be used with "utils/compare-alignments.py"
 
 import argparse
 from collections import defaultdict
-from functools import partial
 import logging
 import math
 import pickle
@@ -27,7 +26,24 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
 
     with open(args.data, 'rb') as f:
-        p_X_given_Y, p_Y, p_X = pickle.load(f)
+        joint_counts, ref_counts, hyp_counts = pickle.load(f)
+
+    # Normalize the count to get a valid distribution.
+    total = np.sum([count for count in ref_counts.values()])
+    for ref_sym in ref_counts:
+        ref_counts[ref_sym] /= total
+    total = np.sum([count for count in hyp_counts.values()])
+    for hyp_sym in hyp_counts:
+        hyp_counts[hyp_sym] /= total
+    for ref_sym in ref_counts:
+        total = np.sum([count for count in joint_counts[ref_sym].values()])
+        for hyp_sym in joint_counts[ref_sym]:
+            joint_counts[ref_sym][hyp_sym] /= total
+
+
+    p_X_given_Y = joint_counts
+    p_X = hyp_counts
+    p_Y = ref_counts
 
     H_X = np.sum([-prob * np.log(prob) for prob in p_X.values()]) / math.log(2)
     H_Y = np.sum([-prob * np.log(prob) for prob in p_Y.values()]) / math.log(2)

@@ -1,0 +1,2 @@
+stops: p t k b d g jh ch
+non-stops: s sh z zh f th v dh hh hv aa ae ah ao ax ax-h axr ay aw eh el er ey ih ix iy l ow oy r uh uw ux w y m em n nx ng eng en h#, epi pau bcl dcl gcl pcl tcl kcl q dx sil
