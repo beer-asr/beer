@@ -43,11 +43,15 @@ fi
 # Features will be store in "data/setname/feats.npz".
 if [ $stage -le 2 ]; then
     echo "--> Features extraction"
-    for s in train test dev; do
-        echo "Extracting features for: $s"
-        steps/extract_features.sh $setup $datadir/$s || exit 1
-    done
+    for fea_type in mfcc fbank logspec; do
+        for s in train test dev; do
+            echo "Extracting ${fea_type} features for: $s"
+            steps/extract_features.sh $setup $datadir/$s $fea_type || exit 1
+        done
+   done
 fi
+
+exit 0
 
 
 # HMM monophone.

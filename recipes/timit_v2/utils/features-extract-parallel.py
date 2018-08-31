@@ -35,7 +35,7 @@ feaconf = {
     'apply_deltas': True,
     'delta_order': 2,
     'delta_winlen': 2,
-    'apply_dct': False,
+    'apply_dct': True,
     'n_dct_coeff': 13,
     'lifter_coeff': 22,
     'utt_mnorm': True,
