@@ -1,0 +1,13 @@
+# Configuration to get the "log spectrum" features.
+
+
+# Raw signal pre-processing.
+srate: 16000
+preemph: 0.97
+window_len: 0.025
+framerate: 0.01
+apply_fbank: no
+apply_deltas: no
+apply_dct: no
+utt_mnorm: yes
+
