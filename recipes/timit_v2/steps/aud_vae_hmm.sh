@@ -17,6 +17,9 @@ mkdir -p $mdl_dir
 
 . $setup
 
+fea=$data_train_dir/${aud_vae_hmm_fea_type}.npz
+feastats=$data_train_dir/${aud_vae_hmm_fea_type}.stats.npz
+
 
 if [ ! -f $mdl_dir/0.mdl ]; then
     echo "Building the VAE-HMM AUD model..."
@@ -42,7 +45,7 @@ if [ ! -f $mdl_dir/0.mdl ]; then
 
     # Get the dimension of the data.
     pycmd="import numpy as np; \
-    utts = np.load('$data_train_dir/feats.npz'); \
+    utts = np.load('$fea'); \
     print(utts[utts.files[0]].shape[1])"
     feadim=$(python -c "$pycmd")
 
@@ -87,7 +90,7 @@ if [ ! -f $mdl_dir/0.mdl ]; then
     python utils/vae-hmm-create.py \
         --encoder-cov-type $aud_vae_hmm_encoder_cov_type \
         --decoder-cov-type $aud_vae_hmm_decoder_cov_type \
-        $data_train_dir/feats.stats.npz \
+        $feastats \
         $aud_vae_hmm_nnet_width \
         $aud_vae_hmm_latent_dim \
         $mdl_dir/encoder.mdl \
@@ -129,7 +132,7 @@ if [ ! -f $mdl_dir/final.mdl ];then
 
             tmpdir=$(mktemp -d $mdl_dir/beer.tmp.XXXX);
             cmd="python utils/vae-hmm-align.py \
-                $mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir"
+                $mdl_dir/$mdl  $fea $tmpdir"
             utils/parallel/submit_parallel.sh \
                 "$parallel_env" \
                 "vae-hmm-align-iter$iter" \
@@ -140,6 +143,7 @@ if [ ! -f $mdl_dir/final.mdl ];then
                 $mdl_dir || exit 1
             find $tmpdir -name '*npy' | \
                   zip -j -@ $mdl_dir/alis.npz > /dev/null || exit 1
+            cp $mdl_dir/alis.npz $mdl_dir/alis.${iter}.npz
 
             echo "Re-estimating the unigram LM of the units..."
 
@@ -192,14 +196,15 @@ if [ ! -f $mdl_dir/final.mdl ];then
                 --verbose \
                 --batch-size $aud_vae_hmm_train_batch_size \
                 --lrate $aud_vae_hmm_train_lrate \
+                --lrate-nnet $aud_vae_hmm_train_nnet_lrate \
                 --epochs $aud_vae_hmm_train_epochs_per_iter \
                 --nnet-optim-state $mdl_dir/nnet_optim_state.pkl \
                 $kl_div_weight \
                 $aud_vae_hmm_train_opts \
                 $mdl_dir/$((iter - 1)).mdl \
                 $mdl_dir/alis.npz \
-                $data_train_dir/feats.npz \
-                $data_train_dir/feats.stats.npz \
+                $fea \
+                $feastats \
                 $mdl_dir/${iter}.mdl"
         utils/parallel/submit_single.sh \
             "$parallel_env" \

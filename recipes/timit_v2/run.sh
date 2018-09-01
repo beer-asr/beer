@@ -51,8 +51,6 @@ if [ $stage -le 2 ]; then
    done
 fi
 
-exit 0
-
 
 # HMM monophone.
 if [ $stage -le 3 ]; then

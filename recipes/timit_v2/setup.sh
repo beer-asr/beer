@@ -9,7 +9,7 @@ if [[ "$hostname" == *".fit.vutbr.cz" ]]; then
     server=matylda5
     parallel_env=sge
     parallel_opts="-l mem_free=200M,ram_free=200M,$server=1"
-    parallel_opts_gpu="-l gpu=1,mem_free=1G,ram_free=1G"
+    parallel_opts_gpu="-l gpu=1,mem_free=1G,ram_free=1G,hostname=*face*"
 elif [[ "$hostname" = *"clsp.jhu.edu" ]]; then
     timit=/export/corpora5/LDC/LDC93S1/timit/TIMIT
     parallel_env=sge
@@ -106,13 +106,16 @@ aud_hmm_decode_parallel_opts="$parallel_opts"
 #######################################################################
 # AUD (VAE-HMM) model parameters.
 
-aud_vae_hmm_confdir=$confdir/aud_vae_hmm
-aud_vae_hmm_dir=$expdir/aud_vae_hmm
+aud_vae_hmm_fea_type=logspec
+aud_vae_hmm_model=aud_conv_vae_hmm
+aud_vae_hmm_confdir=$confdir/$aud_vae_hmm_model
+aud_vae_hmm_dir=$expdir/$aud_vae_hmm_model
 aud_vae_hmm_encoder_conf=$aud_vae_hmm_confdir/encoder.yml
 aud_vae_hmm_decoder_conf=$aud_vae_hmm_confdir/decoder.yml
 aud_vae_hmm_nflow_conf=$aud_vae_hmm_confdir/normalizing_flow.yml
 aud_vae_hmm_hmm_conf=$aud_vae_hmm_confdir/hmm.yml
-aud_vae_hmm_nnet_width=512
+aud_vae_hmm_fea_type=logspec
+aud_vae_hmm_nnet_width=128
 aud_vae_hmm_latent_dim=30
 aud_vae_hmm_encoder_cov_type=isotropic
 aud_vae_hmm_decoder_cov_type=diagonal
@@ -125,7 +128,7 @@ aud_vae_hmm_train_warmup_iters=0
 aud_vae_hmm_train_iters=30
 aud_vae_hmm_train_epochs_per_iter=10
 aud_vae_hmm_train_nnet_lrate=1e-3
-aud_vae_hmm_train_lrate=5e-2
+aud_vae_hmm_train_lrate=1e-1
 aud_vae_hmm_train_batch_size=100
 aud_vae_hmm_train_epochs=10
 aud_vae_hmm_train_opts="--fast-eval --use-gpu"
