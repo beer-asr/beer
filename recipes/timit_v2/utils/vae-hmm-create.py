@@ -45,7 +45,7 @@ def main():
         encoder = pickle.load(fid)
 
     with open(args.nflow, 'rb') as fid:
-        nflow = pickle.load(fid)
+        nnet_flow, flow_params_dim = pickle.load(fid)
 
     with open(args.latent_model, 'rb') as fid:
         latent_model = pickle.load(fid)
@@ -56,6 +56,13 @@ def main():
     prob_layer = encoder_normal_layer[args.encoder_cov_type]
     enc_prob_layer = prob_layer(args.encoder_out_dim, args.latent_dim)
 
+    nflow = beer.nnet.InverseAutoRegressiveFlow(
+        dim_in=args.latent_dim,
+        flow_params_dim=flow_params_dim,
+        normal_layer=enc_prob_layer,
+        nnet_flow=nnet_flow
+    )
+
     data_mean = torch.from_numpy(stats['mean']).float()
     data_var = torch.from_numpy(stats['var']).float()
     normal = beer.Normal.create(data_mean, data_var,
@@ -63,7 +70,7 @@ def main():
 
     vae = beer.VAEGlobalMeanVariance(
         encoder,
-        enc_prob_layer,
+        nflow,
         decoder,
         normal,
         latent_model

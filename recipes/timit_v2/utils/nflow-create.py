@@ -11,6 +11,11 @@ import beer
 
 logging.basicConfig(format='%(levelname)s: %(message)s')
 
+normal_layer = {
+    'isotropic': beer.nnet.NormalIsotropicCovarianceLayer,
+    'diagonal': beer.nnet.NormalDiagonalCovarianceLayer
+}
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -41,7 +46,7 @@ def main():
     for i in range(conf['depth']):
         nnet_flow.append(
             beer.nnet.AutoRegressiveNetwork(
-                dim_in=conf['dim'],
+                dim_in=conf['dim_out'],
                 flow_params_dim=conf['flow_params_dim'],
                 depth=conf['block_depth'],
                 width=conf['block_width'],
@@ -49,9 +54,17 @@ def main():
             )
         )
 
+    nflow = beer.nnet.InverseAutoRegressiveFlow(
+        dim_in=conf['dim_in'],
+        flow_params_dim=conf['flow_params_dim'],
+        normal_layer=normal_layer[conf['cov_type']](conf['dim_in'], conf['dim_out']),
+        nnet_flow=nnet_flow
+    )
+
+
     # Save the model on disk.
     with open(args.out, 'wb') as fid:
-        pickle.dump(nnet_flow, fid)
+        pickle.dump((nflow, conf['flow_params_dim']), fid)
 
 
 if __name__ == '__main__':
