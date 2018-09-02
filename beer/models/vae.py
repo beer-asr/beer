@@ -128,7 +128,95 @@ class VAEGlobalMeanVariance(VAE):
             **self.normal.accumulate(centered_stats)
         }
 
+
+class DualVAEGlobalMeanVariance(VAE):
+    '''Variational Auto-Encoder (VAE) with double latent space and
+    a global mean and covariance matrix parameters.
+
+    The second latent model/space is a "context" space (speaker space
+    for instance).
+
+    '''
+
+    def __init__(self, encoder, encoder_problayer1, encoder_problayer2,
+                 decoder, normal, latent_model1, latent_model2):
+        super().__init__()
+        self.encoder = encoder
+        self.encoder_problayer1 = encoder_problayer1
+        self.encoder_problayer2 = encoder_problayer2
+        self.decoder = decoder
+        self.normal = normal
+        self.latent_model1 = latent_model1
+        self.latent_model2 = latent_model2
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
+
+    def mean_field_factorization(self):
+        return self.latent_model.mean_field_factorization() + \
+            self.normal.mean_field_factorization()
+
+    def expected_log_likelihood(self, data, kl_weight=1., use_mean=False,
+                                context_args, **kwargs):
+        encoder_states = self.encoder(data)
+
+        # Sample from the first latent space.
+        posterior_params1 = self.encoder_problayer1(encoder_states)
+        samples1, post_llh1 = self.encoder_problayer1.samples_and_llh(
+            posterior_params1, use_mean)
+
+        # Per-frame KL divergence between the (approximate) posterior
+        # and the prior.
+        latent_stats1 = self.latent_model1.sufficient_statistics(samples)
+        prior_llh1 = self.latent_model1.expected_log_likelihood(latent_stats,
+                                                                **kwargs)
+
+        # Sample from the second latent space.
+        sum_enc_states = encoder_states.sum(dim=0)[None, :]
+        posterior_params2 = self.encoder_problayer2(encoder_states)
+        samples2, post_llh2 = self.encoder_problayer2.samples_and_llh(
+            posterior_params2, use_mean)
+
+        # Per-frame KL divergence between the (approximate) posterior
+        # and the prior.
+        latent_stats2 = self.latent_model2.sufficient_statistics(samples)
+        prior_llh2 = self.latent_model2.expected_log_likelihood(latent_stats,
+                                                                **context_args)
+
+        # Total KL divergence.
+        kl_divs = post_llh1 + post_llh2 - prior_llh1  - prior_llh2
+
+        # Since the second space is a "context space". It output only
+        # a summary sample. We expand this summary vector to match the
+        # other space number of samples.
+        samples2 = samples2.view(-1).repeat(len(data), 1)
+
+        decoder_means = self.decoder(samples1, samples2)
+        centered_data = (data - decoder_means)
+        centered_stats = self.normal.sufficient_statistics(centered_data)
+        llhs = self.normal.expected_log_likelihood(centered_stats)
+
+        # Store the statistics of the latent/likelihood model to
+        # compute their gradients.
+        self.cache['latent_stats1'] = latent_stats1.detach()
+        self.cache['latent_stats2'] = latent_stats2.detach()
+        self.cache['centered_stats'] = centered_stats.detach()
+        return llhs - kl_weight * kl_divs
+
+    def accumulate(self, _):
+        latent_stats1 = self.cache['latent_stats1']
+        latent_stats2 = self.cache['latent_stats2']
+        centered_stats = self.cache['centered_stats']
+        return {
+            **self.latent_model1.accumulate(latent_stats1),
+            **self.latent_model2.accumulate(latent_stats2),
+            **self.normal.accumulate(centered_stats)
+        }
+
+
 __all__ = [
     'VAE',
     'VAEGlobalMeanVariance',
+    'DualVAEGlobalMeanVariance'
 ]
