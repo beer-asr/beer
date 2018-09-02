@@ -168,20 +168,20 @@ class DualVAEGlobalMeanVariance(VAE):
 
         # Per-frame KL divergence between the (approximate) posterior
         # and the prior.
-        latent_stats1 = self.latent_model1.sufficient_statistics(samples)
-        prior_llh1 = self.latent_model1.expected_log_likelihood(latent_stats,
+        latent_stats1 = self.latent_model1.sufficient_statistics(samples1)
+        prior_llh1 = self.latent_model1.expected_log_likelihood(latent_stats1,
                                                                 **kwargs)
 
         # Sample from the second latent space.
         sum_enc_states = encoder_states.sum(dim=0)[None, :]
-        posterior_params2 = self.encoder_problayer2(encoder_states)
+        posterior_params2 = self.encoder_problayer2(sum_enc_states)
         samples2, post_llh2 = self.encoder_problayer2.samples_and_llh(
             posterior_params2, use_mean)
 
         # Per-frame KL divergence between the (approximate) posterior
         # and the prior.
-        latent_stats2 = self.latent_model2.sufficient_statistics(samples)
-        prior_llh2 = self.latent_model2.expected_log_likelihood(latent_stats,
+        latent_stats2 = self.latent_model2.sufficient_statistics(samples2)
+        prior_llh2 = self.latent_model2.expected_log_likelihood(latent_stats2,
                                                                 **context_args)
 
         # Total KL divergence.

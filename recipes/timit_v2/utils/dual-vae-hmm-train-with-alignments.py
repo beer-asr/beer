@@ -41,6 +41,7 @@ def main():
     parser.add_argument('--use-gpu', action='store_true')
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('model', help='model to train')
+    parser.add_argument('spk_ids', help='speakers ids')
     parser.add_argument('alis', help='alignments')
     parser.add_argument('feats', help='Feature file')
     parser.add_argument('feat_stats', help='data statistics')
@@ -100,18 +101,19 @@ def main():
         logging.debug('Data shuffled into {} batches'.format(len(batches)))
 
         for batch_no, batch_keys in enumerate(batches, start=1):
-            # Reset the gradients.
             optimizer.zero_grad()
+            elbo = beer.evidence_lower_bound(datasize=tot_counts)
+            for uttid in batch_keys:
+                ft = torch.from_numpy(feats[uttid]).float()
+                labels = torch.from_numpy(alis[uttid]).long()
+                skd_id = torch.from_numpy(spk_ids[uttid]).long().view(1, -1)
+                ft, labels, skd_id = ft.to(device), labels.to(device), skd_id.to(device)
 
-            # Load the batch data.
-            ft, labels = load_batch(feats, alis, batch_keys)
-            ft, labels = ft.to(device), labels.to(device)
-
-            # Compute the objective function.
-            elbo = beer.evidence_lower_bound(model, ft, state_path=labels,
-                                             kl_weight=args.kl_weight,
-                                             datasize=tot_counts,
-                                             fast_eval=args.fast_eval)
+                # Compute the objective function.
+                elbo += beer.evidence_lower_bound(model, ft, state_path=labels,
+                                                  kl_weight=args.kl_weight,
+                                                  datasize=tot_counts,
+                                                  fast_eval=args.fast_eval)
 
             # Compute the gradient of the model.
             elbo.natural_backward()
