@@ -158,7 +158,7 @@ class DualVAEGlobalMeanVariance(VAE):
             self.normal.mean_field_factorization()
 
     def expected_log_likelihood(self, data, kl_weight=1., use_mean=False,
-                                context_args, **kwargs):
+                                context_args={}, **kwargs):
         encoder_states = self.encoder(data)
 
         # Sample from the first latent space.

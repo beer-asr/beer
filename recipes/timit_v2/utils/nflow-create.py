@@ -6,6 +6,7 @@ import argparse
 import logging
 import pickle
 import yaml
+import torch
 import beer
 
 
@@ -46,25 +47,18 @@ def main():
     for i in range(conf['depth']):
         nnet_flow.append(
             beer.nnet.AutoRegressiveNetwork(
-                dim_in=conf['dim_out'],
+                dim_in=conf['dim'],
                 flow_params_dim=conf['flow_params_dim'],
                 depth=conf['block_depth'],
                 width=conf['block_width'],
                 activation=activation
             )
         )
-
-    nflow = beer.nnet.InverseAutoRegressiveFlow(
-        dim_in=conf['dim_in'],
-        flow_params_dim=conf['flow_params_dim'],
-        normal_layer=normal_layer[conf['cov_type']](conf['dim_in'], conf['dim_out']),
-        nnet_flow=nnet_flow
-    )
-
+    nnet_flow = torch.nn.Sequential(*nnet_flow)
 
     # Save the model on disk.
     with open(args.out, 'wb') as fid:
-        pickle.dump((nflow, conf['flow_params_dim']), fid)
+        pickle.dump((nnet_flow, conf['flow_params_dim']), fid)
 
 
 if __name__ == '__main__':

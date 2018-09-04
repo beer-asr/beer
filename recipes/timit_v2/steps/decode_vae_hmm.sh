@@ -13,6 +13,7 @@ decode_dir=$4
 . $setup
 mdl=$mdldir/final.mdl
 pdf_mapping=$mdldir/pdf_mapping.txt
+fea=$data_train_dir/${aud_vae_hmm_fea_type}.npz
 
 [[ -f $mdl ]] || { echo "File not found: $mdl" >2; exit 1; }
 [[ -f $pdf_mapping ]] || { echo "File not found: $pdf_mapping" >2; exit 1; }
@@ -37,7 +38,7 @@ if [ ! -f $decode_dir/hyp ];then
     trap 'rm -rf "$tmpdir"' EXIT
 
     cmd="python utils/vae-hmm-decode-parallel.py $mdl \
-        $data_dir/feats.npz $tmpdir"
+        $fea $tmpdir"
     utils/parallel/submit_parallel.sh \
         "$parallel_env" \
         "vae-hmm-decode" \

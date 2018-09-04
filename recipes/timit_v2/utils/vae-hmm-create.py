@@ -57,7 +57,7 @@ def main():
     enc_prob_layer = prob_layer(args.encoder_out_dim, args.latent_dim)
 
     nflow = beer.nnet.InverseAutoRegressiveFlow(
-        dim_in=args.latent_dim,
+        dim_in=args.encoder_out_dim,
         flow_params_dim=flow_params_dim,
         normal_layer=enc_prob_layer,
         nnet_flow=nnet_flow
