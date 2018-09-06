@@ -201,7 +201,7 @@ class BayesianParameterSet:
 
         '''
         for param in self.__parameters:
-            param.to(device)
+            param.to_(device)
 
 
 __all__ = [
