@@ -50,14 +50,14 @@ def merge_llhs(llhs, pdf_seq, start_ids):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('model', type=str, help='Decoding model')
-    parser.add_argument('feats', type=str, help='Features to process')
-    parser.add_argument('outdir', type=str, help='Output file')
     parser.add_argument('--align', type=str,
         help='A npz file with per frame alignment. If not empty, use it \
         to merge per farme likelihood into phone level')
     parser.add_argument('--pdf2phone', type=str,
         help='File mapping pdf id(int) into phone symbols(str)')
+    parser.add_argument('model', type=str, help='Decoding model')
+    parser.add_argument('feats', type=str, help='Features to process')
+    parser.add_argument('outdir', type=str, help='Output file')
     args = parser.parse_args()
     feats = np.load(args.feats)
     outdir = args.outdir
