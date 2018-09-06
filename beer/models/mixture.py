@@ -70,10 +70,11 @@ class Mixture(DiscreteLatentBayesianModel):
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
-    def expected_log_likelihood(self, stats, resps=None):
+    def expected_log_likelihood(self, stats, resps=None, **kwargs):
         # Per-components weighted log-likelihood.
         log_weights = self.weights.expected_natural_parameters().view(1, -1)
-        per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
+        per_component_exp_llh = self.modelset.expected_log_likelihood(stats,
+                                                                      **kwargs)
 
         # Responsibilities and expected llh.
         if resps is None:

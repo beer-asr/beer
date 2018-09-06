@@ -10,3 +10,5 @@ from .marginalpldaset import *
 from .vae import *
 from .modelset import *
 from .lm import *
+from .lds import *
+from .linearreg import *

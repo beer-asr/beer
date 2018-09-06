@@ -11,7 +11,7 @@ import logging
 logging.basicConfig(format='%(levelname)s: %(message)s')
 
 
-def parse_topology(topology, nstates):
+def parse_topology(topology):
     arcs = []
     for arc_conf in topology:
         start = arc_conf['start_id']
@@ -40,6 +40,68 @@ def create_unit_graph(n_states, arcs, start_pdf_id):
 
     graph.normalize()
     return graph, start_pdf_id + n_states - 2
+
+def create_gmm_emissions(group, mean, var):
+    tot_states = group['n_units'] * (group['n_state_per_unit'] - 2)
+    if group['shared_emissions']:
+        modelset = beer.NormalSet.create(
+            mean, var,
+            size=group['n_normal_per_state'],
+            prior_strength=group['prior_strength'],
+            noise_std=group['noise_std'],
+            cov_type=group['cov_type'],
+            shared_cov=group['shared_cov']
+        )
+        modelset = beer.RepeatedModelSet(modelset, tot_states)
+    else:
+        modelset = beer.NormalSet.create(
+            mean, var,
+            size=group['n_normal_per_state'] * tot_states,
+            prior_strength=group['prior_strength'],
+            noise_std=group['noise_std'],
+            cov_type=group['cov_type'],
+            shared_cov=group['shared_cov']
+        )
+    return modelset
+
+
+def create_lds_emissions(group, mean, var):
+    tot_states = group['n_units'] * (group['n_state_per_unit'] - 2)
+    if group['shared_emissions']:
+        modelset = beer.LDSSet.create(
+            mean,
+            size=1,
+            prior_strength=group['prior_strength'],
+            noise_std=group['noise_std'],
+            variance=group['variance'],
+            n_dct_bases=group['n_dct_bases'],
+            memory=group['memory']
+        )
+        modelset = beer.RepeatedModelSet(modelset, tot_states)
+    else:
+        modelset = beer.LDSSet.create(
+            mean,
+            size=tot_states,
+            prior_strength=group['prior_strength'],
+            noise_std=group['noise_std'],
+            variance=group['variance'],
+            n_dct_bases=group['n_dct_bases'],
+            memory=group['memory']
+        )
+    return modelset
+
+
+def create_emissions(group, mean, var):
+    emission_type = group['emission_type']
+
+    if emission_type == 'GMM':
+        modelset = create_gmm_emissions(group, mean, var)
+    elif emission_type == 'LDS':
+        modelset = create_lds_emissions(group, mean, var)
+    else:
+        logging.error(f'Unknown emission_type {emission_type}')
+        exit(1)
+    return modelset
 
 
 def main():
@@ -87,31 +149,12 @@ def main():
             unit_id = unit_count
             unit_count += 1
             nstates = group['n_state_per_unit']
-            arcs = parse_topology(group['topology'], nstates)
+            arcs = parse_topology(group['topology'])
             unit, pdf_id = create_unit_graph(nstates, arcs, pdf_id)
             units[phones[unit_id]] = unit
 
-        # Create emissions.
         tot_states = group['n_units'] * (group['n_state_per_unit'] - 2)
-        if group['shared_emissions']:
-            modelset = beer.NormalSet.create(
-                mean, var,
-                size=group['n_normal_per_state'],
-                prior_strength=group['prior_strength'],
-                noise_std=group['noise_std'],
-                cov_type=group['cov_type'],
-                shared_cov=group['shared_cov']
-            )
-            modelset = beer.RepeatedModelSet(modelset, tot_states)
-        else:
-            modelset = beer.NormalSet.create(
-                mean, var,
-                size=group['n_normal_per_state'] * tot_states,
-                prior_strength=group['prior_strength'],
-                noise_std=group['noise_std'],
-                cov_type=group['cov_type'],
-                shared_cov=group['shared_cov']
-            )
+        modelset = create_emissions(group, mean, var)
         modelset = beer.MixtureSet.create(tot_states, modelset)
         emissions.append(modelset)
 

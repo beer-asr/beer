@@ -8,3 +8,4 @@ from .normal import *
 from .normalwishart import *
 from .normalgamma import *
 from .isonormalgamma import *
+from .matrixnormal import *
