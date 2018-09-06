@@ -19,7 +19,7 @@ class LinearRegression(BayesianModel):
     '''
 
     @classmethod
-    def create(cls, weights, variance, prior_strength=1.,  weights_variance=.1,
+    def create(cls, weights, variance, prior_strength=1.,  weights_variance=1,
                noise_std=.1):
         '''Create a Normal model.
 
@@ -106,13 +106,15 @@ class LinearRegression(BayesianModel):
         delta = torch.sum(stats[:, :-1] * self.cache['nparams'] / prec, dim=-1)
         regressors = self.cache['regressors']
         quad = (regressors[:, :, None] * regressors[:, None, :]).view(len(X), -1)
+        sum_quad = torch.sum(stats[:, -2, None] * quad, dim=0)
+        sum_quad = sum_quad.reshape(regressors.shape[1], regressors.shape[1])
         return {
             self.precision: torch.cat([
                 delta.sum().view(1),
                 stats[:, -1].sum().view(1)
             ]),
             self.weights: torch.cat([
-                torch.sum(stats[:, -2, None] * quad, dim=0).view(-1),
+                sum_quad.view(-1),
                 (regressors.t() @ X).view(-1)
             ]) * prec
         }
@@ -125,7 +127,7 @@ class LinearRegressionSet(BayesianModelSet):
 
     @classmethod
     def create(cls, size, weights, variance, prior_strength=1.,
-               weights_variance=.1, noise_std=.1):
+               weights_variance=1, noise_std=.1):
         '''Create a Normal model.
 
         Args:

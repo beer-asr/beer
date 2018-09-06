@@ -126,6 +126,16 @@ class BayesianModel(metaclass=abc.ABCMeta):
         for module in self._modules.values():
             for param in module.parameters():
                 yield param
+        for submodel in self.submodels.values():
+            for param in submodel.modules_parameters():
+                yield param
+
+    def const_parameters(self):
+        for param in self._const_parameters.values():
+            yield param
+        for submodel in self._submodels.values():
+            for param in submodel.const_parameters():
+                yield param
 
     def bayesian_parameters(self):
         for param in self._bayesian_parameters.values():
@@ -173,10 +183,12 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         for parameter in self._const_parameters.values():
             parameter.float_()
-        for parameter in self.bayesian_parameters():
+        for parameter in self._bayesian_parameters.values():
             parameter.float_()
         for name, module in self._modules.items():
             setattr(self, name, module.float())
+        for name, submodel in self._submodels.items():
+            setattr(self, name, submodel.float())
         return self
 
     def double(self):
@@ -192,10 +204,12 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         for parameter in self._const_parameters.values():
             parameter.double_()
-        for parameter in self.bayesian_parameters():
+        for parameter in self._bayesian_parameters.values():
             parameter.double_()
         for name, module in self._modules.items():
             setattr(self, name, module.double())
+        for name, submodel in self._submodels.items():
+            setattr(self, name, submodel.double())
         return self
 
     def to(self, device):
@@ -208,10 +222,12 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         for parameter in self._const_parameters.values():
             parameter.to_(device)
-        for parameter in self.bayesian_parameters():
+        for parameter in self._bayesian_parameters.values():
             parameter.to_(device)
         for name, module in self._modules.items():
             setattr(self, name, module.to(device))
+        for name, submodel in self._submodels.items():
+            setattr(self, name, submodel.to(device))
         return self
 
     ####################################################################
