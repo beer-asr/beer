@@ -1,0 +1,53 @@
+# Non-speech phone.
+- n_units: 1  # for TIMIT we have only the silence phone.
+  n_state_per_unit: 7
+  n_normal_per_state: 10
+  prior_strength: 1.
+  noise_std: 0.1
+  cov_type: diagonal
+  shared_cov: no
+  shared_emissions: false
+  topology:
+  - {start_id: 0, end_id: 1, trans_prob: 1.0}
+
+  - {start_id: 1, end_id: 1, trans_prob: 0.25}
+  - {start_id: 1, end_id: 2, trans_prob: 0.25}
+  - {start_id: 1, end_id: 3, trans_prob: 0.25}
+  - {start_id: 1, end_id: 4, trans_prob: 0.25}
+
+  - {start_id: 2, end_id: 2, trans_prob: 0.25}
+  - {start_id: 2, end_id: 3, trans_prob: 0.25}
+  - {start_id: 2, end_id: 4, trans_prob: 0.25}
+  - {start_id: 2, end_id: 5, trans_prob: 0.25}
+
+  - {start_id: 3, end_id: 2, trans_prob: 0.25}
+  - {start_id: 3, end_id: 3, trans_prob: 0.25}
+  - {start_id: 3, end_id: 4, trans_prob: 0.25}
+  - {start_id: 3, end_id: 5, trans_prob: 0.25}
+
+  - {start_id: 4, end_id: 2, trans_prob: 0.25}
+  - {start_id: 4, end_id: 3, trans_prob: 0.25}
+  - {start_id: 4, end_id: 4, trans_prob: 0.25}
+  - {start_id: 4, end_id: 5, trans_prob: 0.25}
+
+  - {start_id: 5, end_id: 5, trans_prob: 0.75}
+  - {start_id: 5, end_id: 6, trans_prob: 0.25}
+
+# Standard phones
+- n_units: {n_units}
+  n_state_per_unit: 5
+  n_normal_per_state: 4
+  prior_strength: 1.
+  noise_std: 0.1
+  cov_type: diagonal
+  shared_cov: no
+  shared_emissions: false
+  topology:
+  - {start_id: 0, end_id: 1, trans_prob: 1.0}
+  - {start_id: 1, end_id: 1, trans_prob: 0.75}
+  - {start_id: 1, end_id: 2, trans_prob: 0.25}
+  - {start_id: 2, end_id: 2, trans_prob: 0.75}
+  - {start_id: 2, end_id: 3, trans_prob: 0.25}
+  - {start_id: 3, end_id: 3, trans_prob: 0.75}
+  - {start_id: 3, end_id: 4, trans_prob: 0.25}
+

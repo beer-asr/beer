@@ -28,12 +28,14 @@ feaconf = {
     'preemph': 0.97,
     'window_len': 0.025,
     'framerate': 0.01,
+    'apply_fbank': True,
     'nfilters': 26,
     'cutoff_hfreq': 8000,
     'cutoff_lfreq': 20,
+    'apply_deltas': True,
     'delta_order': 2,
     'delta_winlen': 2,
-    'apply_dct': False,
+    'apply_dct': True,
     'n_dct_coeff': 13,
     'lifter_coeff': 22,
     'utt_mnorm': True,
@@ -84,23 +86,27 @@ def main():
         if not sr == feaconf['srate']:
             msg = 'Sampling rate ({}) does not match the one ' \
                   'of the given file ({}).'
-            logging.error(message.format(feaconf['srate'], sr))
+            logging.error(msg.format(feaconf['srate'], sr))
             exit(1)
 
-        # Remove the DC.
-        signal = signal - signal.mean()
-
-        # Log-mel spectrum.
-        features = beer.features.fbank(
+        # Mel spectrum.
+        features, fft_len = beer.features.short_term_mspec(
             signal,
             flen=feaconf['window_len'],
             frate=feaconf['framerate'],
-            hifreq=feaconf['cutoff_hfreq'],
-            lowfreq=feaconf['cutoff_lfreq'],
-            nfilters=feaconf['nfilters'],
             preemph=feaconf['preemph'],
             srate=feaconf['srate'],
         )
+
+        # Filter bank.
+        if feaconf['apply_fbank']:
+            fbank = beer.features.create_fbank(feaconf['nfilters'], fft_len,
+                                               lowfreq=feaconf['cutoff_lfreq'],
+                                               highfreq=feaconf['cutoff_hfreq'])
+            features = features @ fbank.T
+
+        # Take the logarithm of the magnitude spectrum.
+        features = np.log(1e-6 + features)
 
         # DCT transform.
         if feaconf['apply_dct']:
@@ -117,8 +123,8 @@ def main():
             features *= lifter
 
         # Deltas.
-        delta_order = feaconf['delta_order']
-        if delta_order > 0:
+        if feaconf['apply_deltas']:
+            delta_order = feaconf['delta_order']
             delta_winlen = feaconf['delta_winlen']
             features = beer.features.add_deltas(features,
                 [delta_winlen] * delta_order)

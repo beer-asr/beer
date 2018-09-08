@@ -6,10 +6,16 @@ import argparse
 import logging
 import pickle
 import yaml
+import torch
 import beer
 
 
 logging.basicConfig(format='%(levelname)s: %(message)s')
+
+normal_layer = {
+    'isotropic': beer.nnet.NormalIsotropicCovarianceLayer,
+    'diagonal': beer.nnet.NormalDiagonalCovarianceLayer
+}
 
 
 def main():
@@ -48,10 +54,11 @@ def main():
                 activation=activation
             )
         )
+    nnet_flow = torch.nn.Sequential(*nnet_flow)
 
     # Save the model on disk.
     with open(args.out, 'wb') as fid:
-        pickle.dump(nnet_flow, fid)
+        pickle.dump((nnet_flow, conf['flow_params_dim']), fid)
 
 
 if __name__ == '__main__':

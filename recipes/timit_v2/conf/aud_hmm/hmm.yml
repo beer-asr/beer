@@ -1,6 +1,7 @@
 # Non-speech phone.
 - n_units: 1
   n_state_per_unit: 7
+  emission_type: GMM
   n_normal_per_state: 10
   prior_strength: 1.
   noise_std: 0.1
@@ -38,6 +39,7 @@
 - n_units: {n_units} # The number of units is set in the "setup.sh"
                      # file.
   n_state_per_unit: 5
+  emission_type: GMM
   n_normal_per_state: 4
   prior_strength: 1.
   noise_std: 0.1

@@ -14,7 +14,7 @@ setup=$(pwd)/$1
 
 # Set the stage you want to start from. Keep in mind that some steps
 # depends on previous ones !!
-stage=5
+stage=6
 
 
 # Data preparation. Organize the data directory as:
@@ -34,43 +34,48 @@ if [ $stage -le 1 ]; then
         cp $datadir/local/data/${s}_wav.scp $datadir/$s/wav.scp
         cp $datadir/local/data/$s.uttids $datadir/$s/uttids
         cp $datadir/local/data/$s.text $datadir/$s/trans
+        cp $datadir/local/data/$s.utt2spk $datadir/$s/utt2spk
         cat $datadir/$s/trans | python utils/prepare_trans.py \
             $langdir/phones.txt $datadir/$s/phones.int.npz
     done
 fi
 
-
-# Extract the featuures for each dataset.
-# Features for each data set will be store in "data/setname/feats.npz".
+# Extract the features for each dataset.
+# Features will be store in "data/setname/feats.npz".
 if [ $stage -le 2 ]; then
     echo "--> Features extraction"
-    for s in train test dev; do
-        echo "Extracting features for: $s"
-        steps/extract_features.sh $setup $datadir/$s || exit 1
-    done
+    for fea_type in mfcc fbank logspec; do
+        for s in train test dev; do
+            echo "Extracting ${fea_type} features for: $s"
+            steps/extract_features.sh $setup $datadir/$s $fea_type || exit 1
+        done
+   done
 fi
 
 
-# HMM-GMM monophone.
-if [ $stage -le 3 ]; then
-    echo "--> HMM-GMM system"
-    steps/train_hmm2.sh $setup $datadir/train $hmm_dir || exit 1
-
-    steps/decode_hmm.sh $setup $hmm_dir $datadir/test \
-        $hmm_dir/decode || exit 1
-fi
-
-
-# VAE-HMM monophone system. We use the alignment of the HMM system
-# to initialize the model.
-if [ $stage -le 3 ]; then
-    echo "--> VAE-HMM system"
-    steps/train_vae_hmm2.sh $setup $hmm_dir/alis.npz \
-        $datadir/train $vae_hmm_dir || exit 1
-
-    steps/decode_vae_hmm2.sh $setup $vae_hmm_dir $datadir/test \
-        $vae_hmm_dir/decode || exit 1
-fi
+# HMM monophone.
+#if [ $stage -le 3 ]; then
+#    echo "--> HMM system"
+#    steps/train_hmm.sh $setup $datadir/train $hmm_dir || exit 1
+#
+#    steps/decode_hmm.sh $setup $hmm_dir $datadir/train\
+#        $hmm_dir/decode_train || exit 1
+#
+#    steps/decode_hmm.sh $setup $hmm_dir $datadir/test \
+#        $hmm_dir/decode || exit 1
+#fi
+#
+#
+## VAE-HMM monophone system. We use the alignment of the HMM system
+## to initialize the model.
+#if [ $stage -le 3 ]; then
+#    echo "--> VAE-HMM system"
+#    steps/train_vae_hmm.sh $setup $hmm_dir/alis.npz \
+#        $datadir/train $vae_hmm_dir || exit 1
+#
+#    steps/decode_vae_hmm.sh $setup $vae_hmm_dir $datadir/test \
+#        $vae_hmm_dir/decode || exit 1
+#fi
 
 
 # Score all the models.
@@ -95,5 +100,29 @@ if [ $stage -le 5 ]; then
 
     steps/decode_hmm.sh $setup $aud_hmm_dir $datadir/test \
         $aud_hmm_dir/decode_test || exit 1
+fi
+
+
+#if [ $stage -le 6 ]; then
+#    echo "--> Acoustic Unit Discovery (VAE-HMM)"
+#    utils/prepare_aud_lang.sh $aud_vae_hmm_n_units $datadir/lang_aud_vae_hmm || exit 1
+#
+#    steps/aud_vae_hmm.sh $setup $datadir/lang_aud_vae_hmm $aud_hmm_dir/alis.npz \
+#        $datadir/train $aud_vae_hmm_dir || exit 1
+#
+#    steps/decode_vae_hmm.sh $setup $aud_vae_hmm_dir $datadir/train \
+#        $aud_vae_hmm_dir/decode_train || exit 1
+#
+#    steps/decode_vae_hmm.sh $setup $aud_vae_hmm_dir $datadir/test \
+#        $aud_vae_hmm_dir/decode_test || exit 1
+#fi
+
+if [ $stage -le 6 ]; then
+    echo "--> Acoustic Unit Discovery (VAE-HMM)"
+    utils/prepare_aud_lang.sh $aud_vae_hmm_n_units $datadir/lang_aud_vae_hmm || exit 1
+
+    steps/aud_dual_vae_hmm.sh $setup $datadir/lang_aud_vae_hmm $aud_hmm_dir/alis.npz \
+        $datadir/train ${aud_vae_hmm_dir}_dual || exit 1
+
 fi
 

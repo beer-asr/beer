@@ -16,17 +16,17 @@ mkdir -p $mdl_dir
 
 
 . $setup
+
+fea=$data_train_dir/${aud_vae_hmm_fea_type}.npz
+feastats=$data_train_dir/${aud_vae_hmm_fea_type}.stats.npz
+
 [[ -f "$aud_hmm_conf" ]] || \
     { echo "File not found: $aud_hmm_conf"; exit 1; }
 
 
 
 if [ ! -f $mdl_dir/0.mdl ]; then
-    echo "Building the AUD model..."
-
-    # Copy the configuration files for information.
-    cp $setup $mdl_dir
-    cp $fea_conf $mdl_dir
+    echo "Building the HMM model..."
 
     cat $aud_hmm_conf | sed s/{n_units}/$aud_hmm_n_units/g \
         > $mdl_dir/hmm.yml || exit 1
@@ -49,7 +49,7 @@ if [ ! -f $mdl_dir/0.mdl ]; then
 
     # Create the phones' hmm graph and their respective emissions.
     python utils/hmm-create-graph-and-emissions.py \
-        --stats $data_train_dir/feats.stats.npz \
+        --stats $feastats \
          $mdl_dir/hmm.yml  \
          $lang_dir/phones.txt \
          $mdl_dir/phones_hmm.graphs \
@@ -77,7 +77,7 @@ trap "rm -fr $mdl_dir/beer.tmp* &" EXIT
 
 # Train the model.
 if [ ! -f $mdl_dir/final.mdl ];then
-    echo "Training HMM-GMM model"
+    echo "Training HMM model"
 
     # Retrieve the last model.
     mdl=$(find $mdl_dir -name "[0-9]*mdl" -exec basename {} \; | \
@@ -91,15 +91,15 @@ if [ ! -f $mdl_dir/final.mdl ];then
     while [ $((++iter)) -le $hmm_train_iters ]; do
         echo "Iteration: $iter"
 
-        if echo $hmm_align_iters | grep -w $iter >/dev/null; then
+        if echo $aud_hmm_align_iters | grep -w $iter >/dev/null; then
             echo "Aligning data"
 
             tmpdir=$(mktemp -d $mdl_dir/beer.tmp.XXXX);
             cmd="python utils/hmm-align.py \
-                $mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir"
+                $mdl_dir/$mdl $fea $tmpdir"
             utils/parallel/submit_parallel.sh \
                 "$parallel_env" \
-                "align" \
+                "hmm-align-iter$iter" \
                 "$aud_hmm_align_parallel_opts" \
                 "$aud_hmm_align_njobs" \
                 "$data_train_dir/uttids" \
@@ -150,17 +150,17 @@ if [ ! -f $mdl_dir/final.mdl ];then
 
         echo "Training the emissions"
         cmd="python -u utils/hmm-train-with-alignments.py \
-                --batch-size $aud_hmm_train_emissions_batch_size \
-                --lrate $aud_hmm_train_emissions_lrate \
-                $aud_hmm_train_emissions_opts \
+                --batch-size $aud_hmm_train_batch_size \
+                --lrate $aud_hmm_train_lrate \
+                $aud_hmm_train_opts \
                 $mdl_dir/$((iter - 1)).mdl \
                 $mdl_dir/alis.npz \
-                $data_train_dir/feats.npz \
-                $data_train_dir/feats.stats.npz \
+                $fea \
+                $feastats \
                 $mdl_dir/${iter}.mdl"
         utils/parallel/submit_single.sh \
             "$parallel_env" \
-            "hmm-train" \
+            "hmm-train-iter$iter" \
             "$aud_hmm_train_parallel_opts" \
             "$cmd" \
             $mdl_dir || exit 1

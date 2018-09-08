@@ -70,18 +70,23 @@ class Mixture(DiscreteLatentBayesianModel):
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
-    def expected_log_likelihood(self, stats, resps=None):
+    def expected_log_likelihood(self, stats, labels=None, **kwargs):
         # Per-components weighted log-likelihood.
         log_weights = self.weights.expected_natural_parameters().view(1, -1)
-        per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
+        per_component_exp_llh = self.modelset.expected_log_likelihood(stats,
+                                                                      **kwargs)
 
         # Responsibilities and expected llh.
-        if resps is None:
+        if labels is None:
             w_per_component_exp_llh = (per_component_exp_llh + log_weights).detach()
             w_exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
             log_resps = w_per_component_exp_llh.detach() - w_exp_llh.view(-1, 1)
             local_kl_div = self._local_kl_divergence(log_resps)
             resps = log_resps.exp()
+        else:
+            local_kl_div = 0
+            resps = onehot(labels, len(self.modelset),
+                            dtype=log_weights.dtype, device=log_weights.device)
         exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
 
         # Store the responsibilites to accumulate the statistics.

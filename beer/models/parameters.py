@@ -184,13 +184,13 @@ class BayesianParameterSet:
     def float_(self):
         '''Convert value of the parameter to float precision in-place.'''
         for param in self.__parameters:
-            param.float()
+            param.float_()
 
     def double_(self):
         '''Convert the value of the parameter to double precision
         in-place.'''
         for param in self.__parameters:
-            param.double()
+            param.double_()
 
     def to_(self, device):
         '''Move the internal buffer of the parameter to the given
@@ -201,7 +201,7 @@ class BayesianParameterSet:
 
         '''
         for param in self.__parameters:
-            param.to(device)
+            param.to_(device)
 
 
 __all__ = [

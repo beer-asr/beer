@@ -21,8 +21,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ali-graphs', help='aligment graph for each ' \
                                              'utterance')
-    parser.add_argument('--ali-type', choices=['viterbi', 'baum_welch'],
-                        default='viterbi', help='alignment type')
     parser.add_argument('hmm', help='hmm model to train')
     parser.add_argument('feats', help='Feature file')
     parser.add_argument('outdir', help='output directory')
@@ -47,8 +45,7 @@ def main():
         enc_states = model.encoder(ft)
         post_params = model.encoder_problayer(enc_states)
         samples, _ = model.encoder_problayer.samples_and_llh(post_params)
-        ali = model.latent_model.align(samples, inference_graph=graph,
-                                       align_type=args.ali_type)
+        ali = model.latent_model.decode(samples, inference_graph=graph)
         path = os.path.join(args.outdir, uttid + '.npy')
         np.save(path, ali.numpy())
 

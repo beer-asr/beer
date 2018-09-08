@@ -97,6 +97,56 @@ def add_deltas(fea, winlens=(2, 2)):
         fea_list.append(fea)
     return np.hstack(fea_list)
 
+def short_term_mspec(signal, flen=0.025, frate=0.01, preemph=0.97,
+                       srate=16000, window=np.hamming):
+    '''Short term magnitude spectrum.
+
+    Args:
+        signal (numpy.ndarray): The raw audio signal.
+        flen (float): Frame duration in seconds.
+        frate (int): Frame rate in Hertz.
+        srate (int): Expected sampling rate of the audio.
+        window (function): Windowing function (default: hamming).
+
+    Returns:
+        mspec (``numpy.ndarray``): Magnitude spectrum.
+        fft_len (int): Length of the FFT used.
+
+    '''
+    # Normalize the the dynamic range of the signal.
+    try:
+        max_val = np.iinfo(signal.dtype).max
+    except ValueError:
+        max_val = np.finfo(signal.dtype).max
+    signal = signal / max_val
+
+    # Remove DC offset.
+    signal -= signal.mean()
+
+    # Convert the frame rate/length from second to number of samples.
+    frate_samp = int(srate * frate)
+    flen_samp = int(srate * flen)
+
+    # Compute the number of frames.
+    nframes = (len(signal) - flen_samp) // frate_samp + 1
+
+    # Pre-emphasis filtering.
+    s_t = np.array(signal, dtype=np.float32)
+    s_t -= preemph * np.r_[s_t[0], s_t[:-1]]
+
+    # Extract the overlapping frames.
+    isize = s_t.dtype.itemsize
+    sframes = np.lib.stride_tricks.as_strided(s_t, shape=(nframes, flen_samp),
+                                              strides=(frate_samp * isize,
+                                                       isize),
+                                              writeable=False)
+
+    # Apply the window function.
+    frames = sframes * window(flen_samp)[None, :]
+
+    # Compute FFT.
+    fft_len = int(2 ** np.floor(np.log2(flen_samp) + 1))
+    return np.abs(np.fft.rfft(frames, n=fft_len, axis=-1)[:, :-1]), fft_len
 
 def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, lowfreq=20, nfilters=26,
           preemph=0.97, srate=16000):
@@ -114,7 +164,6 @@ def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, lowfreq=20, nfilters=26,
     on some 'perceptual' scale (usually the Mel scale).
 
     Args:
-
         signal (numpy.ndarray): The raw audio signal.
         outdir (string): Output of an existing directory.
         fduration (float): Frame duration in seconds.
@@ -158,4 +207,4 @@ def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, lowfreq=20, nfilters=26,
     filters = create_fbank(nfilters, fft_len, lowfreq=lowfreq, highfreq=hifreq)
     melspec = magspec @ filters.T
 
-    return np.log(melspec + 1e-30)
+    return np.log(melspec + 1)

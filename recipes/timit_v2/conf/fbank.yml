@@ -1,0 +1,17 @@
+# Configuration to get standard FBANK features.
+
+
+# Raw signal pre-processing.
+srate: 16000
+preemph: 0.97
+window_len: 0.025
+framerate: 0.01
+
+apply_fbank: yes
+nfilters: 26
+cutoff_hfreq: 7600
+cutoff_lfreq: 20
+
+apply_deltas: no
+apply_dct: no
+

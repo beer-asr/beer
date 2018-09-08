@@ -68,6 +68,8 @@ def main():
     nnet_optim = torch.optim.Adam(
         model.modules_parameters(),
         lr=args.lrate_nnet,
+        eps=1e-3,
+        amsgrad=False,
         weight_decay=1e-2
     )
 
@@ -89,7 +91,7 @@ def main():
 
 
     tot_counts = int(stats['nframes'])
-    for epoch in range(args.epochs):
+    for epoch in range(1, args.epochs + 1):
         # Shuffle the order of the utterance.
         keys = list(feats.keys())
         random.shuffle(keys)
@@ -114,6 +116,9 @@ def main():
             # Compute the gradient of the model.
             elbo.natural_backward()
             elbo.backward()
+
+            # Clip the gradient to make avoid explosion.
+            torch.nn.utils.clip_grad_norm_(model.modules_parameters(), 100.0)
 
             # Update the parameters.
             optimizer.step()

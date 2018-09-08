@@ -1,0 +1,7 @@
+dim: {dim_in}
+flow_params_dim: 30
+block_depth: 2
+block_width: 100
+depth: 5
+activation: ELU
+

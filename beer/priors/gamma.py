@@ -30,7 +30,7 @@ class GammaPrior(ExpFamilyPrior):
         shape, rate = self.to_std_parameters(self.natural_parameters)
         return self.__repr_str.format(
             classname=self.__class__.__name__,
-            shape=repr(shape), rate=repr(shape)
+            shape=repr(shape), rate=repr(rate)
         )
 
     def expected_value(self):

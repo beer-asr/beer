@@ -50,7 +50,9 @@ class NormalFullCovariancePrior(ExpFamilyPrior):
     def to_natural_parameters(self, mean, scale):
         return torch.cat([scale * mean, -.5 * scale.view(1)])
 
-    def _to_std_parameters(self, natural_parameters):
+    def _to_std_parameters(self, natural_parameters=None):
+        if natural_parameters is None:
+            natural_parameters = self.natural_parameters
         scale = - 2 * natural_parameters[-1]
         mean = natural_parameters[:-1] / scale
         return mean, scale
@@ -61,7 +63,7 @@ class NormalFullCovariancePrior(ExpFamilyPrior):
         precision = self.precision_prior.expected_value()
         mean_quad = torch.trace(precision @ torch.ger(mean, mean))
         return torch.cat([
-            precision @ mean,
+            precision.inverse() @ mean,
             (mean_quad + dim / scale).view(1)
         ])
 
