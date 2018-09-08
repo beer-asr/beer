@@ -14,7 +14,7 @@ setup=$(pwd)/$1
 
 # Set the stage you want to start from. Keep in mind that some steps
 # depends on previous ones !!
-stage=0
+stage=6
 
 
 # Data preparation. Organize the data directory as:
@@ -34,6 +34,7 @@ if [ $stage -le 1 ]; then
         cp $datadir/local/data/${s}_wav.scp $datadir/$s/wav.scp
         cp $datadir/local/data/$s.uttids $datadir/$s/uttids
         cp $datadir/local/data/$s.text $datadir/$s/trans
+        cp $datadir/local/data/$s.utt2spk $datadir/$s/utt2spk
         cat $datadir/$s/trans | python utils/prepare_trans.py \
             $langdir/phones.txt $datadir/$s/phones.int.npz
     done
@@ -102,17 +103,26 @@ if [ $stage -le 5 ]; then
 fi
 
 
+#if [ $stage -le 6 ]; then
+#    echo "--> Acoustic Unit Discovery (VAE-HMM)"
+#    utils/prepare_aud_lang.sh $aud_vae_hmm_n_units $datadir/lang_aud_vae_hmm || exit 1
+#
+#    steps/aud_vae_hmm.sh $setup $datadir/lang_aud_vae_hmm $aud_hmm_dir/alis.npz \
+#        $datadir/train $aud_vae_hmm_dir || exit 1
+#
+#    steps/decode_vae_hmm.sh $setup $aud_vae_hmm_dir $datadir/train \
+#        $aud_vae_hmm_dir/decode_train || exit 1
+#
+#    steps/decode_vae_hmm.sh $setup $aud_vae_hmm_dir $datadir/test \
+#        $aud_vae_hmm_dir/decode_test || exit 1
+#fi
+
 if [ $stage -le 6 ]; then
     echo "--> Acoustic Unit Discovery (VAE-HMM)"
     utils/prepare_aud_lang.sh $aud_vae_hmm_n_units $datadir/lang_aud_vae_hmm || exit 1
 
-    steps/aud_vae_hmm.sh $setup $datadir/lang_aud_vae_hmm $aud_hmm_dir/alis.npz \
-        $datadir/train $aud_vae_hmm_dir || exit 1
+    steps/aud_dual_vae_hmm.sh $setup $datadir/lang_aud_vae_hmm $aud_hmm_dir/alis.npz \
+        $datadir/train ${aud_vae_hmm_dir}_dual || exit 1
 
-    steps/decode_vae_hmm.sh $setup $aud_vae_hmm_dir $datadir/train \
-        $aud_vae_hmm_dir/decode_train || exit 1
-
-    steps/decode_vae_hmm.sh $setup $aud_vae_hmm_dir $datadir/test \
-        $aud_vae_hmm_dir/decode_test || exit 1
 fi
 

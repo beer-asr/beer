@@ -126,7 +126,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
         for module in self._modules.values():
             for param in module.parameters():
                 yield param
-        for submodel in self.submodels.values():
+        for submodel in self._submodels.values():
             for param in submodel.modules_parameters():
                 yield param
 
@@ -224,10 +224,14 @@ class BayesianModel(metaclass=abc.ABCMeta):
             parameter.to_(device)
         for parameter in self._bayesian_parameters.values():
             parameter.to_(device)
+        new_modules = {}
         for name, module in self._modules.items():
-            setattr(self, name, module.to(device))
+            new_modules[name] = module.to(device)
+        self._modules = new_modules
+        new_submodels = {}
         for name, submodel in self._submodels.items():
-            setattr(self, name, submodel.to(device))
+            new_submodels[name] = submodel.to(device)
+        self._submodels = new_submodels
         return self
 
     ####################################################################

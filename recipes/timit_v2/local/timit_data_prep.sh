@@ -98,6 +98,10 @@ for x in train dev test; do
     # Create wav.scp
     awk '{printf("%s sph2pipe -f wav %s |\n", $1, $2);}' < $dir/${x}_sph.scp \
         > $dir/${x}_wav.scp
+
+    # Make the utt2spk and spk2utt files.
+    cut -f1 -d'_'  $dir/${x}.uttids | paste -d' ' $dir/$x.uttids - > $dir/$x.utt2spk
+
 done
 
 python $local/timit_lang_prep.py $langdir "$conf/phones.60-48-39.map"

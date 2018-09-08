@@ -80,15 +80,17 @@ def main():
         for batch_no, batch_keys in enumerate(batches, start=1):
             # Reset the gradients.
             optimizer.zero_grad()
+            elbo = beer.evidence_lower_bound(datasize=tot_counts)
+            for uttid in batch_keys:
+                # Load the batch data.
+                ft = torch.from_numpy(feats[uttid]).float()
+                ali = torch.from_numpy(alis[uttid]).long()
+                ft, ali = ft.to(device), ali.to(device)
 
-            # Load the batch data.
-            ft, ali= load_batch(feats, alis, batch_keys)
-            ft, ali = ft.to(device), ali.to(device)
-
-            # Compute the objective function.
-            elbo = beer.evidence_lower_bound(model, ft, state_path=ali,
-                                             datasize=tot_counts,
-                                             fast_eval=args.fast_eval)
+                # Compute the objective function.
+                elbo += beer.evidence_lower_bound(model, ft, state_path=ali,
+                                                  datasize=tot_counts,
+                                                  fast_eval=args.fast_eval)
 
             # Compute the gradient of the model.
             elbo.natural_backward()
@@ -103,6 +105,8 @@ def main():
                 batch_no, len(batches),
                 round(elbo_value, 3))
             )
+
+            del ft, ali
 
 
     with open(args.out, 'wb') as fh:

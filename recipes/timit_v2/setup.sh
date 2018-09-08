@@ -86,16 +86,18 @@ vae_hmm_train_parallel_opts="$parallel_opts_gpu"
 #######################################################################
 # AUD (HMM) model parameters.
 
-aud_hmm_conf=$confdir/aud_hmm/hmm.yml
-aud_hmm_dir=$expdir/aud_hmm
-aud_hmm_n_units=100
+aud_hmm_fea_type=fbank
+aud_hmm_model_name=aud_hmm
+aud_hmm_conf=$confdir/${aud_hmm_model_name}/hmm.yml
+aud_hmm_dir=$expdir/$aud_hmm_model_name
+aud_hmm_n_units=50
 aud_hmm_lm_concentration=1.
 aud_hmm_align_njobs=20
 aud_hmm_align_parallel_opts="$parallel_opts"
 aud_hmm_align_iters="1 2 3 4 5 6 7 8 9 10 12 14 16 18 20 23 26 29"
 aud_hmm_train_iters=30
 aud_hmm_train_lrate=5e-2
-aud_hmm_train_batch_size=100
+aud_hmm_train_batch_size=50
 aud_hmm_train_epochs=10
 aud_hmm_train_opts="--fast-eval --use-gpu"
 aud_hmm_train_parallel_opts="$parallel_opts_gpu"
@@ -107,7 +109,7 @@ aud_hmm_decode_parallel_opts="$parallel_opts"
 # AUD (VAE-HMM) model parameters.
 
 aud_vae_hmm_fea_type=logspec
-aud_vae_hmm_model=aud_conv_vae_hmm
+aud_vae_hmm_model=aud_dual_vae_hmm
 aud_vae_hmm_confdir=$confdir/$aud_vae_hmm_model
 aud_vae_hmm_dir=$expdir/$aud_vae_hmm_model
 aud_vae_hmm_encoder_conf=$aud_vae_hmm_confdir/encoder.yml
@@ -123,14 +125,14 @@ aud_vae_hmm_n_units=100
 aud_vae_hmm_lm_concentration=1.
 aud_vae_hmm_align_njobs=20
 aud_vae_hmm_align_parallel_opts="$parallel_opts"
-aud_vae_hmm_align_iters=$(seq 10 30)
+aud_vae_hmm_align_iters=$(seq 2 30)
 aud_vae_hmm_train_warmup_iters=0
 aud_vae_hmm_train_iters=30
-aud_vae_hmm_train_epochs_per_iter=10
+aud_vae_hmm_train_epochs_per_iter=1
 aud_vae_hmm_train_nnet_lrate=1e-3
 aud_vae_hmm_train_lrate=1e-1
-aud_vae_hmm_train_batch_size=100
-aud_vae_hmm_train_epochs=10
+aud_vae_hmm_train_batch_size=50
+aud_vae_hmm_train_epochs=30
 aud_vae_hmm_train_opts="--fast-eval --use-gpu"
 aud_vae_hmm_train_parallel_opts="$parallel_opts_gpu"
 aud_vae_hmm_decode_njobs=2

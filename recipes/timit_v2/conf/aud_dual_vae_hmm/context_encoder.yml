@@ -1,0 +1,8 @@
+# Encoder of the VAE model.
+
+nnet_structure:
+
+- block_structure:
+  - Linear:in_features={dim_in};out_features={dim_out}
+  - ELU
+

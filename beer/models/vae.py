@@ -4,6 +4,7 @@ prior over the latent space.
 
 '''
 
+import torch
 from .bayesmodel import BayesianModel
 
 
@@ -129,7 +130,7 @@ class VAEGlobalMeanVariance(VAE):
         }
 
 
-class DualVAEGlobalMeanVariance(VAE):
+class DualVAEGlobalMeanVariance(BayesianModel):
     '''Variational Auto-Encoder (VAE) with double latent space and
     a global mean and covariance matrix parameters.
 
@@ -153,8 +154,14 @@ class DualVAEGlobalMeanVariance(VAE):
     # BayesianModel interface.
     ####################################################################
 
+    @staticmethod
+    def sufficient_statistics(data):
+        #For the VAE, this is just the idenity function
+        return data
+
     def mean_field_factorization(self):
-        return self.latent_model.mean_field_factorization() + \
+        return self.latent_model1.mean_field_factorization() + \
+            self.latent_model2.mean_field_factorization() + \
             self.normal.mean_field_factorization()
 
     def expected_log_likelihood(self, data, kl_weight=1., use_mean=False,
@@ -173,7 +180,7 @@ class DualVAEGlobalMeanVariance(VAE):
                                                                 **kwargs)
 
         # Sample from the second latent space.
-        sum_enc_states = encoder_states.sum(dim=0)[None, :]
+        sum_enc_states = encoder_states.mean(dim=0)[None, :]
         posterior_params2 = self.encoder_problayer2(sum_enc_states)
         samples2, post_llh2 = self.encoder_problayer2.samples_and_llh(
             posterior_params2, use_mean)
@@ -185,14 +192,17 @@ class DualVAEGlobalMeanVariance(VAE):
                                                                 **context_args)
 
         # Total KL divergence.
-        kl_divs = post_llh1 + post_llh2 - prior_llh1  - prior_llh2
+        kl_divs = post_llh1 - prior_llh1 + \
+            (post_llh2 - prior_llh2) / len(encoder_states)
 
         # Since the second space is a "context space". It output only
         # a summary sample. We expand this summary vector to match the
         # other space number of samples.
         samples2 = samples2.view(-1).repeat(len(data), 1)
 
-        decoder_means = self.decoder(samples1, samples2)
+        samples = torch.cat([samples1, samples2], dim=-1)
+
+        decoder_means = self.decoder(samples)
         centered_data = (data - decoder_means)
         centered_stats = self.normal.sufficient_statistics(centered_data)
         llhs = self.normal.expected_log_likelihood(centered_stats)

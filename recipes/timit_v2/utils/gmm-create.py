@@ -1,27 +1,27 @@
 'Create a the GMM.'
 
+import numpy as np
 import argparse
+import beer
 import pickle
 import torch
 import yaml
+import logging
 
-import numpy as np
-import beer
-
+logging.basicConfig(format='%(levelname)s: %(message)s')
 
 
 def main():
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--stats', help='Feature statistics file for gmm model')
+    group.add_argument('--stats', help='Feature statistics file for hmm model')
     group.add_argument('--dim', type=int,
-                        help='Dimension of feature, used for gmm model')
+                        help='Dimension of feature, used for vae-hmm model')
     parser.add_argument('conf', help='Configuration file')
-    parser.add_argument('n_normal', type=int, help='Number of Gaussian pdfs')
-    parser.add_argument('gmm', help='outout gmm')
+    parser.add_argument('out', help='outout emissions')
     args = parser.parse_args()
 
-    # Load the GMM configuration.
+    # Load the HMM configuration.
     with open(args.conf, 'r') as fid:
         conf = yaml.load(fid)
 
@@ -35,19 +35,19 @@ def main():
         mean = torch.zeros(dim).float()
         var = torch.ones(dim).float()
 
+
     modelset = beer.NormalSet.create(
         mean, var,
-        size=args.n_normal,
+        size=conf['size'],
         prior_strength=conf['prior_strength'],
         noise_std=conf['noise_std'],
         cov_type=conf['cov_type'],
         shared_cov=conf['shared_cov']
     )
-    gmm = beer.Mixture.create(modelset, prior_strength=conf['prior_strength'])
+    model = beer.Mixture.create(modelset)
 
-    with open(args.gmm, 'wb') as fid:
-        pickle.dump(gmm, fid)
-
+    with open(args.out, 'wb') as fid:
+        pickle.dump(model, fid)
 
 if __name__ == '__main__':
     main()

@@ -16,6 +16,10 @@ mkdir -p $mdl_dir
 
 
 . $setup
+
+fea=$data_train_dir/${aud_vae_hmm_fea_type}.npz
+feastats=$data_train_dir/${aud_vae_hmm_fea_type}.stats.npz
+
 [[ -f "$aud_hmm_conf" ]] || \
     { echo "File not found: $aud_hmm_conf"; exit 1; }
 
@@ -45,7 +49,7 @@ if [ ! -f $mdl_dir/0.mdl ]; then
 
     # Create the phones' hmm graph and their respective emissions.
     python utils/hmm-create-graph-and-emissions.py \
-        --stats $data_train_dir/feats.stats.npz \
+        --stats $feastats \
          $mdl_dir/hmm.yml  \
          $lang_dir/phones.txt \
          $mdl_dir/phones_hmm.graphs \
@@ -87,12 +91,12 @@ if [ ! -f $mdl_dir/final.mdl ];then
     while [ $((++iter)) -le $hmm_train_iters ]; do
         echo "Iteration: $iter"
 
-        if echo $hmm_align_iters | grep -w $iter >/dev/null; then
+        if echo $aud_hmm_align_iters | grep -w $iter >/dev/null; then
             echo "Aligning data"
 
             tmpdir=$(mktemp -d $mdl_dir/beer.tmp.XXXX);
             cmd="python utils/hmm-align.py \
-                $mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir"
+                $mdl_dir/$mdl $fea $tmpdir"
             utils/parallel/submit_parallel.sh \
                 "$parallel_env" \
                 "hmm-align-iter$iter" \
@@ -151,8 +155,8 @@ if [ ! -f $mdl_dir/final.mdl ];then
                 $aud_hmm_train_opts \
                 $mdl_dir/$((iter - 1)).mdl \
                 $mdl_dir/alis.npz \
-                $data_train_dir/feats.npz \
-                $data_train_dir/feats.stats.npz \
+                $fea \
+                $feastats \
                 $mdl_dir/${iter}.mdl"
         utils/parallel/submit_single.sh \
             "$parallel_env" \

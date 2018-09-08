@@ -1,0 +1,5 @@
+size: {size}
+prior_strength: 1.
+noise_std: 0.1
+cov_type: full
+shared_cov: true

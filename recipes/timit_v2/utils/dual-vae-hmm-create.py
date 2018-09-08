@@ -65,20 +65,20 @@ def main():
     enc_prob_layer1 = prob_layer1(args.encoder_out_dim, args.latent_dim)
 
     nflow1 = beer.nnet.InverseAutoRegressiveFlow(
-        dim_in=args.latent_dim,
+        dim_in=args.encoder_out_dim,
         flow_params_dim=flow_params_dim1,
         normal_layer=enc_prob_layer1,
-        nnet_flow=enc_prob_layer1
+        nnet_flow=nnet_flow1
     )
 
     prob_layer2 = encoder_normal_layer[args.encoder_cov_type]
     enc_prob_layer2 = prob_layer2(args.encoder_out_dim, args.latent_dim)
 
     nflow2 = beer.nnet.InverseAutoRegressiveFlow(
-        dim_in=args.latent_dim,
+        dim_in=args.encoder_out_dim,
         flow_params_dim=flow_params_dim2,
         normal_layer=enc_prob_layer2,
-        nnet_flow=enc_prob_layer2
+        nnet_flow=nnet_flow2
     )
 
     data_mean = torch.from_numpy(stats['mean']).float()
@@ -86,7 +86,7 @@ def main():
     normal = beer.Normal.create(data_mean, data_var,
                                 cov_type=args.decoder_cov_type)
 
-    vae = beer.VAEGlobalMeanVariance(
+    vae = beer.DualVAEGlobalMeanVariance(
         encoder,
         nflow1,
         nflow2,

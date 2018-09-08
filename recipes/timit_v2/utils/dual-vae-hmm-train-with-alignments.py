@@ -54,6 +54,7 @@ def main():
     # Load the data.
     alis = np.load(args.alis)
     feats = np.load(args.feats)
+    spk_ids = np.load(args.spk_ids)
     stats = np.load(args.feat_stats)
 
     # Load the model and move it to the chosen device (CPU/GPU)
@@ -106,14 +107,16 @@ def main():
             for uttid in batch_keys:
                 ft = torch.from_numpy(feats[uttid]).float()
                 labels = torch.from_numpy(alis[uttid]).long()
-                skd_id = torch.from_numpy(spk_ids[uttid]).long().view(1, -1)
-                ft, labels, skd_id = ft.to(device), labels.to(device), skd_id.to(device)
+                spk_id = torch.from_numpy(spk_ids[uttid]).long().view(1, -1)
+                ft, labels, skd_id = ft.to(device), labels.to(device), spk_id.to(device)
 
                 # Compute the objective function.
                 elbo += beer.evidence_lower_bound(model, ft, state_path=labels,
                                                   kl_weight=args.kl_weight,
                                                   datasize=tot_counts,
-                                                  fast_eval=args.fast_eval)
+                                                  fast_eval=args.fast_eval,
+                                                  context_args={'labels': spk_id}
+                                                  )
 
             # Compute the gradient of the model.
             elbo.natural_backward()
@@ -125,7 +128,7 @@ def main():
             # Update the parameters.
             optimizer.step()
 
-            elbo_value = float(elbo) / tot_counts
+            elbo_value = float(elbo) / (tot_counts * len(batch_keys))
             log_msg = 'epoch={}/{} batch={}/{} elbo={}'
             logging.info(log_msg.format(
                 epoch, args.epochs,

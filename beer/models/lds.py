@@ -43,7 +43,7 @@ class LDSSet(BayesianModelSet):
         super().__init__()
         self.lr_set = lr_set
         self.memory = memory
-        self.dct_bases = ConstantParameter(dct_bases)
+        self.dct_bases = ConstantParameter(dct_bases.detach())
 
     def __len__(self):
         return len(self.lr_set)
@@ -61,7 +61,7 @@ class LDSSet(BayesianModelSet):
         X = stats[:, 1:-2]
 
         # Get the context .
-        pX = torch.nn.functional.pad(X, pad=(0, 0, self.memory, 0))
+        pX = torch.nn.functional.pad(X, pad=(0, 0, self.memory, 0)).detach()
         stacked_X = pX[:-1].unfold(0, self.memory, 1)
 
         # Compute the regressors.
