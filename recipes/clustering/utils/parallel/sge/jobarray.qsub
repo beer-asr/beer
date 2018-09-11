@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+if [ $# -ne 2 ]; then
+    echo "usage: <command> <splitdir>"
+    exit 1
+fi
+
+cmd=$1
+splitdir=$2
+
+cmd=$(echo $cmd | sed s/JOBID/$SGE_TASK_ID/g)
+
+# Set the working directory to the one from where was call "qsub"
+cd ${SGE_O_WORKDIR} || exit 1
+
+echo date: $(date)
+echo hostname: $(hostname)
+echo directory: $(pwd)
+echo splitdir: $splitdir
+echo cmd: $cmd
+
+. path.sh
+
+# This is bash specific and will not work in other shells.
+shopt -s extglob
+time cat $splitdir/x*(0)${SGE_TASK_ID} | $cmd || exit 1
+
+echo "job succeeded on date $(date)"
+

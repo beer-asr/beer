@@ -23,8 +23,6 @@ mkdir -p $outdir
 if [ ! -f $outdir/.done ]; then
     cat $uttids | shuf > $outdir/list.txt
 
-    utils/parallel/split.sh $outdir/list.txt $n_batches $outdir/split
-
     cmd="python utils/features-extract-central-frame.py \
             $langdir/phones.txt \
             $alidir/alis.npz \
@@ -35,8 +33,8 @@ if [ ! -f $outdir/.done ]; then
         "$parallel_env" \
         "extract-central-frame" \
         "$fea_parallel_opts" \
-        "$fea_njobs" \
-        "$uttids" \
+        "$n_batches" \
+        "$outdir/list.txt" \
         "$cmd" \
         "$outdir"
 else
