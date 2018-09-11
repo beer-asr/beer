@@ -123,7 +123,7 @@ fi
 
 if [ ! -f $mdl_dir/alis.npz ]; then
     echo "Using: $init_ali as initial alignments."
-    ln -s $init_ali $mdl_dir/alis.npz
+    cp $init_ali $mdl_dir/alis.npz
 fi
 
 

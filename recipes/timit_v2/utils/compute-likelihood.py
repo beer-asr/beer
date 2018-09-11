@@ -44,15 +44,16 @@ def merge_llhs(llhs, pdf_seq, start_ids):
             frame_count = 0
         llhs_sum += llhs[i]
         frame_count += 1
+    phone_llhs.append(llhs_sum / frame_count)
     return phone_llhs
-
-
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--align', type=str,
-        help='A npz file with per frame alignment. If not empty, use it \
+    parser.add_argument('--smooth', type=str, default=None,
+        help='A npz file with pdf id sequence. If not empty, use it \
         to merge per farme likelihood into phone level')
+    parser.add_argument('--align', type=str,
+        help='Align graph file. If not empty, compute the llhs along best path.')
     parser.add_argument('--pdf2phone', type=str,
         help='File mapping pdf id(int) into phone symbols(str)')
     parser.add_argument('model', type=str, help='Decoding model')
@@ -61,26 +62,36 @@ def main():
     args = parser.parse_args()
     feats = np.load(args.feats)
     outdir = args.outdir
-    alignfile = args.align
+    smoothfile = args.smooth
+    align_graphs = None
+    if args.align is not None:
+        align_graphs = np.load(args.align)
     mapfile = args.pdf2phone
     smooth = None
 
-    if alignfile:
+    if smoothfile:
         if not mapfile:
             sys.exit('Pdf2phone mapping file needed if merging likelihood' +
                      'into phone level')
         else:
-            aligns = np.load(alignfile)
+            paths = np.load(smoothfile)
             _, start_ids = read_pdf2phone(mapfile)
             smooth = 1
     with open(args.model, 'rb') as m:
         model = pickle.load(m)
-    for k in feats.keys():
+
+    for line in sys.stdin:
+        k = line.strip()
         ft = torch.from_numpy(feats[k]).float()
         stats = model.sufficient_statistics(ft)
-        llhs = model.expected_log_likelihood(stats).tolist()
+        if align_graphs is not None:
+            graph = align_graphs[k][0]
+            llhs = model.expected_log_likelihood(stats,
+                                                 inference_graph=graph).tolist()
+        else:
+            llhs = model.expected_log_likelihood(stats).tolist()
         if smooth:
-            ref_path = aligns[k]
+            ref_path = paths[k]
             llhs = merge_llhs(llhs, ref_path, start_ids)
         outfile = os.path.join(outdir, k + '.npy')
         np.save(outfile, llhs)
