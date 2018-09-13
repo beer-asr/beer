@@ -87,8 +87,8 @@ class Normal(BayesianModel):
         return (stats * nparams[None]).sum(dim=-1)  -.5 * self.dim * math.log(2 * math.pi)
 
     def marginal_log_likelihood(self, stats):
-        prior = self.mean_precision.prior
-        return prior.log_norm(prior.natural_parameters + stats) - prior.log_norm()
+        posterior = self.mean_precision.posterior
+        return posterior.log_norm(posterior.natural_parameters + stats) - posterior.log_norm()
 
     def accumulate(self, stats, parent_msg=None):
         return {self.mean_precision: stats.sum(dim=0)}

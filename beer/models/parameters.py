@@ -41,6 +41,7 @@ class ConstantParameter:
         '''
         self.value = self.value.to(device)
 
+
 class BayesianParameter:
     '''Parameter which has a *prior* and a *posterior* distribution.
 
@@ -65,7 +66,7 @@ class BayesianParameter:
         self.prior, self.posterior = prior, posterior
         dtype = self.prior.natural_parameters.dtype
         device = self.prior.natural_parameters.device
-        self.natural_grad = \
+        self.stats = \
             torch.zeros_like(self.prior.natural_parameters, dtype=dtype,
                             device=device, requires_grad=False)
 
@@ -107,24 +108,28 @@ class BayesianParameter:
         '''
         return self.posterior.expected_sufficient_statistics()
 
-    def accumulate_natural_grad(self, acc_stats):
-        '''Accumulate the natural gradient from the accumulated
-        statistics.
+    def store_stats(self, acc_stats):
+        '''Store the accumulated statistics.
 
         Args:
             acc_stats (``torch.Tensor[dim]``): Accumulated statistics
                 of the parameter.
 
         '''
-        natural_grad = self.prior.natural_parameters + acc_stats - \
-            self.posterior.natural_parameters
-        self.natural_grad += natural_grad.detach()
+        self.stats = acc_stats.detach()
+
+    def remove_stats(self, acc_stats):
+        self.posterior.natural_parameters = self.posterior.natural_parameters - acc_stats
+
+    def add_stats(self, acc_stats):
+        self.posterior.natural_parameters = self.posterior.natural_parameters + acc_stats
 
     def natural_grad_update(self, lrate):
+        grad = self.prior.natural_parameters + self.stats - \
+               self.posterior.natural_parameters
         self.posterior.natural_parameters = torch.tensor(
-            self.posterior.natural_parameters + \
-            lrate * self.natural_grad,
-            requires_grad=True
+            self.posterior.natural_parameters + lrate * grad,
+            requires_grad=False
         )
         # Notify the observers the parameters has changed.
         self._dispatch()
@@ -137,13 +142,13 @@ class BayesianParameter:
         '''Convert value of the parameter to float precision.'''
         self.prior = self.prior.float()
         self.posterior = self.posterior.float()
-        self.natural_grad = self.natural_grad.float()
+        self.stats = self.stats.float()
 
     def double_(self):
         '''Convert the value of the parameter to double precision.'''
         self.prior = self.prior.double()
         self.posterior = self.posterior.double()
-        self.natural_grad = self.natural_grad.double()
+        self.stats = self.stats.double()
 
     def to_(self, device):
         '''Move the internal buffer of the parameter to the given
@@ -155,7 +160,7 @@ class BayesianParameter:
         '''
         self.prior = self.prior.to(device)
         self.posterior = self.posterior.to(device)
-        self.natural_grad = self.natural_grad.to(device)
+        self.stats = self.stats.to(device)
 
 
 class BayesianParameterSet:
