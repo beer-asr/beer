@@ -110,6 +110,59 @@ class EvidenceLowerBoundInstance:
             parameter.accumulate_natural_grad(scale * acc_stats)
 
 
+class CollapsedEvidenceLowerBoundInstance:
+    '''Collapsed Evidence Lower Bound of a data set given a model.
+
+    Note:
+        This object should not be created directly.
+
+    '''
+    __repr_str = '{classname}(value={value})'
+
+    def __init__(self, elbo_value, acc_stats, model_parameters):
+        self._elbo_value = elbo_value
+        self._acc_stats = acc_stats
+        self._model_parameters = set(model_parameters)
+
+    def __repr__(self):
+        return self.__repr_str.format(
+            classname=self.__class__.__name__,
+            value=float(self._elbo_value)
+        )
+
+    def __str__(self):
+        return str(self._elbo_value)
+
+    def __float__(self):
+        return float(self._elbo_value)
+
+    def __add__(self, other):
+        if not isinstance(other, CollapsedEvidenceLowerBoundInstance):
+            raise ValueError('expected CollapsedEvidenceLowerBoundInstance')
+
+        return CollapsedEvidenceLowerBoundInstance(
+            self._elbo_value + other._elbo_value,
+            add_acc_stats(self._acc_stats, other._acc_stats),
+            self._model_parameters.union(other._model_parameters)
+        )
+
+    def backward(self):
+        '''Compute the gradient of the loss w.r.t. to standard
+        ``pytorch`` parameters.
+        '''
+        # Pytorch minimizes the loss ! We change the sign of the ELBO
+        # just before to compute the gradient.
+        (-self._elbo_value).backward()
+
+    def get_stats(self):
+        '''Get the accumuate statistics for each parameter of the model.
+        '''
+        scale = self._datasize / self._minibatchsize
+        for parameter in self._model_parameters:
+            acc_stats = self._acc_stats[parameter]
+            parameter.accumulate_natural_grad(scale * acc_stats)
+
+
 def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
                          fast_eval=False, **kwargs):
     '''Evidence Lower Bound objective function of Variational Bayes
@@ -193,6 +246,35 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
     return EvidenceLowerBoundInstance(elbo_value, acc_stats,
                                       model.bayesian_parameters(),
                                       mb_datasize, datasize)
+
+
+def collapsed_evidence_lower_bound(model=None, data=None, **kwargs):
+    '''Collapsed Evidence Lower Bound objective function of Variational
+    Bayes Inference.
+
+    Args:
+        model (:any:`BayesianModel`): The Bayesian model with which to
+            compute the ELBO.
+        minibatch_data (``torch.Tensor``): Data of the minibatch on
+            which to evaluate the ELBO.
+        datasize (int): Number of data points of the total training
+            data. If set to 0 or negative values, the size of the
+            provided `minibatch_data` will be used instead.
+        fast_eval (boolean): If true, skip computing KL-divergence for the
+            global parameters.
+        kwargs (object): Model specific extra parameters to evalute the
+            ELBO.
+
+    Returns:
+        ``CollapsedEvidenceLowerBoundInstance``
+
+    '''
+    stats = model.sufficient_statistics(data)
+    melbo_value = model.marginal_log_likelihood(stats, **kwargs)
+    acc_stats = model.accumulate(stats)
+    model.clear_cache()
+    return CollapsedEvidenceLowerBoundInstance(melbo_value, acc_stats,
+                                               model.bayesian_parameters())
 
 
 class BayesianModelOptimizer:

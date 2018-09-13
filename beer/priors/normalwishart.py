@@ -59,6 +59,7 @@ class NormalWishartPrior(ExpFamilyPrior):
 
     def expected_value(self):
         mean, _, mean_precision, dof = self.to_std_parameters()
+        mean, mean_precision, dof = mean[0], mean_precision[0], dof[0]
         return mean, dof * mean_precision
 
     def to_natural_parameters(self, mean, scale, mean_precision, dof):
@@ -74,28 +75,39 @@ class NormalWishartPrior(ExpFamilyPrior):
     def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
-        dim = int(-1 + math.sqrt(1 - 4 * (2 - len(natural_parameters)))) // 2
-        np1 = natural_parameters[:int(dim**2)].reshape((dim, dim))
-        np2 = natural_parameters[int(dim**2):int(dim**2) + dim]
-        np3, np4 = natural_parameters[-2], natural_parameters[-1]
+
+        np_dim = natural_parameters.shape[-1]
+        natural_parameters = natural_parameters.view(-1, np_dim)
+        dim = int(-1 + math.sqrt(1 - 4 * (2 - np_dim))) // 2
+        #np1 = natural_parameters[:int(dim**2)].reshape((dim, dim))
+        np1 = natural_parameters[:, :int(dim**2)].reshape((-1, dim, dim))
+        #np2 = natural_parameters[int(dim**2):int(dim**2) + dim]
+        np2 = natural_parameters[:, int(dim**2):int(dim**2) + dim]
+        #np3, np4 = natural_parameters[-2], natural_parameters[-1]
+        np3, np4 = natural_parameters[:, -2].view(-1, 1), \
+                   natural_parameters[:, -1].view(-1, 1)
 
         scale = -2 * np3
         dof = 2 * np4 + dim
         mean = np2 / scale
-        mean_precision = torch.inverse(-2 * np1 - scale * torch.ger(mean, mean))
+        mean_quad = mean[:, :, None] * mean[:, None, :]
+        M = -2 * np1 - scale[:, :, None] * mean_quad
+        eye = M.new_ones(M.size(-1)).diag().expand_as(M)
+        M_inv, _ = torch.gesv(eye, M)
 
-        return mean, scale, mean_precision, dof
+        return mean, scale, M_inv.contiguous(), dof
 
     def _expected_sufficient_statistics(self):
         mean, scale, mean_precision, dof = self.to_std_parameters()
+        mean, scale, mean_precision, dof = mean[0], scale[0], \
+                                           mean_precision[0], dof[0]
         dtype, device = mean.dtype, mean.device
         dim = len(mean)
 
         precision = dof * mean_precision
-        logdet = _logdet(mean_precision)
+        logdet = _logdet(mean_precision)[0]
         seq = torch.arange(1, dim + 1, 1, dtype=dtype, device=device)
         sum_digamma = torch.digamma(.5 * (dof + 1 - seq)).sum()
-
         return torch.cat([
             precision.reshape(-1),
             precision @ mean,
@@ -110,7 +122,7 @@ class NormalWishartPrior(ExpFamilyPrior):
         mean, scale, mean_precision, dof = \
             self.to_std_parameters(natural_parameters)
         dtype, device = mean.dtype, mean.device
-        dim = len(mean)
+        dim = mean.shape[-1]
 
         lognorm =  .5 * dof * _logdet(mean_precision)
         lognorm -= .5 * dim * torch.log(scale)
@@ -118,8 +130,8 @@ class NormalWishartPrior(ExpFamilyPrior):
         lognorm += .25 * dim * (dim - 1) * math.log(math.pi)
         seq = torch.arange(1, dim + 1, 1, dtype=dtype, device=device,
                            requires_grad=False)
-        lognorm += torch.lgamma(.5 * (dof + 1 - seq)).sum()
-        return lognorm
+        lognorm += torch.lgamma(.5 * (dof + 1 - seq)).sum(dim=-1).view(-1, 1)
+        return lognorm.view(-1)
 
 
 class JointNormalWishartPrior(ExpFamilyPrior):
