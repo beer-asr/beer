@@ -61,7 +61,11 @@ def main():
 
     all_ref = read_text(args.reference)
     all_hyp = read_text(args.hypothesis)
-    remove_unit = args.remove
+    if args.remove is None:
+        remove_unit = None
+    else:
+        remove_unit = args.remove
+
     duplicate = args.duplicate
     phone_map = read_phone_map(args.phone_map)
     ref_keys = list(all_ref.keys())
@@ -72,7 +76,8 @@ def main():
 
     tot_len = 0
     tot_err = 0
-    for k in ref_keys:
+    for k in sys.stdin:
+        k = k.strip()
         ref = filter_text(all_ref[k], remove=remove_unit, duplicate=duplicate,
             phone_map=phone_map)
         hyp = filter_text(all_hyp[k], remove=remove_unit, duplicate=duplicate,
@@ -91,9 +96,10 @@ def main():
                 mtrix[j, i] = min(err)
         tot_err += mtrix[-1, -1]
         tot_len += len(ref)
+        print(k, round(mtrix[-1, -1] / len(ref), 4))
 
-    per = tot_err / tot_len
-    print(round(per, 4))
+    #per = tot_err / tot_len
+    #print('Total: ', round(per, 4))
 
 if __name__ == "__main__":
     main()
