@@ -113,7 +113,6 @@ class VAEGlobalMeanVariance(VAE):
         centered_data = (data - decoder_means)
         centered_stats = self.normal.sufficient_statistics(centered_data)
         llhs = self.normal.expected_log_likelihood(centered_stats)
-
         # Store the statistics of the latent/likelihood model to
         # compute their gradients.
         self.cache['latent_stats'] = latent_stats.detach()
