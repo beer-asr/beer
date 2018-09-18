@@ -104,6 +104,14 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
         nparams = self.means_precisions.expected_natural_parameters()
         return stats @ nparams.t() - .5 * self.dim * math.log(2 * math.pi)
 
+    def marginal_log_likelihood(self, stats):
+        m_llhs = []
+        for mean_precision in self.means_precisions:
+            post = mean_precision.posterior
+            m_llhs.append(post.log_norm(post.natural_parameters + stats) \
+                         - post.log_norm())
+        return torch.cat(m_llhs, dim=-1)
+
     def accumulate(self, stats, weights):
         return dict(zip(self.means_precisions, weights.t() @ stats))
 
@@ -198,6 +206,26 @@ class NormalSetSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
     def mean_field_factorization(self):
         return [[self.means_precision]]
 
+    def marginal_log_likelihood(self, stats):
+        joint_nparams = self.means_precision.posterior.natural_parameters
+        np1, np2 = self._split_natural_parameters(joint_nparams)
+        np1 = torch.ones(len(np2), 1, dtype=np1.dtype,
+                         device=np1.device) * np1.view(1, -1)
+        nparams1 = torch.cat([
+            np1[:, :-1],
+            np2,
+            np1[:, -1].view(-1, 1)
+        ], dim=1)[None]
+
+        new_stats = torch.cat([
+            stats[:, :int(self.dim ** 2)],
+            stats[:, int(self.dim ** 2):-1] / len(self),
+            stats[:, -1].view(-1, 1)
+        ], dim=-1)
+        nparams2 = new_stats[:, None, :] + nparams1
+        post = self.means_precision.posterior
+        return post.joint_log_norm(nparams2) - post.joint_log_norm(nparams1)
+
 
 class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
     '''Set of Normal density models with a shared isotropic covariance
@@ -245,6 +273,14 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
         exp_llhs = (stats1 @ nparams1)[:, None] + stats2 @ nparams2.t()
         exp_llhs -= .5 * self.dim * math.log(2 * math.pi)
         return exp_llhs
+
+    def marginal_log_likelihood(self, stats):
+        m_llhs = []
+        for mean_precision in self.means_precisions:
+            post = mean_precision.posterior
+            m_llhs.append(post.log_norm(post.natural_parameters + stats) \
+                         - post.log_norm())
+        return torch.cat(m_llhs, dim=-1)
 
     def accumulate(self, stats, resps):
         dtype, device = stats.dtype, stats.device

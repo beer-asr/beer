@@ -118,20 +118,19 @@ class NormalWishartPrior(ExpFamilyPrior):
     def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
-
         mean, scale, mean_precision, dof = \
             self.to_std_parameters(natural_parameters)
         dtype, device = mean.dtype, mean.device
         dim = mean.shape[-1]
 
-        lognorm =  .5 * dof * _logdet(mean_precision)
+        lognorm = .5 * dof * _logdet(mean_precision)
         lognorm -= .5 * dim * torch.log(scale)
         lognorm += .5 * dof * dim * math.log(2)
         lognorm += .25 * dim * (dim - 1) * math.log(math.pi)
         seq = torch.arange(1, dim + 1, 1, dtype=dtype, device=device,
                            requires_grad=False)
         lognorm += torch.lgamma(.5 * (dof + 1 - seq)).sum(dim=-1).view(-1, 1)
-        return lognorm.view(-1)
+        return lognorm
 
 
 class JointNormalWishartPrior(ExpFamilyPrior):
@@ -247,14 +246,50 @@ class JointNormalWishartPrior(ExpFamilyPrior):
         dtype, device = mean_precision.dtype, mean_precision.device
         dim = self._dim
 
-        lognorm = .5 * dof * _logdet(mean_precision)
-        lognorm -= .5 * dim  * torch.log(scales).sum()
-        lognorm += .5 * dof * dim * math.log(2)
-        lognorm += .25 * dim * (dim - 1) * math.log(math.pi)
+        lognorm_prec = .5 * dof * _logdet(mean_precision)
+        lognorm_prec += .5 * dof * dim * math.log(2)
+        lognorm_prec += .25 * dim * (dim - 1) * math.log(math.pi)
         seq = torch.arange(1, dim + 1, 1, dtype=dtype, device=device)
-        lognorm += torch.lgamma(.5 * (dof + 1 - seq)).sum()
-        return lognorm
+        lognorm_prec += torch.lgamma(.5 * (dof + 1 - seq)).sum()
+        lognorm = -.5 * dim  * torch.log(scales).sum()
+        return lognorm + lognorm_prec
+
+
+    def joint_to_std_parameters(self, natural_parameters):
+        ncomp, dim = self._ncomp, self._dim
+        np1 = natural_parameters[:, 0, :int(dim**2)].view(-1, dim, dim)
+        np2s = natural_parameters[:, :, int(dim**2):int(dim**2 + dim)]
+        np3s = natural_parameters[:, :, -2].contiguous().view(-1, ncomp, 1)
+        np4 = natural_parameters[:, :, -1].contiguous().view(-1, ncomp, 1)
+
+        scales = -2 * np3s
+        dof = 2 * np4[:, 0, :] + dim + 1 - ncomp
+        means = np2s / scales
+        quad_means = (np2s[:, :, :, None] * means[:, :, None, :]).sum(dim=1)
+        mean_cov = -2 * np1 - quad_means
+
+        # Inverting the set of covariance matrix.
+        #eye = mean_cov.new_ones(mean_cov.size(-1)).diag().expand_as(mean_cov)
+        #mean_precision, _ = torch.gesv(eye, mean_cov)
+
+        return means, scales[:, :, 0], mean_cov, dof
+
+    def joint_log_norm(self, natural_parameters):
+        _, scales, mean_cov, dof = \
+            self.joint_to_std_parameters(natural_parameters)
+        dtype, device = mean_cov.dtype, mean_cov.device
+        dim = self._dim
+
+        ldet = -_logdet(mean_cov).view(len(natural_parameters), -1)
+        lognorm_prec = .5 * dof * ldet
+        seq = torch.arange(1, dim + 1, 1, dtype=dtype, device=device)
+        tmp = dof[:, :] + 1 - seq[None, :]
+        lognorm_prec += torch.lgamma(.5 * tmp).sum(dim=-1)[:, None]
+        lognorm_prec = lognorm_prec.view(len(natural_parameters), -1)
+        lognorm_prec += .5 * dof * dim * math.log(2)
+        lognorm_prec += .25 * dim * (dim - 1) * math.log(math.pi)
+        lognorm = -.5 * dim  * scales.log()
+        return lognorm + lognorm_prec
 
 
 __all__ = ['NormalWishartPrior', 'JointNormalWishartPrior']
-

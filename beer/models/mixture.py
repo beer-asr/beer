@@ -52,8 +52,7 @@ class Mixture(DiscreteLatentBayesianModel):
         super().__init__(modelset)
         self.weights = BayesianParameter(prior_weights, posterior_weights)
 
-    def _local_kl_divergence(self, log_resps):
-        log_weights = self.weights.expected_natural_parameters()
+    def _local_kl_divergence(self, log_resps, log_weights):
         resps = log_resps.exp()
         retval = torch.sum(resps * (log_resps - log_weights[None]), dim=-1)
         return retval
@@ -81,7 +80,7 @@ class Mixture(DiscreteLatentBayesianModel):
             w_per_component_exp_llh = (per_component_exp_llh + log_weights).detach()
             w_exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
             log_resps = w_per_component_exp_llh.detach() - w_exp_llh.view(-1, 1)
-            local_kl_div = self._local_kl_divergence(log_resps)
+            local_kl_div = self._local_kl_divergence(log_resps, log_weights)
             resps = log_resps.exp()
         else:
             local_kl_div = 0
@@ -93,6 +92,29 @@ class Mixture(DiscreteLatentBayesianModel):
         self.cache['resps'] = resps
 
         return exp_llh - local_kl_div
+
+    def marginal_log_likelihood(self, stats, labels=None, **kwargs):
+        # Per-components weighted log-likelihood.
+        log_weights = self.weights.expected_value().view(1, -1).log()
+        pc_llh = self.modelset.marginal_log_likelihood(stats, **kwargs)
+
+        # Responsibilities and expected llh.
+        if labels is None:
+            w_per_component_exp_llh = (pc_llh + log_weights).detach()
+            w_exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
+            log_resps = w_per_component_exp_llh.detach() - w_exp_llh.view(-1, 1)
+            local_kl_div = self._local_kl_divergence(log_resps, log_weights)
+            resps = log_resps.exp()
+        else:
+            local_kl_div = 0
+            resps = onehot(labels, len(self.modelset), dtype=log_weights.dtype,
+                           device=log_weights.device)
+        m_llh = (pc_llh * resps).sum(dim=-1)
+
+        # Store the responsibilites to accumulate the statistics.
+        self.cache['resps'] = resps
+
+        return m_llh - local_kl_div
 
     def accumulate(self, stats):
         resps = self.cache['resps']

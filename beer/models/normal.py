@@ -12,6 +12,7 @@ from .bayesmodel import BayesianModel
 from ..priors import IsotropicNormalGammaPrior
 from ..priors import NormalGammaPrior
 from ..priors import NormalWishartPrior
+from ..priors.normalwishart import _logdet
 
 
 class Normal(BayesianModel):
@@ -87,8 +88,10 @@ class Normal(BayesianModel):
         return (stats * nparams[None]).sum(dim=-1)  -.5 * self.dim * math.log(2 * math.pi)
 
     def marginal_log_likelihood(self, stats):
-        posterior = self.mean_precision.posterior
-        return posterior.log_norm(posterior.natural_parameters + stats) - posterior.log_norm()
+        post = self.mean_precision.posterior
+        retval = post.log_norm(post.natural_parameters + stats) - post.log_norm()
+        retval = retval.view(-1)
+        return retval
 
     def accumulate(self, stats, parent_msg=None):
         return {self.mean_precision: stats.sum(dim=0)}
@@ -182,6 +185,27 @@ class NormalFullCovariance(Normal):
             -.5 * torch.ones(data.size(0), 1, dtype=dtype, device=device),
             .5 * torch.ones(data.size(0), 1, dtype=dtype, device=device),
         ], dim=-1)
+
+    def marginal_log_likelihood(self, stats):
+        mean, k, W, dof = self.mean_precision.posterior.to_std_parameters()
+        dim = mean.shape[-1]
+        mean, k, W, dof = mean.view(-1), k.view(-1), W.view(dim, dim), dof.view(-1)
+        alpha = 1 + 1/k
+
+        lnorm = .5 * _logdet(W)
+        lnorm += torch.lgamma(.5 * (dof + 1))
+        lnorm -= torch.lgamma(.5 * (dof - dim + 1))
+        lnorm = - .5 * dim * torch.log(alpha * 2 * math.pi)
+
+        quad_mean = (torch.ger(mean, mean).view(-1) * W.view(-1)).sum()
+        vec_params = torch.cat([
+            -2 * W.view(-1),
+            W @ mean,
+            2 * quad_mean.view(1)
+        ]) / alpha
+        kernel = 1 + stats[:, :-1] @ vec_params
+
+        return -.5 * (dof + 1) * kernel.log() + lnorm
 
 
 cov_types = {

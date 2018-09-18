@@ -99,7 +99,7 @@ class EvidenceLowerBoundInstance:
 
         scale = self._datasize / self._minibatchsize
         for parameter in self._model_parameters:
-            acc_stats = self._acc_stats[parameter]
+            acc_stats = self._acc_stats[parameter].detach()
             parameter.store_stats(scale * acc_stats)
 
 
@@ -136,7 +136,7 @@ class CollapsedEvidenceLowerBoundInstance:
             (-self._elbo_value).backward()
 
         for parameter in self._model_parameters:
-            acc_stats = self._acc_stats[parameter]
+            acc_stats = self._acc_stats[parameter].detach()
             parameter.store_stats(acc_stats)
 
         return self._acc_stats

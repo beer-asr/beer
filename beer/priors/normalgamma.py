@@ -53,7 +53,7 @@ class NormalGammaPrior(ExpFamilyPrior):
 
     def expected_value(self):
         mean, _, shape, rates = self.to_std_parameters()
-        return mean, shape / rates
+        return mean.view(-1), shape.view(-1) / rates.view(-1)
 
     def to_natural_parameters(self, mean, scale, shape, rates):
         return torch.cat([
@@ -66,10 +66,14 @@ class NormalGammaPrior(ExpFamilyPrior):
     def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
-        dim = (len(natural_parameters) - 2) // 2
-        np1 = natural_parameters[:dim]
-        np2 = natural_parameters[dim:2 * dim]
-        np3, np4 = natural_parameters[-2], natural_parameters[-1]
+        np_dim = natural_parameters.shape[-1]
+        natural_parameters = natural_parameters.view(-1, np_dim)
+
+        dim = (natural_parameters.shape[-1] - 2) // 2
+        np1 = natural_parameters[:, :dim]
+        np2 = natural_parameters[:, dim:2 * dim]
+        np3, np4 = natural_parameters[:, -2][:, None], \
+                   natural_parameters[:, -1][:, None]
 
         scale = -2 * np3
         shape = np4 + .5
@@ -80,6 +84,8 @@ class NormalGammaPrior(ExpFamilyPrior):
 
     def _expected_sufficient_statistics(self):
         mean, scale, shape, rates = self.to_std_parameters()
+        mean, scale, shape, rates = mean.view(-1), scale.view(-1), \
+                                    shape.view(-1), rates.view(-1)
         dim = len(mean)
         diag_precision = shape / rates
         logdet = torch.sum(torch.digamma(shape) - torch.log(rates))
@@ -94,8 +100,8 @@ class NormalGammaPrior(ExpFamilyPrior):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         mean, scale, shape, rates = self.to_std_parameters(natural_parameters)
-        dim = len(mean)
-        return dim * torch.lgamma(shape) - shape * rates.log().sum() \
+        dim = mean.shape[-1]
+        return dim * torch.lgamma(shape) - shape * rates.log().sum(dim=-1)[:, None] \
             - .5 * dim * scale.log()
 
 
