@@ -57,7 +57,7 @@ class NormalGammaPrior(ExpFamilyPrior):
 
     def to_natural_parameters(self, mean, scale, shape, rates):
         return torch.cat([
-            -.5 * scale * mean * mean - rates,
+            -.5 * scale * mean.pow(2) - rates,
             scale * mean,
             -.5 * scale.view(1),
             shape.view(1) - .5,
@@ -78,7 +78,7 @@ class NormalGammaPrior(ExpFamilyPrior):
         scale = -2 * np3
         shape = np4 + .5
         mean = np2 / scale
-        rates = -np1 - .5 * scale * mean * mean
+        rates = -np1 - .5 * scale * mean.pow(2)
 
         return mean, scale, shape, rates
 
@@ -92,7 +92,7 @@ class NormalGammaPrior(ExpFamilyPrior):
         return torch.cat([
             diag_precision,
             diag_precision * mean,
-            ((dim / scale) + torch.sum((diag_precision * mean) * mean)).view(1),
+            ((dim / scale) + (diag_precision * mean.pow(2)).sum()).view(1),
             logdet.view(1)
         ])
 

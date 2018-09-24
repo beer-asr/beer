@@ -1,3 +1,4 @@
+
 class BayesianModelOptimizer:
     '''Generic optimizer for :any:`BayesianModel` subclasses.
 
@@ -59,12 +60,12 @@ class CVBOptimizer:
         self._parameters = list(params)
         self._std_optim = std_optim
 
-    def init_step(self, stats):
+    def init_step(self, stats=None):
         'Set all the standard/Bayesian parameters gradient to zero.'
         if self._std_optim is not None:
             self._std_optim.zero_grad()
         for parameter in self._parameters:
-            if stats[parameter] is not None:
+            if stats is not None and stats[parameter] is not None:
                 parameter.remove_stats(stats[parameter])
 
     def step(self):

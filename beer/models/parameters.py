@@ -1,6 +1,7 @@
 
 '''Implementation of the models\' parameters.'''
 
+import uuid
 import torch
 from ..priors import ExpFamilyPrior
 
@@ -13,13 +14,14 @@ class ConstantParameter:
     def __init__(self, tensor, fixed_dtype=False):
         self.fixed_dtype = fixed_dtype
         self.value = tensor
+        self.uuid = uuid.uuid4()
 
     def __repr__(self):
         return self.__repr_str.format(classname=self.__class__.__name__,
                                       value=self.value)
 
     def __hash__(self):
-        return hash(super().__repr__())
+        return hash(self.uuid)
 
     def float_(self):
         'Convert value of the parameter to float precision.'
@@ -69,12 +71,16 @@ class BayesianParameter:
         self.stats = \
             torch.zeros_like(self.prior.natural_parameters, dtype=dtype,
                             device=device, requires_grad=False)
+        self.uuid = uuid.uuid4()
 
     def __repr__(self):
         return self.__repr_str.format(prior=self.prior, posterior=self.posterior)
 
     def __hash__(self):
-        return hash(super().__repr__())
+        return hash(self.uuid)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     def _dispatch(self):
         for callback in self._callbacks:

@@ -90,7 +90,7 @@ class ARNetNormalDiagonalCovarianceLayer(torch.nn.Module):
     def forward(self, data):
         mean = self.h2mean(data)
         logvar = self.h2logvar(data)
-        variance = 1e-2 + torch.nn.functional.sigmoid(logvar)
+        variance = 1e-2 + torch.sigmoid(logvar)
         return (1 - variance) * mean, variance
 
 

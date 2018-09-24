@@ -136,7 +136,10 @@ class CollapsedEvidenceLowerBoundInstance:
             (-self._elbo_value).backward()
 
         for parameter in self._model_parameters:
-            acc_stats = self._acc_stats[parameter].detach()
+            if parameter.stats is not None:
+                acc_stats = self._acc_stats[parameter].detach()
+            else:
+                acc_stats = self._acc_stats[parameter].detach()
             parameter.store_stats(acc_stats)
 
         return self._acc_stats

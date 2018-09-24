@@ -107,7 +107,7 @@ class IsotropicNormalGammaPrior(ExpFamilyPrior):
         return torch.cat([
             precision.view(1),
             precision * mean,
-            ((dim / scale) + precision * (mean * mean).sum()).view(1),
+            ((dim / scale) + precision * (mean.pow(2)).sum()).view(1),
             logdet.view(1)
         ])
 
