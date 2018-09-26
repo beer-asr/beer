@@ -131,8 +131,17 @@ class Mixture(DiscreteLatentBayesianModel):
 
     def posteriors(self, data):
         stats = self.modelset.sufficient_statistics(data)
+        log_weights = self.weights.expected_natural_parameters().view(1, -1)
         per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
-        per_component_exp_llh += self.weights.expected_value().view(1, -1)
+        per_component_exp_llh += log_weights
+        
+        lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
+        return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
+    
+    def marginal_posteriors(self, data):
+        stats = self.modelset.sufficient_statistics(data)
+        per_component_exp_llh = self.modelset.marginal_log_likelihood(stats)
+        per_component_exp_llh += self.weights.expected_value().view(1, -1).log()
         lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
         return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
 

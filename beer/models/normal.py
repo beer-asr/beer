@@ -82,13 +82,10 @@ class Normal(BayesianModel):
     def expected_log_likelihood(self, stats):
         nparams = self.mean_precision.expected_natural_parameters()
         return (stats * nparams[None]).sum(dim=-1)  -.5 * self.dim * math.log(2 * math.pi)
-
-    #def marginal_log_likelihood(self, stats):
-    #    post = self.mean_precision.posterior
-    #    retval = post.log_norm(post.natural_parameters + stats) - post.log_norm()
-    #    retval = retval.view(-1)
-    #    return retval
-
+    
+    def marginal_log_likelihood(prior, stats):
+        return self._marginal_log_likelihood(self.mean_precision.posterior, stats)
+    
     def accumulate(self, stats, parent_msg=None):
         return {self.mean_precision: stats.sum(dim=0)}
 
@@ -123,8 +120,10 @@ class NormalIsotropicCovariance(Normal):
             .5 * dim * torch.ones(len(data), 1, dtype=dtype, device=device),
         ], dim=-1)
 
-    def marginal_log_likelihood(self, stats):
-        mean, scale, shape, rate = self.mean_precision.posterior.to_std_parameters()
+    
+    @staticmethod
+    def _marginal_log_likelihood(prior, stats):
+        mean, scale, shape, rate = prior.to_std_parameters()
         mean, scale, shape, rate = mean.view(-1), scale.view(-1), \
                                     shape.view(-1), rate.view(-1)
 
@@ -163,7 +162,9 @@ class NormalDiagonalCovariance(Normal):
         return cls(prior, posterior)
 
     @property
-    def cov(self):
+    def cov(
+    
+    ):
         _, precision = self.mean_precision.expected_value()
         return (1. / precision).diag()
 
@@ -176,9 +177,10 @@ class NormalDiagonalCovariance(Normal):
             -.5 * torch.ones(len(data), 1, dtype=dtype, device=device),
             .5 * torch.ones(len(data), 1, dtype=dtype, device=device),
         ], dim=-1)
-
-    def marginal_log_likelihood(self, stats):
-        mean, scale, shape, rates = self.mean_precision.posterior.to_std_parameters()
+    
+    @staticmethod
+    def _marginal_log_likelihood(prior, stats):
+        mean, scale, shape, rates = prior.to_std_parameters()
         mean, scale, shape, rates = mean.view(-1), scale.view(-1), \
                                     shape.view(-1), rates.view(-1)
         dim = len(mean)
@@ -219,8 +221,9 @@ class NormalFullCovariance(Normal):
             .5 * torch.ones(data.size(0), 1, dtype=dtype, device=device),
         ], dim=-1)
 
-    def marginal_log_likelihood(self, stats):
-        mean, k, W, dof = self.mean_precision.posterior.to_std_parameters()
+    @staticmethod
+    def _marginal_log_likelihood(prior, stats):
+        mean, k, W, dof = prior.to_std_parameters()
         dim = mean.shape[-1]
         mean, k, W, dof = mean.view(-1), k.view(-1), W.view(dim, dim), dof.view(-1)
         alpha = 1 + 1/k

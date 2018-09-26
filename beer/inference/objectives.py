@@ -134,15 +134,13 @@ class CollapsedEvidenceLowerBoundInstance:
         # just before to compute the gradient.
         if self._elbo_value.requires_grad:
             (-self._elbo_value).backward()
-
+            
         for parameter in self._model_parameters:
-            if parameter.stats is not None:
-                acc_stats = self._acc_stats[parameter].detach()
-            else:
-                acc_stats = self._acc_stats[parameter].detach()
+            acc_stats = self._acc_stats[parameter].detach()
             parameter.store_stats(acc_stats)
 
         return self._acc_stats
+    
 
 
 def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
@@ -230,7 +228,7 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
                                       mb_datasize, datasize)
 
 
-def collapsed_evidence_lower_bound(model=None, data=None, **kwargs):
+def collapsed_evidence_lower_bound(model=None, minibatch_data=None, **kwargs):
     '''Collapsed Evidence Lower Bound objective function of Variational
     Bayes Inference.
 
@@ -251,7 +249,7 @@ def collapsed_evidence_lower_bound(model=None, data=None, **kwargs):
         ``CollapsedEvidenceLowerBoundInstance``
 
     '''
-    stats = model.sufficient_statistics(data)
+    stats = model.sufficient_statistics(minibatch_data)
     elbo_value = model.marginal_log_likelihood(stats, **kwargs).sum()
     acc_stats = model.accumulate(stats)
     model.clear_cache()

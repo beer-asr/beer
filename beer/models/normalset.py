@@ -106,7 +106,7 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
 
     def marginal_log_likelihood(self, stats):
         m_llhs = []
-        for mean_precision in self.means_precisions:
+        for model in self.means_precisions:
             post = mean_precision.posterior
             m_llhs.append(post.log_norm(post.natural_parameters + stats) \
                          - post.log_norm())
@@ -129,6 +129,14 @@ class NormalSetIsotropicCovariance(NormalSetNonSharedCovariance):
     def sufficient_statistics(data):
         return NormalIsotropicCovariance.sufficient_statistics(data)
 
+    def marginal_log_likelihood(self, stats):
+        m_llhs = []
+        for param in self.means_precisions:
+            cls = NormalIsotropicCovariance
+            c_m_llhs = cls._marginal_log_likelihood(param.posterior, stats)
+            m_llhs.append(c_m_llhs.view(-1, 1))
+        return torch.cat(m_llhs, dim=-1)
+
 
 class NormalSetDiagonalCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with diagonal covariance matrix.'''
@@ -141,6 +149,14 @@ class NormalSetDiagonalCovariance(NormalSetNonSharedCovariance):
     @staticmethod
     def sufficient_statistics(data):
         return NormalDiagonalCovariance.sufficient_statistics(data)
+    
+    def marginal_log_likelihood(self, stats):
+        m_llhs = []
+        for param in self.means_precisions:
+            cls = NormalDiagonalCovariance
+            c_m_llhs = cls._marginal_log_likelihood(param.posterior, stats)
+            m_llhs.append(c_m_llhs.view(-1, 1))
+        return torch.cat(m_llhs, dim=-1)
 
 
 class NormalSetFullCovariance(NormalSetNonSharedCovariance):
@@ -154,6 +170,14 @@ class NormalSetFullCovariance(NormalSetNonSharedCovariance):
     @staticmethod
     def sufficient_statistics(data):
         return NormalFullCovariance.sufficient_statistics(data)
+
+    def marginal_log_likelihood(self, stats):
+        m_llhs = []
+        for param in self.means_precisions:
+            cls = NormalFullCovariance
+            c_m_llhs = cls._marginal_log_likelihood(param.posterior, stats)
+            m_llhs.append(c_m_llhs.view(-1, 1))
+        return torch.cat(m_llhs, dim=-1)
 
 
 ########################################################################
