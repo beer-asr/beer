@@ -72,7 +72,11 @@ class BayesianParameter:
             torch.zeros_like(self.prior.natural_parameters, dtype=dtype,
                             device=device, requires_grad=False)
         self.uuid = uuid.uuid4()
-
+    
+    def __getstate__(self):
+        self.stats = torch.tensor(self.stats)
+        return self.__dict__
+    
     def __repr__(self):
         return self.__repr_str.format(prior=self.prior, posterior=self.posterior)
 
@@ -122,7 +126,7 @@ class BayesianParameter:
                 of the parameter.
 
         '''
-        self.stats = acc_stats.detach()
+        self.stats = acc_stats
 
     def remove_stats(self, acc_stats):
         self.posterior.natural_parameters = self.posterior.natural_parameters - acc_stats

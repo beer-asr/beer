@@ -87,7 +87,7 @@ class Normal(BayesianModel):
         return self._marginal_log_likelihood(self.mean_precision.posterior, stats)
     
     def accumulate(self, stats, parent_msg=None):
-        return {self.mean_precision: stats.sum(dim=0)}
+        return {self.mean_precision: torch.tensor(stats.sum(dim=0))}
 
 
 class NormalIsotropicCovariance(Normal):

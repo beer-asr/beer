@@ -4,6 +4,7 @@ from collections import defaultdict, OrderedDict
 import torch
 from .utils import logsumexp
 
+
 class Arc:
     '''Arc between to state (i.e. node) of a graph with a weight.
 

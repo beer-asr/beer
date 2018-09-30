@@ -99,7 +99,7 @@ class EvidenceLowerBoundInstance:
 
         scale = self._datasize / self._minibatchsize
         for parameter in self._model_parameters:
-            acc_stats = self._acc_stats[parameter].detach()
+            acc_stats = self._acc_stats[parameter]
             parameter.store_stats(scale * acc_stats)
 
 
@@ -141,7 +141,48 @@ class CollapsedEvidenceLowerBoundInstance:
 
         return self._acc_stats
     
+class StochasticCollapsedEvidenceLowerBoundInstance:
+    '''Collapsed Evidence Lower Bound of a data set given a model.
 
+    Note:
+        This object should not be created directly.
+
+    '''
+    __repr_str = '{classname}(value={value})'
+
+    def __init__(self, elbo_value, acc_stats, model_parameters, minibatchsize,
+                 datasize):
+        self._elbo_value = elbo_value
+        self._acc_stats = acc_stats
+        self._model_parameters = set(model_parameters)
+        self._minibatchsize = minibatchsize
+        self._datasize = datasize
+
+    def __repr__(self):
+        return self.__repr_str.format(
+            classname=self.__class__.__name__,
+            value=float(self._elbo_value)
+        )
+
+    def __str__(self):
+        return str(self._elbo_value)
+
+    def __float__(self):
+        return float(self._elbo_value)
+
+    def backward(self):
+        # Pytorch minimizes the loss ! We change the sign of the ELBO
+        # just before to compute the gradient.
+        if self._elbo_value.requires_grad:
+            (-self._elbo_value).backward()
+            
+        scale = self._datasize / self._minibatchsize
+        for parameter in self._model_parameters:
+            acc_stats = self._acc_stats[parameter].detach()
+            parameter.store_stats(scale * acc_stats)
+
+        return self._acc_stats
+    
 
 def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
                          fast_eval=False, **kwargs):
@@ -204,23 +245,15 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
     mb_datasize = len(minibatch_data)
     if datasize <= 0:
         datasize = mb_datasize
-
-    # Estimate the scaling constant of the stochastic ELBO.
     scale = datasize / float(mb_datasize)
-
-    # Compute the ELBO.
     stats = model.sufficient_statistics(minibatch_data)
     exp_llh = model.expected_log_likelihood(stats, **kwargs)
     if not fast_eval:
         kl_div = model.kl_div_posterior_prior().sum()
     else:
         kl_div = 0.
-    elbo_value = scale * exp_llh.sum() - kl_div
-
-    # Accumulate the statistics and scale them accordingly.
-    acc_stats = model.accumulate(stats)
-
-    # Clean up intermediary results.
+    elbo_value = float(scale) * exp_llh.sum() - kl_div
+    acc_stats = model.accumulate(torch.tensor(stats))
     model.clear_cache()
 
     return EvidenceLowerBoundInstance(elbo_value, acc_stats,
@@ -251,11 +284,58 @@ def collapsed_evidence_lower_bound(model=None, minibatch_data=None, **kwargs):
     '''
     stats = model.sufficient_statistics(minibatch_data)
     elbo_value = model.marginal_log_likelihood(stats, **kwargs).sum()
-    acc_stats = model.accumulate(stats)
+    acc_stats = model.accumulate(torch.tensor(stats))
     model.clear_cache()
     return CollapsedEvidenceLowerBoundInstance(elbo_value, acc_stats,
                                                model.bayesian_parameters())
 
 
+def stochastic_collapsed_evidence_lower_bound(model, minibatch_data, datasize=-1, 
+                                              **kwargs):
+    '''Collapsed Evidence Lower Bound objective function of Variational
+    Bayes Inference.
 
-__all__ = ['evidence_lower_bound', 'collapsed_evidence_lower_bound']
+    Args:
+        model (:any:`BayesianModel`): The Bayesian model with which to
+            compute the ELBO.
+        minibatch_data (``torch.Tensor``): Data of the minibatch on
+            which to evaluate the ELBO.
+        datasize (int): Number of data points of the total training
+            data. If set to 0 or negative values, the size of the
+            provided `minibatch_data` will be used instead.
+        fast_eval (boolean): If true, skip computing KL-divergence for the
+            global parameters.
+        kwargs (object): Model specific extra parameters to evalute the
+            ELBO.
+
+    Returns:
+        ``CollapsedEvidenceLowerBoundInstance``
+
+    '''
+    if model is None and  minibatch_data is None and datasize > 0:
+        return EvidenceLowerBoundInstance(0., {}, [], 0, datasize)
+    elif model is None or minibatch_data is None:
+        raise ValueError('if datasize is not provided, need at least "model" '
+                         'and "minibatch_data"')
+
+    mb_datasize = len(minibatch_data)
+    if datasize <= 0:
+        datasize = mb_datasize
+    scale = datasize / float(mb_datasize)
+    stats = model.sufficient_statistics(minibatch_data)
+    exp_llh = model.marginal_log_likelihood(stats, **kwargs)
+    kl_div = model.kl_div_posterior_prior().sum()
+    elbo_value = float(scale) * exp_llh.sum() - kl_div
+    acc_stats = model.accumulate(torch.tensor(stats))
+    model.clear_cache()
+
+    return EvidenceLowerBoundInstance(elbo_value, acc_stats,
+                                      model.bayesian_parameters(),
+                                      mb_datasize, datasize)
+
+
+
+
+__all__ = ['evidence_lower_bound', 'collapsed_evidence_lower_bound',
+           'stochastic_collapsed_evidence_lower_bound']
+

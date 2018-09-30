@@ -113,7 +113,7 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
         return torch.cat(m_llhs, dim=-1)
 
     def accumulate(self, stats, weights):
-        return dict(zip(self.means_precisions, weights.t() @ stats))
+        return dict(zip(self.means_precisions, torch.tensor(weights.t() @ stats)))
 
 
 class NormalSetIsotropicCovariance(NormalSetNonSharedCovariance):
@@ -315,7 +315,7 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
             w_stats[:, -2].view(-1),
             w_stats[:, -1].sum().view(1)
         ], dim=0)
-        return {self.means_precision: acc_stats}
+        return {self.means_precision: torch.tensor(acc_stats)}
 
 
 class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
@@ -376,7 +376,7 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
             w_stats[:, -2].view(-1),
             w_stats[:, -1].sum().view(1)
         ], dim=0)
-        return {self.means_precision: acc_stats}
+        return {self.means_precision: torch.tensor(acc_stats)}
 
 
 class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
@@ -439,7 +439,7 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
             w_stats[:, -2].view(-1),
             w_stats[:, -1].sum().view(1)
         ], dim=0)
-        return {self.means_precision: acc_stats}
+        return {self.means_precision: torch.tensor(acc_stats)}
 
 
 __all__ = ['NormalSet']
