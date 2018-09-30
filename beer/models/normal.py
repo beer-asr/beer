@@ -12,6 +12,7 @@ from .bayesmodel import BayesianModel
 from ..priors import IsotropicNormalGammaPrior
 from ..priors import NormalGammaPrior
 from ..priors import NormalWishartPrior
+from ..priors.normalwishart import _logdet
 
 
 class Normal(BayesianModel):
@@ -81,9 +82,12 @@ class Normal(BayesianModel):
     def expected_log_likelihood(self, stats):
         nparams = self.mean_precision.expected_natural_parameters()
         return (stats * nparams[None]).sum(dim=-1)  -.5 * self.dim * math.log(2 * math.pi)
-
+    
+    def marginal_log_likelihood(prior, stats):
+        return self._marginal_log_likelihood(self.mean_precision.posterior, stats)
+    
     def accumulate(self, stats, parent_msg=None):
-        return {self.mean_precision: stats.sum(dim=0)}
+        return {self.mean_precision: torch.tensor(stats.sum(dim=0))}
 
 
 class NormalIsotropicCovariance(Normal):
@@ -116,6 +120,32 @@ class NormalIsotropicCovariance(Normal):
             .5 * dim * torch.ones(len(data), 1, dtype=dtype, device=device),
         ], dim=-1)
 
+    
+    @staticmethod
+    def _marginal_log_likelihood(prior, stats):
+        mean, scale, shape, rate = prior.to_std_parameters()
+        mean, scale, shape, rate = mean.view(-1), scale.view(-1), \
+                                    shape.view(-1), rate.view(-1)
+
+        dim = len(mean)
+        alpha = 1 + 1 / scale
+        lnorm = (torch.lgamma(shape + .5 * dim) - torch.lgamma(shape))
+        lnorm -= .5 * dim * (alpha.log() + math.log(2 * math.pi))
+        lnorm -= .5 * dim * rate.log()
+        data = stats[:, 1: 1 + dim]
+        kernel = 1 + (data - mean).pow(2).sum(dim=-1) / (2 * alpha * rate)
+        #import pdb; pdb.set_trace()
+        return - (shape + .5 * dim) * kernel.log() + lnorm
+
+        dim = len(mean)
+        alpha = 1 + 1 / scale
+        lnorm = dim * (torch.lgamma(shape + .5 ) - torch.lgamma(shape))
+        lnorm -= .5 * dim * (alpha.log() + math.log(2 * math.pi))
+        lnorm -= .5 * dim * rate.log().sum()
+        data = stats[:, 1: 1 + dim]
+        kernels = 1 + (data - mean).pow(2) / (2 * alpha * rate)
+        return - (shape + .5) * kernels.log().sum(dim=-1) + lnorm
+
 
 class NormalDiagonalCovariance(Normal):
     '''Normal model with diagonal covariance matrix.'''
@@ -132,7 +162,9 @@ class NormalDiagonalCovariance(Normal):
         return cls(prior, posterior)
 
     @property
-    def cov(self):
+    def cov(
+    
+    ):
         _, precision = self.mean_precision.expected_value()
         return (1. / precision).diag()
 
@@ -140,11 +172,25 @@ class NormalDiagonalCovariance(Normal):
     def sufficient_statistics(data):
         dtype, device = data.dtype, data.device
         return torch.cat([
-            -.5 * data ** 2,
+            -.5 * data.pow(2),
             data,
             -.5 * torch.ones(len(data), 1, dtype=dtype, device=device),
             .5 * torch.ones(len(data), 1, dtype=dtype, device=device),
         ], dim=-1)
+    
+    @staticmethod
+    def _marginal_log_likelihood(prior, stats):
+        mean, scale, shape, rates = prior.to_std_parameters()
+        mean, scale, shape, rates = mean.view(-1), scale.view(-1), \
+                                    shape.view(-1), rates.view(-1)
+        dim = len(mean)
+        alpha = 1 + 1 / scale
+        lnorm = dim * (torch.lgamma(shape + .5 ) - torch.lgamma(shape))
+        lnorm -= .5 * dim * (alpha.log() + math.log(2 * math.pi))
+        lnorm -= .5 * rates.log().sum()
+        data = stats[:, dim: 2 * dim]
+        kernels = 1 + (data - mean).pow(2) / (2 * alpha * rates)
+        return - (shape + .5) * kernels.log().sum(dim=-1) + lnorm
 
 
 class NormalFullCovariance(Normal):
@@ -174,6 +220,28 @@ class NormalFullCovariance(Normal):
             -.5 * torch.ones(data.size(0), 1, dtype=dtype, device=device),
             .5 * torch.ones(data.size(0), 1, dtype=dtype, device=device),
         ], dim=-1)
+
+    @staticmethod
+    def _marginal_log_likelihood(prior, stats):
+        mean, k, W, dof = prior.to_std_parameters()
+        dim = mean.shape[-1]
+        mean, k, W, dof = mean.view(-1), k.view(-1), W.view(dim, dim), dof.view(-1)
+        alpha = 1 + 1/k
+
+        lnorm = .5 * _logdet(W)
+        lnorm += torch.lgamma(.5 * (dof + 1))
+        lnorm -= torch.lgamma(.5 * (dof - dim + 1))
+        lnorm -= .5 * dim * torch.log(alpha * math.pi)
+
+        quad_mean = (torch.ger(mean, mean).view(-1) * W.view(-1)).sum()
+        vec_params = torch.cat([
+            2 * W.view(-1),
+            W @ mean,
+            2 * quad_mean.view(1)
+        ])
+        kernel = 1 + stats[:, :-1] @ (-vec_params) / alpha
+
+        return -.5 * (dof + 1) * kernel.log() + lnorm
 
 
 cov_types = {

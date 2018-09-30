@@ -13,9 +13,11 @@ n_split=$2
 split_dir=$3
 mkdir -p $split_dir
 
+
+nsuff=${#n_split}
 cp $list $split_dir/list
 pushd $split_dir > /dev/null
-split --numeric-suffixes=1 -n l/$n_split ./list
+split --numeric-suffixes=1 -a $nsuff -n l/$n_split ./list
 rm list
 popd > /dev/null
 

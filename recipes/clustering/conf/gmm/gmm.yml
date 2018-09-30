@@ -1,0 +1,6 @@
+size: 512
+concentration: 1.
+prior_strength: 1.
+noise_std: 1
+cov_type: diagonal
+shared_cov: no

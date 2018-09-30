@@ -5,11 +5,16 @@ import torch
 from .baseprior import ExpFamilyPrior
 
 
-def _logdet(mat):
+def _logdet(mats):
     '''Log determinant of a positive definite matrix.'''
-    if mat.requires_grad:
-        mat.register_hook(lambda grad: .5 * (grad + grad.t()))
-    return 2 * torch.log(torch.diag(torch.potrf(mat))).sum()
+    dim = mats.shape[-1]
+    vmats = mats.view(-1, dim, dim)
+    retval = []
+    for mat in vmats:
+        if mat.requires_grad:
+            mat.register_hook(lambda grad: .5 * (grad + grad.t()))
+        retval.append(2 * torch.log(torch.diag(torch.potrf(mat))).sum().view(1))
+    return torch.cat(retval).view(-1, 1)
 
 
 class WishartPrior(ExpFamilyPrior):

@@ -71,7 +71,7 @@ class IsotropicNormalGammaPrior(ExpFamilyPrior):
 
     def expected_value(self):
         mean, _, shape, rate = self.to_std_parameters()
-        return mean, shape / rate
+        return mean.view(-1), shape.view(-1) / rate.view(-1)
 
     def to_natural_parameters(self, mean, scale, shape, rate):
         return torch.cat([
@@ -84,33 +84,39 @@ class IsotropicNormalGammaPrior(ExpFamilyPrior):
     def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
-        dim = len(natural_parameters) - 3
-        np1 = natural_parameters[0]
-        np2 = natural_parameters[1:1 + dim]
-        np3, np4 = natural_parameters[-2], natural_parameters[-1]
+        np_dim = natural_parameters.shape[-1]
+        natural_parameters = natural_parameters.view(-1, np_dim)
+
+        dim = natural_parameters.shape[-1] - 3
+        np1 = natural_parameters[:, 0].view(-1, 1)
+        np2 = natural_parameters[:, 1:1 + dim]
+        np3, np4 = natural_parameters[:, -2].view(-1, 1), \
+                   natural_parameters[:, -1].view(-1, 1)
         scale = -2 * np3
         shape = np4 + 1 - .5 * dim
         mean = np2 / scale
-        rate = -np1 - .5 * scale * torch.sum(mean * mean)
+        rate = -np1 - .5 * scale * torch.sum(mean * mean, dim=-1)[:, None]
         return mean, scale, shape, rate
 
     def _expected_sufficient_statistics(self):
         mean, scale, shape, rate = self.to_std_parameters()
+        mean, scale, shape, rate = mean[0], scale[0], shape[0], rate[0]
         dim = len(mean)
         precision = shape / rate
         logdet = torch.digamma(shape) - torch.log(rate)
         return torch.cat([
             precision.view(1),
             precision * mean,
-            ((dim / scale) + precision * (mean * mean).sum()).view(1),
+            ((dim / scale) + precision * (mean.pow(2)).sum()).view(1),
             logdet.view(1)
         ])
 
     def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
+
         mean, scale, shape, rate = self.to_std_parameters(natural_parameters)
-        dim = len(mean)
+        dim = mean.shape[-1]
         return torch.lgamma(shape) - shape * rate.log()  - .5 * dim * scale.log()
 
 

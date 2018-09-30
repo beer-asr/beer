@@ -71,6 +71,30 @@ class VAE(BayesianModel):
 
         return llhs - kl_weight * kl_divs
 
+    def marginal_log_likelihood(self, data, kl_weight=1., use_mean=False,
+                                **kwargs):
+        encoder_states = self.encoder(data)
+        posterior_params = self.encoder_problayer(encoder_states)
+        samples, post_llh = self.encoder_problayer.samples_and_llh(
+            posterior_params, use_mean)
+
+        # Per-frame KL divergence between the (approximate) posterior
+        # and the prior.
+        latent_stats = self.latent_model.sufficient_statistics(samples)
+        prior_llh = self.latent_model.marginal_log_likelihood(latent_stats,
+                                                              **kwargs)
+        kl_divs = post_llh - prior_llh
+
+        # Log-likelihood.
+        decoder_states = self.decoder(samples)
+        llh_params = self.decoder_problayer(decoder_states)
+        llhs = self.decoder_problayer.log_likelihood(data, llh_params)
+
+        # Store the statistics of the latent/likelihood model to
+        # compute their gradients.
+        self.cache['latent_stats'] = latent_stats.detach()
+        return llhs - kl_weight * kl_divs
+
     def accumulate(self, _):
         latent_stats = self.cache['latent_stats']
         return self.latent_model.accumulate(latent_stats)
@@ -97,29 +121,61 @@ class VAEGlobalMeanVariance(VAE):
             self.normal.mean_field_factorization()
 
     def expected_log_likelihood(self, data, kl_weight=1., use_mean=False,
-                                **kwargs):
+                                nsamples=1, **kwargs):
         encoder_states = self.encoder(data)
         posterior_params = self.encoder_problayer(encoder_states)
-        samples, post_llh = self.encoder_problayer.samples_and_llh(
-            posterior_params, use_mean)
+        s_llhs = []
+        for l in range(nsamples):
+            samples, post_llh = self.encoder_problayer.samples_and_llh(
+                posterior_params, use_mean)
 
-        # Per-frame KL divergence between the (approximate) posterior
-        # and the prior.
-        latent_stats = self.latent_model.sufficient_statistics(samples)
-        prior_llh = self.latent_model.expected_log_likelihood(latent_stats,
-                                                              **kwargs)
-        kl_divs = post_llh - prior_llh
+            # Per-frame KL divergence between the (approximate) posterior
+            # and the prior.
+            latent_stats = self.latent_model.sufficient_statistics(samples)
+            prior_llh = self.latent_model.expected_log_likelihood(latent_stats,
+                                                                   **kwargs)
+            kl_divs = post_llh - prior_llh
 
-        decoder_means = self.decoder(samples)
-        centered_data = (data - decoder_means)
-        centered_stats = self.normal.sufficient_statistics(centered_data)
-        llhs = self.normal.expected_log_likelihood(centered_stats)
+            decoder_means = self.decoder(samples)
+            centered_data = (data - decoder_means)
+            centered_stats = self.normal.sufficient_statistics(centered_data)
+            llhs = self.normal.expected_log_likelihood(centered_stats)
 
-        # Store the statistics of the latent/likelihood model to
-        # compute their gradients.
-        self.cache['latent_stats'] = latent_stats.detach()
-        self.cache['centered_stats'] = centered_stats.detach()
-        return llhs - kl_weight * kl_divs
+            # Store the statistics of the latent/likelihood model to
+            # compute their gradients.
+            self.cache['latent_stats'] = latent_stats.detach()
+            self.cache['centered_stats'] = centered_stats.detach()
+            s_llhs.append((llhs - kl_weight * kl_divs).view(-1, 1))
+        return torch.cat(s_llhs, dim=-1).mean(dim=-1)
+
+    def marginal_log_likelihood(self, data, kl_weight=1., use_mean=False,
+                                nsamples=1, **kwargs):
+        encoder_states = self.encoder(data)
+        posterior_params = self.encoder_problayer(encoder_states)
+        
+        s_llhs = []
+        for l in range(nsamples):
+            samples, post_llh = self.encoder_problayer.samples_and_llh(
+                posterior_params, use_mean)
+
+            # Per-frame KL divergence between the (approximate) posterior
+            # and the prior.
+            latent_stats = self.latent_model.sufficient_statistics(samples)
+            prior_llh = self.latent_model.marginal_log_likelihood(latent_stats,
+                                                                  **kwargs)
+            kl_divs = post_llh - prior_llh
+
+            decoder_means = self.decoder(samples)
+            centered_data = (data - decoder_means)
+            centered_stats = self.normal.sufficient_statistics(centered_data)
+            llhs = self.normal.marginal_log_likelihood(centered_stats)
+
+            # Store the statistics of the latent/likelihood model to
+            # compute their gradients.
+            self.cache['latent_stats'] = latent_stats.detach()
+            self.cache['centered_stats'] = centered_stats.detach()
+            s_llhs.append((llhs - kl_weight * kl_divs).view(-1, 1))
+        return torch.cat(s_llhs, dim=-1).mean(dim=-1)
 
     def accumulate(self, _):
         latent_stats = self.cache['latent_stats']

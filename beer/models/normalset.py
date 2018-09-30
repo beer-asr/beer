@@ -104,8 +104,16 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
         nparams = self.means_precisions.expected_natural_parameters()
         return stats @ nparams.t() - .5 * self.dim * math.log(2 * math.pi)
 
+    def marginal_log_likelihood(self, stats):
+        m_llhs = []
+        for model in self.means_precisions:
+            post = mean_precision.posterior
+            m_llhs.append(post.log_norm(post.natural_parameters + stats) \
+                         - post.log_norm())
+        return torch.cat(m_llhs, dim=-1)
+
     def accumulate(self, stats, weights):
-        return dict(zip(self.means_precisions, weights.t() @ stats))
+        return dict(zip(self.means_precisions, torch.tensor(weights.t() @ stats)))
 
 
 class NormalSetIsotropicCovariance(NormalSetNonSharedCovariance):
@@ -121,6 +129,14 @@ class NormalSetIsotropicCovariance(NormalSetNonSharedCovariance):
     def sufficient_statistics(data):
         return NormalIsotropicCovariance.sufficient_statistics(data)
 
+    def marginal_log_likelihood(self, stats):
+        m_llhs = []
+        for param in self.means_precisions:
+            cls = NormalIsotropicCovariance
+            c_m_llhs = cls._marginal_log_likelihood(param.posterior, stats)
+            m_llhs.append(c_m_llhs.view(-1, 1))
+        return torch.cat(m_llhs, dim=-1)
+
 
 class NormalSetDiagonalCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with diagonal covariance matrix.'''
@@ -133,6 +149,14 @@ class NormalSetDiagonalCovariance(NormalSetNonSharedCovariance):
     @staticmethod
     def sufficient_statistics(data):
         return NormalDiagonalCovariance.sufficient_statistics(data)
+    
+    def marginal_log_likelihood(self, stats):
+        m_llhs = []
+        for param in self.means_precisions:
+            cls = NormalDiagonalCovariance
+            c_m_llhs = cls._marginal_log_likelihood(param.posterior, stats)
+            m_llhs.append(c_m_llhs.view(-1, 1))
+        return torch.cat(m_llhs, dim=-1)
 
 
 class NormalSetFullCovariance(NormalSetNonSharedCovariance):
@@ -146,6 +170,14 @@ class NormalSetFullCovariance(NormalSetNonSharedCovariance):
     @staticmethod
     def sufficient_statistics(data):
         return NormalFullCovariance.sufficient_statistics(data)
+
+    def marginal_log_likelihood(self, stats):
+        m_llhs = []
+        for param in self.means_precisions:
+            cls = NormalFullCovariance
+            c_m_llhs = cls._marginal_log_likelihood(param.posterior, stats)
+            m_llhs.append(c_m_llhs.view(-1, 1))
+        return torch.cat(m_llhs, dim=-1)
 
 
 ########################################################################
@@ -198,6 +230,26 @@ class NormalSetSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
     def mean_field_factorization(self):
         return [[self.means_precision]]
 
+    def marginal_log_likelihood(self, stats):
+        joint_nparams = self.means_precision.posterior.natural_parameters
+        np1, np2 = self._split_natural_parameters(joint_nparams)
+        np1 = torch.ones(len(np2), 1, dtype=np1.dtype,
+                         device=np1.device) * np1.view(1, -1)
+        nparams1 = torch.cat([
+            np1[:, :-1],
+            np2,
+            np1[:, -1].view(-1, 1)
+        ], dim=1)[None]
+
+        new_stats = torch.cat([
+            stats[:, :int(self.dim ** 2)],
+            stats[:, int(self.dim ** 2):-1] / len(self),
+            stats[:, -1].view(-1, 1)
+        ], dim=-1)
+        nparams2 = new_stats[:, None, :] + nparams1
+        post = self.means_precision.posterior
+        return post.joint_log_norm(nparams2) - post.joint_log_norm(nparams1)
+
 
 class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
     '''Set of Normal density models with a shared isotropic covariance
@@ -246,6 +298,14 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
         exp_llhs -= .5 * self.dim * math.log(2 * math.pi)
         return exp_llhs
 
+    def marginal_log_likelihood(self, stats):
+        m_llhs = []
+        for mean_precision in self.means_precisions:
+            post = mean_precision.posterior
+            m_llhs.append(post.log_norm(post.natural_parameters + stats) \
+                         - post.log_norm())
+        return torch.cat(m_llhs, dim=-1)
+
     def accumulate(self, stats, resps):
         dtype, device = stats.dtype, stats.device
         w_stats = resps.t() @ stats
@@ -255,7 +315,7 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
             w_stats[:, -2].view(-1),
             w_stats[:, -1].sum().view(1)
         ], dim=0)
-        return {self.means_precision: acc_stats}
+        return {self.means_precision: torch.tensor(acc_stats)}
 
 
 class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
@@ -316,7 +376,7 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
             w_stats[:, -2].view(-1),
             w_stats[:, -1].sum().view(1)
         ], dim=0)
-        return {self.means_precision: acc_stats}
+        return {self.means_precision: torch.tensor(acc_stats)}
 
 
 class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
@@ -379,7 +439,7 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
             w_stats[:, -2].view(-1),
             w_stats[:, -1].sum().view(1)
         ], dim=0)
-        return {self.means_precision: acc_stats}
+        return {self.means_precision: torch.tensor(acc_stats)}
 
 
 __all__ = ['NormalSet']

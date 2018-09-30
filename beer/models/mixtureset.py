@@ -106,7 +106,7 @@ class MixtureSet(BayesianModelSet):
         ret_val = {}
         joint_resps = self.cache['resps'] * resps[:,:, None]
         sum_joint_resps = joint_resps.sum(dim=0)
-        ret_val = dict(zip(self.weights, sum_joint_resps))
+        ret_val = dict(zip(self.weights, torch.tensor(sum_joint_resps)))
         acc_stats = self.modelset.accumulate(stats,
             joint_resps.reshape(-1, len(self) * self.n_comp_per_mixture))
         ret_val = {**ret_val, **acc_stats}

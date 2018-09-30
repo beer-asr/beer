@@ -8,11 +8,14 @@ if [ $# -ne 5 ]; then
     exit 1
 fi
 
+
+
 name=$1
 opts=$2
 split_dir=$3
 cmd=$4
 log_dir=$5
+
 
 rm -fr $log_dir/${name}.out.*
 qsub -N "$name"  -cwd  -j y -sync y\

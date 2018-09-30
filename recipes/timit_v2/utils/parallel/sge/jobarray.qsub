@@ -8,6 +8,8 @@ fi
 cmd=$1
 splitdir=$2
 
+cmd=$(echo $cmd | sed s/JOBID/$SGE_TASK_ID/g)
+
 # Set the working directory to the one from where was call "qsub"
 cd ${SGE_O_WORKDIR} || exit 1
 
