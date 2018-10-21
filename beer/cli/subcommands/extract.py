@@ -28,7 +28,7 @@ feaconf = {
     'apply_dct': True,
     'n_dct_coeff': 13,
     'lifter_coeff': 22,
-    'utt_mnorm': True,
+    'utt_mnorm': False,
 }
 
 
@@ -49,9 +49,10 @@ class ShowDefaultsAction(argparse.Action):
 
 def setup(parser):
     parser.add_argument('--show-default-conf', action=ShowDefaultsAction,
-                        help='show the default configuration')
+                        help='show the default configuration and exit')
     parser.add_argument('feaconf', help='configuration file of the '
                                         'features')
+    parser.add_argument('wav_list', help='list WAV files or "-" for stdin')
     parser.add_argument('outdir', help='output directory')
 
 
@@ -71,10 +72,18 @@ def main(args, logger):
     # Pre-compute the DCT bases.
     dct_bases = compute_dct_bases(feaconf['nfilters'], feaconf['n_dct_coeff'])
 
-    for line in sys.stdin:
+
+    if args.wav_list == '-':
+        infile = sys.stdin
+    else:
+        with open(args.wav_list, 'r') as f:
+            infile = f.readlines()
+
+    counts = 0
+    for line in infile:
         tokens = line.strip().split()
         uttid, inwav = tokens[0], ' '.join(tokens[1:])
-        logger.debug(f'extracting features for utterance: {uttid}')
+        logger.debug(f'processing utterance: {uttid}')
 
         # If 'inwav' ends up with the '|' symbol, 'inwav' is
         # interpreted as a command otherwise we assume 'inwav' to
@@ -153,6 +162,10 @@ def main(args, logger):
         path = os.path.join(args.outdir, uttid)
         logger.debug(f'saving features to: {path}')
         np.save(path, features)
+
+        counts += 1
+
+    logger.info(f'extracted features for {counts} file(s)')
 
 
 if __name__ == '__main__':
