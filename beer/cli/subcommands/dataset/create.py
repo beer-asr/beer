@@ -7,7 +7,7 @@ import pickle
 import numpy as np
 import torch
 
-from ..dataset import Dataset
+from ...dataset import Dataset
 
 
 def accumulate(feature_file):

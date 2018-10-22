@@ -1,12 +1,10 @@
 
-'features related command'
+'dataset management'
 
-from . import extract
-from . import archive
+from . import create
 
 
-cmds = [extract, archive]
-
+cmds = [create]
 
 def setup(parser):
     subparsers = parser.add_subparsers(title='possible commands', metavar='<cmd>')
