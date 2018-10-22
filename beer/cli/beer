@@ -20,6 +20,7 @@ def main():
                         help='show debug messages')
 
     subparsers = parser.add_subparsers(title='possible commands', metavar='<cmd>')
+    subparsers.required = True
     for cmd_name in subcommands.__all__:
         cmd = getattr(subcommands, cmd_name)
         subparser = subparsers.add_parser(cmd_name, help=cmd.__doc__)

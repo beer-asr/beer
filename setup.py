@@ -21,6 +21,7 @@ setup(
         'beer.inference',
         'beer.cli',
         'beer.cli.subcommands',
+        'beer.cli.subcommands.features',
     ],
     scripts=['beer/cli/beer']
 )
