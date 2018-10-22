@@ -1,6 +1,3 @@
 
-'''
-BEER -- the Bayesian spEEch Recognizer 
+from . import dataset
 
-Command line interface.
-'''

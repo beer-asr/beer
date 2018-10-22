@@ -19,6 +19,7 @@ setup(
         'beer.models',
         'beer.nnet',
         'beer.inference',
+        'beer.cli',
         'beer.cli.subcommands',
     ],
     scripts=['beer/cli/beer']

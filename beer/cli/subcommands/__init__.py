@@ -1,9 +1,9 @@
 
 from . import extract
-from . import stats
+from . import compile
 
 __all__ = [
     'extract',
-    'stats'
+    'compile'
 ]
 
