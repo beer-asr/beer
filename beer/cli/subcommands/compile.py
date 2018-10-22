@@ -50,15 +50,12 @@ def main(args, logger):
     logger.debug('creating the dataset...')
     dataset = Dataset(args.features, mean, var, size)
 
-    logger.info(f'created dataset with {len(dataset)} utterances '\
-                f'(total frame count: {dataset.size})')
-
-    import pdb; pdb.set_trace()
-
-
     logger.debug('saving the dataset on disk...')
     with open(args.out, 'wb') as f:
         pickle.dump(dataset, f)
+
+    logger.info(f'created dataset with {len(dataset)} utterances '\
+                f'(total frame count: {dataset.size})')
 
 if __name__ == "__main__":
     main()
