@@ -34,18 +34,22 @@ export -f scp_line
 # Create the uttids/wavs.scp files for each data set.
 chmod +x $datadir/local/mboshi/script/fix_wav.sh
 for x in train dev; do
-    echo "Fixing WAV files fro the $x data set..."
-    mkdir -p $datadir/local/mboshi/full_corpus_newsplit/${x}.fixed
-    find $datadir/local/mboshi/full_corpus_newsplit/$x -name '*wav' \
-        -exec $datadir/local/mboshi/script/fix_wav.sh {} \
-        $datadir/local/mboshi/full_corpus_newsplit/${x}.fixed \;
+    if [ ! -f $datadir/$x/uttids ]; then
+        echo "Fixing WAV files for the $x data set..."
+        mkdir -p $datadir/local/mboshi/full_corpus_newsplit/${x}.fixed
+        find $datadir/local/mboshi/full_corpus_newsplit/$x -name '*wav' \
+            -exec $datadir/local/mboshi/script/fix_wav.sh {} \
+            $datadir/local/mboshi/full_corpus_newsplit/${x}.fixed \;
 
 
-    echo "Creating wavs.scp/uttids files for the $x data set..."
-    mkdir -p $datadir/$x
-    find $datadir/local/mboshi/full_corpus_newsplit/${x}.fixed -name '*wav' \
-        -exec bash -c 'scp_line "$0"' {} {} \; \
-        | sort | uniq > $datadir/$x/wavs.scp
-    cat $datadir/$x/wavs.scp | awk '{print $1}' >$datadir/$x/uttids
+        echo "Creating wavs.scp/uttids files for the $x data set..."
+        mkdir -p $datadir/$x
+        find $datadir/local/mboshi/full_corpus_newsplit/${x}.fixed -name '*wav' \
+            -exec bash -c 'scp_line "$0"' {} {} \; \
+            | sort | uniq > $datadir/$x/wavs.scp
+        cat $datadir/$x/wavs.scp | awk '{print $1}' >$datadir/$x/uttids
+    else
+        echo "Dataset \"${x}\" already prepared. Skipping."
+    fi
 done
 
