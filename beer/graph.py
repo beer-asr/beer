@@ -1,63 +1,28 @@
 'Acoustic graph for the HMM.'
 
 from collections import defaultdict, OrderedDict
+from dataclasses import dataclass, field
+from typing import Set, Dict, TypeVar, Generic
 import torch
 from .utils import logsumexp
 
-
-class Arc:
-    '''Arc between to state (i.e. node) of a graph with a weight.
-
-    Attributes:
-        start (int): Identifier of the starting state.
-        end (int): Identifier of the ending state.
-        weight (float): Weight of the arc.
-    '''
-    __repr_str = 'Arc(start={}, end={}, weight={})'
-
-    def __init__(self, start, end, weight):
-        '''
-        Args:
-            start (State): Starting state.
-            end (State): Final state,
-            weight (int): Weight of the arc.
-        '''
-        self.start = start
-        self.end = end
-        self.weight = weight
-
-    def __hash__(self):
-        return hash('{}:{}'.format(self.start, self.end))
-
-    def __repr__(self):
-        return self.__repr_str.format(self.start, self.end, self.weight)
+StateType = TypeVar('StateType')
+ArcType = TypeVar('ArcType')
 
 
-class State:
-    '''State (or node) of a graph.
+@dataclass
+class State(Generic[StateType]):
+    'State (i.e. node) of a graph.'
+    id: int
+    pdf_id: int
 
-    Attributes:
-        unit_id (obj): Identifier of the parent unit.
-        state_id (int): Unique identifier of the state within the unit.
-        pdf_id (int): Idenitifier of the probability density function
-            associated with this state.
-    '''
-    __repr_str = 'State(state_id={}, pdf_id={})'
 
-    def __init__(self, state_id, pdf_id):
-        self.state_id = state_id
-        self.pdf_id = pdf_id
-
-    def __hash__(self):
-        return hash(self.state_id)
-
-    def __repr__(self):
-        return self.__repr_str.format(self.state_id, self.pdf_id)
-
-    def __eq__(self, other):
-        if isinstance(other, State):
-            return hash(self) == hash(other)
-        return NotImplemented
+@dataclass(unsafe_hash=True)
+class Arc(Generic[ArcType]):
+    'Arc between 2 states (i.e. node) of a graph with a weight.'
+    start: int
+    end: int
+    weight: float
 
 
 def _state_name(symbols, state_id):
@@ -67,56 +32,58 @@ def _state_name(symbols, state_id):
         name = str(state_id)
     return name
 
+
+def _show_graph(graph):
+    # We import the module here as it is only needed by the Jupyter
+    # notebook.
+    import graphviz
+    dot = graphviz.Digraph()
+    dot.graph_attr['rankdir'] = 'LR'
+    for state_id in graph.states():
+        attrs = {'shape': 'circle'}
+        if state_id == graph.start_state:
+            attrs.update(penwidth='2.0')
+        if state_id == graph.end_state:
+            attrs.update(shape='doublecircle')
+        dot.node(_state_name(graph.symbols, state_id), **attrs)
+    for arc in graph.arcs():
+        dot.edge(_state_name(graph.symbols, arc.start),
+                 _state_name(graph.symbols, arc.end),
+                 label=str(round(arc.weight, 3)))
+    return graphviz.Source(dot.source)._repr_svg_()
+
+
+@dataclass
 class Graph:
-    '''Graph.
 
-    Attributes:
-        states (dictionary): All the states of the graph.
-        arcs (dictionary): All the arcs of the graph.
-    '''
-
-    def __init__(self):
-        self._state_count = 0
-        self._states = OrderedDict()
-        self._arcs = set()
-        self.symbols = {}
-        self.start_state = None
-        self.end_state = None
-
-    def __repr__(self):
-        retval = ''
-        for i, state in enumerate(self._states):
-            retval += repr(state)
-            if i <= len(self._states) - 1:
-                retval += '\n'
-        return retval
+    _state_count: int = field(default=0, init=False, repr=False)
+    _states: Dict[int, StateType] = field(default_factory=OrderedDict, init=False,
+                                          repr=False)
+    _arcs: Set[ArcType] = field(default_factory=set, init=False, repr=False)
+    symbols: Dict[int, str] = field(default_factory=dict, init=False,
+                                    repr=False)
+    start_state: int = field(default=None, init=False, repr=False)
+    end_state: int = field(default=None, init=False, repr=False)
 
     def _repr_svg_(self):
-        # We import the module here as it is only needed by the Jupyter
-        # notebook.
-        import graphviz
-        dot = graphviz.Digraph()
-        dot.graph_attr['rankdir'] = 'LR'
-        for state_id in self.states():
-            attrs = {'shape': 'circle'}
-            if state_id == self.start_state:
-                attrs.update(penwidth='2.0')
-            if state_id == self.end_state:
-                attrs.update(shape='doublecircle')
-            dot.node(_state_name(self.symbols, state_id), **attrs)
-        for arc in self.arcs():
-            dot.edge(_state_name(self.symbols, arc.start),
-                     _state_name(self.symbols, arc.end),
-                     label=str(round(arc.weight, 3)))
-        return graphviz.Source(dot.source)._repr_svg_()
+        return _show_graph(self)
 
     def states(self):
-        '''Iterate over the states.'''
+        'Iterator over the states.'
         return self._states.keys()
 
     def arcs(self, state_id=None, incoming=False):
-        '''Iterates over the arcs. If state is provided enumerate the
-        outgoing args from "state_id"
+        '''Iterator over the arcs.
+
+        Args:
+            state_id (int): If provided, consider only the incoming/
+                outgoing arcs from the given states.
+            incomping (boolean): If True/False, only iterates over the
+                incoming/outgoing arcs. This field is used only if
+                state_id is provided.
+
+        Yields:
+            ``Arc``.
         '''
         for arc in self._arcs:
             if not incoming:
@@ -130,7 +97,7 @@ class Graph:
         state_id = self._state_count
         self._state_count += 1
         new_state = State(state_id, pdf_id)
-        self._states[new_state.state_id] = new_state
+        self._states[new_state.id] = new_state
         return state_id
 
     def add_arc(self, start, end, weight=1.0):
@@ -209,7 +176,8 @@ class Graph:
                     visited.add(arc.start)
 
     def compile(self):
-        '''Compile the graph.'''
+        'Compile the graph.'
+
         # Total number of emitting states.
         tot_n_states = 0
         pdf_id_mapping = []
@@ -261,7 +229,8 @@ class Graph:
                 trans_probs[dim, :] /= norms / (1 - diag)
                 trans_probs[dim, dim] =  diag
 
-        return CompiledGraph(init_probs, final_probs, trans_probs, pdf_id_mapping)
+        return CompiledGraph(init_probs, final_probs, trans_probs,
+                             pdf_id_mapping)
 
 
 class CompiledGraph:
