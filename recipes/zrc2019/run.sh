@@ -42,7 +42,7 @@ for x in train dev; do
 
         # Create a "dataset". This "dataset" is just an object
         # associating the features with their utterance id and some
-        # other meta-data (e.g. spk info if available).
+        # other meta-data (e.g. global mean, variance, ...).
         beer dataset create $datadir/$x $feadir/$x/mfcc.npz \
             $expdir/datasets/${x}.pkl
     else

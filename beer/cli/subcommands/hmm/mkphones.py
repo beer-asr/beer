@@ -64,7 +64,7 @@ def create_pdfs(mean, var, tot_emitting_states, group_conf):
 def setup(parser):
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-d', '--dataset', help='dataset for initialization')
-    group.add_argument('-D', '--dim', type=int,
+    group.add_argument('-D', '--dimension', type=int,
                         help='dimension of features for the pdf')
     parser.add_argument('conf', help='configuration file')
     parser.add_argument('out', help='output phone HMMs')
