@@ -1,5 +1,5 @@
 
-'create a set of left-to-right HMM reprenting "phones"'
+'create a set of left-to-right HMM representing "phones"'
 
 import argparse
 import pickle
@@ -31,8 +31,8 @@ def create_unit_graph(topology, start_pdf_id):
             pdf_id = None
         else:
             pdf_id = start_pdf_id + count
+            count += 1
         graph.add_state(pdf_id=pdf_id)
-        count += 1
     graph.start_state = state_ids[0]
     graph.end_state = state_ids[-1]
     for arc in arcs: graph.add_arc(*arc)

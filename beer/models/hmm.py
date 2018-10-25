@@ -13,7 +13,8 @@ class HMM(DiscreteLatentBayesianModel):
     ''' Hidden Markov Model.
 
     Attributes:
-        graph (:any:`Graph`): The Graph of the dynamics of the HMM.
+        graph (:any:`CompiledGraph`): The (compiled) graph of the
+            dynamics of the HMM.
         modelset (:any:`BayesianModelSet`): Set of emission densities.
 
     '''
@@ -23,8 +24,10 @@ class HMM(DiscreteLatentBayesianModel):
         '''Create a :any:`HMM` model.
 
         Args:
-            graph (:any:`Graph`): The Graph of the dynamics of the HMM.
-            modelset (:any:`BayesianModelSet`): Set of emission density.
+            graph (:any:`CompiledGraph`): The compiled grpah of the
+                dynamics of the HMM.
+            modelset (:any:`BayesianModelSet`): Set of emission
+                density.
 
         Returns:
             :any:`HMM`

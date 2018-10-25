@@ -22,7 +22,7 @@ class Arc(Generic[ArcType]):
     'Arc between 2 states (i.e. node) of a graph with a weight.'
     start: int
     end: int
-    weight: float
+    weight: float = field(compare=False)
 
 
 def _state_name(symbols, state_id):
@@ -71,6 +71,9 @@ class Graph:
     def states(self):
         'Iterator over the states.'
         return self._states.keys()
+
+    def state_from_id(self, state_id):
+        return self._states[state_id]
 
     def arcs(self, state_id=None, incoming=False):
         '''Iterator over the arcs.
@@ -146,7 +149,7 @@ class Graph:
             self._arcs.remove(arc)
         del self._states[old_state_id]
 
-    def _find_next_pdf_ids(self, start_state, init_weight):
+    def find_next_pdf_ids(self, start_state, init_weight=1.0):
         to_explore = [(arc, init_weight) for arc in self.arcs(start_state)]
         visited = set([start_state])
         while to_explore:
@@ -160,7 +163,7 @@ class Graph:
                                     for arc in self.arcs(arc.end)]
                     visited.add(arc.end)
 
-    def _find_previous_pdf_ids(self, start_state, init_weight):
+    def find_previous_pdf_ids(self, start_state, init_weight=1.0):
         to_explore = [(arc, init_weight)
                       for arc in self.arcs(start_state, incoming=True)]
         visited = set([start_state])
@@ -193,12 +196,12 @@ class Graph:
         trans_probs = torch.zeros(tot_n_states, tot_n_states)
 
         # Init probs.
-        for state_id, weight in self._find_next_pdf_ids(self.start_state, 1.0):
+        for state_id, weight in self.find_next_pdf_ids(self.start_state, 1.0):
             init_probs[state2pdf_id[state_id]] += weight
         init_probs /= init_probs.sum()
 
         # Init probs.
-        for state_id, weight in self._find_previous_pdf_ids(self.end_state, 1.0):
+        for state_id, weight in self.find_previous_pdf_ids(self.end_state, 1.0):
             final_probs[state2pdf_id[state_id]] += weight
         final_probs /= final_probs.sum()
 
@@ -215,7 +218,7 @@ class Graph:
             # We need to follow the path until the next valid pdf_id
             pdf_id1 = state2pdf_id[arc.start]
             if pdf_id2 is None:
-                for state_id, weight in self._find_next_pdf_ids(arc.end, weight):
+                for state_id, weight in self.find_next_pdf_ids(arc.end, weight):
                     trans_probs[pdf_id1, state2pdf_id[state_id]] += weight
             else:
                 trans_probs[pdf_id1, state2pdf_id[arc.end]] += weight
@@ -254,41 +257,60 @@ class CompiledGraph:
         'Total number of states in the graph.'
         return len(self.trans_probs)
 
-    def _baum_welch_forward(self, lhs, eps=1e-6):
-        alphas = torch.zeros_like(lhs)
-        consts = torch.zeros(len(lhs), dtype=lhs.dtype, device=lhs.device)
-        trans_mat = self.trans_probs
-        res = lhs[0] * self.init_probs
-        consts[0] = res.sum()
-        alphas[0] = res / consts[0]
-        for i in range(1, lhs.shape[0]):
-            res = lhs[i] * (trans_mat.t() @ (alphas[i-1] + eps))
-            consts[i] = res.sum()
-            alphas[i] = res / consts[i]
-        return alphas, consts
+    def _baum_welch_forward(self, llhs):
+        log_trans_mat = self.trans_probs.log()
+        log_alphas = torch.zeros_like(llhs) - float('inf')
+        log_alphas[0] = llhs[0] + self.init_probs.log()
+        for i in range(1, llhs.shape[0]):
+            log_alphas[i] = llhs[i]
+            log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(),
+                                        dim=1).view(-1)
+        return log_alphas
 
-    def _baum_welch_backward(self, lhs, consts, eps=1e-6):
-        betas = torch.zeros_like(lhs)
-        trans_mat = self.trans_probs
-        betas[-1] = self.final_probs
-        for i in reversed(range(lhs.shape[0] - 1)):
-            res = trans_mat @ (lhs[i+1] * (betas[i+1] + eps))
-            betas[i] = res / consts[i+1]
-        return betas
+    def _baum_welch_backward(self, llhs):
+        log_trans_mat = self.trans_probs.log()
+        log_betas = torch.zeros_like(llhs) - float('inf')
+        log_betas[-1] = self.final_probs.log()
+        for i in reversed(range(llhs.shape[0]-1)):
+            log_betas[i] = logsumexp(log_trans_mat + llhs[i+1] + \
+                           log_betas[i+1], dim=1).view(-1)
+        return log_betas
 
-    def posteriors(self, llhs, eps=1e-6):
-        # Scale the log-likelihoods to avoid overflow.
-        max_val = llhs.max()
-        lhs = (llhs - max_val).exp() + eps
+    def posteriors(self, llhs, trans_posterior=False):
+        '''Compute the posterior of the state given the
+        (log-)likelihood of the data.
 
-        # Scaled forward-backward algorithm.
-        alphas, consts = self._baum_welch_forward(lhs, eps)
-        betas = self._baum_welch_backward(lhs, consts + eps, eps)
-        posts = (alphas + eps) * (betas + eps)
-        norm = posts.sum(dim=1)
-        posts /= norm[:, None]
+        Args:
+            llhs (``torch.Tensor[N, K]``): Log-likelihood per frame and
+                state.
+            trans_posterior (boolean): If true, also compute the
+                transition posterior.
 
-        return posts
+        Returns:
+            ``torch.FloatTensor[N, K]``: state posteriors.
+            ``torch.FloatTensor[N-1, K, K]``: transition posteriors
+
+        '''
+        log_alphas = self._baum_welch_forward(llhs)
+        log_betas = self._baum_welch_backward(llhs)
+        lognorm = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
+        state_posts = (log_alphas + log_betas - lognorm[:, None]).exp()
+        if trans_posterior:
+            log_A = self.trans_probs.log()
+            log_xi = log_alphas[1:, :, None] + log_A[None] + \
+                     (llhs + log_betas)[:-1, None, :]
+            log_xi = log_xi.view(-1, len(log_A) * len(log_A))
+            lnorm = logsumexp(log_xi, dim=-1)
+            trans_posts = (log_xi - lnorm[:, None]).exp()
+            trans_posts = torch.where(trans_posts != trans_posts,
+                                     torch.zeros_like(trans_posts),
+                                     trans_posts)
+            trans_posts = trans_posts.view(-1, len(log_A), len(log_A))
+            retval = state_posts, trans_posts
+        else:
+            retval = state_posts
+        return retval
+
 
     def best_path(self, llhs):
         init_log_prob = self.init_probs.log()
@@ -326,3 +348,4 @@ class CompiledGraph:
 
 
 __all__ = ['Graph']
+
