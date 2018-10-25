@@ -5,8 +5,8 @@ from .bayesmodel import BayesianModelSet
 
 
 class JointModelSet(BayesianModelSet):
-    '''Set of concatenated model sets having the same type of sufficient
-    statistics.
+    '''Set of concatenated model sets having the same type of
+    sufficient statistics.
     '''
 
     def __init__(self, modelsets):
