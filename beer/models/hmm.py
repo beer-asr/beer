@@ -33,12 +33,6 @@ class HMM(DiscreteLatentBayesianModel):
         return cls(graph, modelset)
 
     def __init__(self, graph, modelset):
-        '''
-        Args:
-            graph (:any:`Graph`): The Graph of the dynamics of the HMM.
-            modelset (:any:`BayesianModelSet`): Set of emission density.
-
-        '''
         super().__init__(DynamicallyOrderedModelSet(modelset))
         self.graph = ConstantParameter(graph)
 
