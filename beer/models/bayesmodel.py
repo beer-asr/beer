@@ -282,37 +282,6 @@ class BayesianModel(metaclass=abc.ABCMeta):
         pass
 
 
-class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
-    '''Abstract base class for a set of the :any:`BayesianModel`.
-
-    This model is used by model having discrete latent variable such
-    as Mixture models  or Hidden Markov models.
-
-    Note:
-        subclasses of :any:`BayesianModelSet` are expected to be
-        iterable and therefore should implement at minima:
-
-        .. code-block:: python
-
-           MyBayesianModelSet:
-
-               def __getitem__(self, key):
-                  ...
-
-               def __len__(self):
-                  ...
-
-    '''
-
-    @abc.abstractmethod
-    def __getitem__(self, key):
-        pass
-
-    @abc.abstractmethod
-    def __len__(self):
-        pass
-
-
 class DiscreteLatentBayesianModel(BayesianModel, metaclass=abc.ABCMeta):
     '''Abstract base class for a set of :any:`BayesianModel` with
     discrete latent variable.
@@ -344,7 +313,6 @@ class DiscreteLatentBayesianModel(BayesianModel, metaclass=abc.ABCMeta):
 
 __all__ = [
     'BayesianModel',
-    'BayesianModelSet',
     'DiscreteLatentBayesianModel',
 ]
 

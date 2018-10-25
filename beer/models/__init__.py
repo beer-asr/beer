@@ -1,14 +1,18 @@
 
-from .parameters import *
+
+# Generic model definition.
 from .bayesmodel import *
-from .normal import *
-from .normalset import *
-from .mixture import *
-from .mixtureset import *
-from .hmm import *
-from .marginalpldaset import *
-from .vae import *
 from .modelset import *
-from .lm import *
-from .lds import *
-from .linearreg import *
+from .parameters import *
+
+# Concrete model.
+from .normal import *
+from .mixture import *
+from .hmm import *
+from .vae import *
+
+# Concrete model set.
+from .mixtureset import *
+from .marginalpldaset import *
+from .normalset import *
+

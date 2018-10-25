@@ -2,7 +2,7 @@
 from collections import namedtuple
 import torch
 from .bayesmodel import BayesianParameterSet, BayesianParameter
-from .bayesmodel import BayesianModelSet
+from .modelset import BayesianModelSet
 from ..priors import DirichletPrior
 from ..utils import logsumexp
 

@@ -9,9 +9,9 @@ from collections import namedtuple
 import math
 import torch
 
-from .bayesmodel import BayesianParameter
-from .bayesmodel import BayesianParameterSet
-from .bayesmodel import BayesianModelSet
+from .parameters import BayesianParameter
+from .parameters import BayesianParameterSet
+from .modelset import BayesianModelSet
 from .normal import Normal
 from .normal import NormalIsotropicCovariance
 from .normal import NormalDiagonalCovariance
@@ -149,7 +149,7 @@ class NormalSetDiagonalCovariance(NormalSetNonSharedCovariance):
     @staticmethod
     def sufficient_statistics(data):
         return NormalDiagonalCovariance.sufficient_statistics(data)
-    
+
     def marginal_log_likelihood(self, stats):
         m_llhs = []
         for param in self.means_precisions:

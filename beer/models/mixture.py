@@ -26,7 +26,8 @@ class Mixture(DiscreteLatentBayesianModel):
                 weights.
 
         '''
-        prior_nparams = modelset.mean_field_groups[0][0].prior.natural_parameters
+        mf_groups = modelset.mean_field_factorization()
+        prior_nparams = mf_groups[0][0].prior.natural_parameters
         dtype, device = prior_nparams.dtype, prior_nparams.device
 
         if weights is None:
@@ -134,10 +135,10 @@ class Mixture(DiscreteLatentBayesianModel):
         log_weights = self.weights.expected_natural_parameters().view(1, -1)
         per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
         per_component_exp_llh += log_weights
-        
+
         lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
         return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
-    
+
     def marginal_posteriors(self, data):
         stats = self.modelset.sufficient_statistics(data)
         per_component_exp_llh = self.modelset.marginal_log_likelihood(stats)
