@@ -297,8 +297,8 @@ class CompiledGraph:
         state_posts = (log_alphas + log_betas - lognorm[:, None]).exp()
         if trans_posterior:
             log_A = self.trans_probs.log()
-            log_xi = log_alphas[1:, :, None] + log_A[None] + \
-                     (llhs + log_betas)[:-1, None, :]
+            log_xi = log_alphas[:-1, :, None] + log_A[None] + \
+                     (llhs + log_betas)[1:, None, :]
             log_xi = log_xi.view(-1, len(log_A) * len(log_A))
             lnorm = logsumexp(log_xi, dim=-1)
             trans_posts = (log_xi - lnorm[:, None]).exp()
