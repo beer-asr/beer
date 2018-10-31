@@ -2,11 +2,11 @@
 'Hidden Markov Model (HMM)'
 
 from . import mkdecodegraph
-from . import mkphoneloop
+from . import mkphoneloopgraph
 from . import mkphones
 from . import phonelist
 
-cmds = [mkdecodegraph, mkphoneloop, mkphones, phonelist]
+cmds = [mkdecodegraph, mkphoneloopgraph, mkphones, phonelist]
 
 def setup(parser):
     subparsers = parser.add_subparsers(title='possible commands', metavar='<cmd>')
