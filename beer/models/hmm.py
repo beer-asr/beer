@@ -42,7 +42,7 @@ class HMM(DiscreteLatentBayesianModel):
 
     def _inference(self, pc_llhs, inference_graph, viterbi=False,
                    state_path=None, trans_posteriors=False):
-        if viterbi is not None or state_path is not None:
+        if viterbi or state_path is not None:
             if state_path is None:
                 path = inference_graph.best_path(pc_llhs)
             else:

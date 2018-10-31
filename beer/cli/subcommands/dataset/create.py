@@ -2,6 +2,7 @@
 'compile a data set with the given features'
 
 import argparse
+import os
 import pickle
 
 import numpy as np
@@ -48,7 +49,7 @@ def main(args, logger):
     mean, var, size = accumulate(args.features)
 
     logger.debug('creating the dataset...')
-    dataset = Dataset(args.features, mean, var, size)
+    dataset = Dataset(os.path.abspath(args.features), mean, var, size)
 
     logger.debug('saving the dataset on disk...')
     with open(args.out, 'wb') as f:

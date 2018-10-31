@@ -30,7 +30,7 @@ class MixtureSet(BayesianModelSet):
                 weights.
 
         '''
-        tensor = modelset.mean_field_groups[0][0].prior.natural_parameters
+        tensor = modelset.mean_field_factorization()[0][0].prior.natural_parameters
         dtype, device = tensor.dtype, tensor.device
         n_comp_per_mixture = len(modelset) // size
         if weights is None:
