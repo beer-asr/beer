@@ -40,14 +40,28 @@ class HMM(DiscreteLatentBayesianModel):
         order = inference_graph.pdf_id_mapping
         return self.modelset.expected_log_likelihood(stats, order)
 
-    def _inference(self, pc_llhs, inference_graph, viterbi=False):
-        if viterbi:
-            posts = onehot(inference_graph.best_path(pc_llhs),
-                           inference_graph.n_states,
+    def _inference(self, pc_llhs, inference_graph, viterbi=False,
+                   state_path=None, trans_posteriors=False):
+        if viterbi is not None or state_path is not None:
+            if state_path is None:
+                path = inference_graph.best_path(pc_llhs)
+            else:
+                path = state_path
+            posts = onehot(path, inference_graph.n_states,
                            dtype=pc_llhs.dtype, device=pc_llhs.device)
+            if trans_posteriors:
+                n_states = self.graph.value.n_states
+                trans_posts = torch.zeros(len(pc_llhs) - 1, n_states, n_states)
+                for i, transition in enumerate(zip(path[:-1], path[1:])):
+                    src, dest = transition
+                    trans_posts[i, src, dest] += 1
+                retval = posts, trans_posts
+            else:
+                retval = posts
         else:
-            posts = inference_graph.posteriors(pc_llhs)
-        return posts
+            retval = inference_graph.posteriors(pc_llhs,
+                                                trans_posteriors=trans_posteriors)
+        return retval
 
     ####################################################################
     # BayesianModel interface.
@@ -64,13 +78,13 @@ class HMM(DiscreteLatentBayesianModel):
         if inference_graph is None:
             inference_graph = self.graph.value
         pc_llhs = self._pc_llhs(stats, inference_graph)
-        if state_path is not None:
-            resps = onehot(state_path, inference_graph.n_states,
-                           dtype=pc_llhs.dtype, device=pc_llhs.device)
-        else:
-            resps = self._inference(pc_llhs, inference_graph, viterbi=viterbi)
+        resps, trans_resps = self._inference(pc_llhs, inference_graph,
+                                             viterbi=viterbi,
+                                             state_path=state_path,
+                                             trans_posteriors=True)
         exp_llh = (pc_llhs * resps).sum(dim=-1)
         self.cache['resps'] = resps
+        self.cache['trans_resps'] = trans_resps
 
         # We ignore the KL divergence term. It biases the
         # lower-bound (it may decrease) a little bit but will not affect
@@ -81,6 +95,7 @@ class HMM(DiscreteLatentBayesianModel):
         retval = {
             **self.modelset.accumulate(stats, self.cache['resps'])
         }
+        # By default, we don't do anything with the transition probabilities
         return retval
 
     ####################################################################

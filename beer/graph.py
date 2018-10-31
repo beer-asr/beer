@@ -232,35 +232,36 @@ class Graph:
                 trans_probs[dim, :] /= norms / (1 - diag)
                 trans_probs[dim, dim] =  diag
 
-        return CompiledGraph(init_probs, final_probs, trans_probs,
-                             pdf_id_mapping)
+        return CompiledGraph(init_probs.log(), final_probs.log(),
+                             trans_probs.log(), pdf_id_mapping)
 
 
 class CompiledGraph:
     '''Inference graph for a HMM model.'''
 
-    def __init__(self, init_probs, final_probs, trans_probs, pdf_id_mapping=None):
+    def __init__(self, init_log_probs, final_log_probs, trans_log_probs,
+                 pdf_id_mapping=None):
         '''
         Args:
-            init_probs (``torch.Tensor``): Initial probabilities.
-            final_probs (``torch.Tensor``): Final probabilities.
-            trans_probs (``torch.Tensor``): Transition probabilities.
+            init_log_probs (``torch.Tensor``): Initial log probabilities.
+            final_log_probs (``torch.Tensor``): Final log probabilities.
+            trans_log_probs (``torch.Tensor``): Transition log probabilities.
             pdf_id_mapping (list): Mapping of the pdf ids (optional)
         '''
-        self.init_probs = init_probs
-        self.final_probs = final_probs
-        self.trans_probs = trans_probs
+        self.init_log_probs = init_log_probs
+        self.final_log_probs = final_log_probs
+        self.trans_log_probs = trans_log_probs
         self.pdf_id_mapping = pdf_id_mapping
 
     @property
     def n_states(self):
         'Total number of states in the graph.'
-        return len(self.trans_probs)
+        return len(self.trans_log_probs)
 
     def _baum_welch_forward(self, llhs):
-        log_trans_mat = self.trans_probs.log()
+        log_trans_mat = self.trans_log_probs
         log_alphas = torch.zeros_like(llhs) - float('inf')
-        log_alphas[0] = llhs[0] + self.init_probs.log()
+        log_alphas[0] = llhs[0] + self.init_log_probs
         for i in range(1, llhs.shape[0]):
             log_alphas[i] = llhs[i]
             log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(),
@@ -268,22 +269,22 @@ class CompiledGraph:
         return log_alphas
 
     def _baum_welch_backward(self, llhs):
-        log_trans_mat = self.trans_probs.log()
+        log_trans_mat = self.trans_log_probs
         log_betas = torch.zeros_like(llhs) - float('inf')
-        log_betas[-1] = self.final_probs.log()
+        log_betas[-1] = self.final_log_probs
         for i in reversed(range(llhs.shape[0]-1)):
             log_betas[i] = logsumexp(log_trans_mat + llhs[i+1] + \
                            log_betas[i+1], dim=1).view(-1)
         return log_betas
 
-    def posteriors(self, llhs, trans_posterior=False):
+    def posteriors(self, llhs, trans_posteriors=False):
         '''Compute the posterior of the state given the
         (log-)likelihood of the data.
 
         Args:
             llhs (``torch.Tensor[N, K]``): Log-likelihood per frame and
                 state.
-            trans_posterior (boolean): If true, also compute the
+            trans_posteriors (boolean): If true, also compute the
                 transition posterior.
 
         Returns:
@@ -295,8 +296,8 @@ class CompiledGraph:
         log_betas = self._baum_welch_backward(llhs)
         lognorm = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
         state_posts = (log_alphas + log_betas - lognorm[:, None]).exp()
-        if trans_posterior:
-            log_A = self.trans_probs.log()
+        if trans_posteriors:
+            log_A = self.trans_log_probs
             log_xi = log_alphas[:-1, :, None] + log_A[None] + \
                      (llhs + log_betas)[1:, None, :]
             log_xi = log_xi.view(-1, len(log_A) * len(log_A))
@@ -313,37 +314,38 @@ class CompiledGraph:
 
 
     def best_path(self, llhs):
-        init_log_prob = self.init_probs.log()
-        backtrack = torch.zeros_like(llhs, dtype=torch.long, device=llhs.device)
+        init_log_prob = self.init_log_probs
+        backtrack = torch.zeros_like(llhs, dtype=torch.long,
+                                     device=llhs.device)
         omega = llhs[0] + init_log_prob
-        log_trans_mat = self.trans_probs.log()
+        log_trans_mat = self.trans_log_probs
 
         for i in range(1, llhs.shape[0]):
             hypothesis = omega + log_trans_mat.t()
             backtrack[i] = torch.argmax(hypothesis, dim=1)
             omega = llhs[i] + hypothesis[range(len(log_trans_mat)), backtrack[i]]
 
-        path = [torch.argmax(omega + self.final_probs.log())]
+        path = [torch.argmax(omega + self.final_log_probs)]
         for i in reversed(range(1, len(llhs))):
             path.insert(0, backtrack[i, path[0]])
         return torch.LongTensor(path)
 
     def float(self):
-            return CompiledGraph(self.init_probs.float(),
-                                 self.final_probs.float(),
-                                 self.trans_probs.float(),
+            return CompiledGraph(self.init_log_probs.float(),
+                                 self.final_log_probs.float(),
+                                 self.trans_log_probs.float(),
                                  self.pdf_id_mapping)
 
     def double(self):
-        return CompiledGraph(self.init_probs.double(),
-                                 self.final_probs.double(),
-                                 self.trans_probs.double(),
+        return CompiledGraph(self.init_log_probs.double(),
+                                 self.final_log_probs.double(),
+                                 self.trans_log_probs.double(),
                                  self.pdf_id_mapping)
 
     def to(self, device):
-        return CompiledGraph(self.init_probs.to(device),
-                                 self.final_probs.to(device),
-                                 self.trans_probs.to(device),
+        return CompiledGraph(self.init_log_probs.to(device),
+                                 self.final_log_probs.to(device),
+                                 self.trans_log_probs.to(device),
                                  self.pdf_id_mapping)
 
 
