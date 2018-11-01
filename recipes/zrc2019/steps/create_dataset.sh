@@ -14,6 +14,6 @@ mkdir -p $outdir
 if [ ! -f $output ]; then
     beer dataset create $datadir $features $output
 else
-    echo "Dataset \"${x}\" already created. Skipping."
+    echo "Dataset \"$output\" already created. Skipping."
 fi
 

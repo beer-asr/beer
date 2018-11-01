@@ -1,46 +1,50 @@
 #!/usr/bin/env bash
 
-databases="mboshi"
-feaname=mfcc
+#######################################################################
+## SETUP
+
+# Directory structure
 datadir=data
 feadir=features
 expdir=exp
 
+# Data
+db=zrc2019
+dataset=train
+
+# Features
+feaname=mfcc
+
+# AUD training
+epochs=5
+lrate=0.1
+batch_size=400
+
+#######################################################################
+
+
 mkdir -p $datadir $expdir $feadir
 
 
-for db in $databases; do
-    echo "--> Preparing data for the $db database"
-    local/$db/prepare_data.sh $datadir/$db || exit 1
-done
+echo "--> Preparing data for the $db database"
+local/$db/prepare_data.sh $datadir/$db || exit 1
 
 
-for db in $databases; do
-    echo "--> Extracting features for the $db database"
-    for x in train dev; do
-        steps/extract_features.sh conf/${feaname}.yml data/$db/$x \
-            $feadir/$db/$x || exit 1
-    done
-done
+echo "--> Extracting features for the $db database"
+steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$dataset \
+     $feadir/$db/$dataset || exit 1
+
 
 # Create a "dataset". This "dataset" is just an object
 # associating the features with their utterance id and some
 # other meta-data (e.g. global mean, variance, ...).
-for db in $databases; do
-    echo "--> Creating dataset(s) for $db database"
-    for x in train dev; do
-        steps/create_dataset.sh data/$db/$x $feadir/$db/$x/${feaname}.npz \
-            $expdir/$db/datasets/${x}.pkl
-    done
-done
+echo "--> Creating dataset(s) for $db database"
+steps/create_dataset.sh $datadir/$db/$dataset \
+    $feadir/$db/$dataset/${feaname}.npz \
+    $expdir/$db/datasets/${dataset}.pkl
 
 
-epochs=5
-lrate=0.1
-batch_size=400
-for db in $databases; do
-    echo "--> Acoustic Unit Discovery on $db database"
-    steps/aud.sh conf/hmm.yml $expdir/$db/datasets/train.pkl \
-        $epochs $lrate $batch_size $expdir/$db/aud
-done
+echo "--> Acoustic Unit Discovery on $db database"
+steps/aud.sh conf/hmm.yml $expdir/$db/datasets/${dataset}.pkl \
+    $epochs $lrate $batch_size $expdir/$db/aud
 
