@@ -151,7 +151,7 @@ def main(args, logger):
             delta_order = feaconf['delta_order']
             delta_winlen = feaconf['delta_winlen']
             features = beer.features.add_deltas(features,
-                [delta_winlen] * delta_order)
+                tuple([delta_winlen] * delta_order))
 
         # Mean normalization.
         if feaconf['utt_mnorm']:
