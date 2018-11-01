@@ -10,18 +10,25 @@ change !
 Requirements
 ------------
 
-Beer is built upon the [pytorch](http://pytorch.org)
-library. Beside, it also requires [numpy](http://www.numpy.org) and
-[scipy](https://www.scipy.org/scipylib/index.html).  Finally, the
-examples use [bokeh](https://bokeh.pydata.org/en/latest/) for
-visualization.
+Beer is built upon the [pytorch](http://pytorch.org) and several other
+third party packages. To make sure that all the dependencies are
+installed we recommend to create a new anaconda environment with
+the given environment file:
+
+```
+    $ conda env create -f condaenv.yml
+```
+
+This will create a new environment name `beer`.
 
 Installation
 ------------
 
-In a terminal type.
+Assuming that you have already created the `beer` environment, type
+in a terminal.
 
 ```
+  $ source activate beer
   $ python setup.py install
 ```
 
