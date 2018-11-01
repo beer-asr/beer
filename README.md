@@ -32,15 +32,8 @@ in a terminal.
   $ python setup.py install
 ```
 
-This will install ``beer`` and eventually ``numpy`` and ``sicpy``
-if there are not install yet. Note that it will not
-automatically install ``pytorch``. Please refer to the
-[pytorch documentation](https://github.com/pytorch/pytorch)
-to install it.
-
 
 Usage
 -----
 
-Have a look to our [examples](https://github.com/beer-asr/beer/tree/master/examples)
-to get started with beer.
+Have a look to the [recipe](https://github.com/beer-asr/beer/tree/zrc/recipes/zrc2019) to get started with beer.
