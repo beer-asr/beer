@@ -9,14 +9,14 @@ import beer
 
 
 def setup(parser):
-    parser.add_argument('phone_loop_graph', help='phone-loop decoding graph')
+    parser.add_argument('decode_graph', help='decoding graph')
     parser.add_argument('hmms', help='phones\' hmm')
     parser.add_argument('out', help='phone loop model')
 
 
 def main(args, logger):
     logger.debug('load the decoding graph...')
-    with open(args.phone_loop_graph, 'rb') as f:
+    with open(args.decode_graph, 'rb') as f:
         graph, start_pdf, end_pdf = pickle.load(f)
 
     logger.debug('load the hmms...')

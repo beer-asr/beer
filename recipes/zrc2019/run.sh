@@ -34,3 +34,13 @@ for db in $databases; do
     done
 done
 
+
+epochs=5
+lrate=0.1
+batch_size=400
+for db in $databases; do
+    echo "--> Acoustic Unit Discovery on $db database"
+    steps/aud.sh conf/hmm.yml $expdir/$db/datasets/train.pkl \
+        $epochs $lrate $batch_size $expdir/$db/aud
+done
+
