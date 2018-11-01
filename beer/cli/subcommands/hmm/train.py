@@ -46,19 +46,17 @@ def main(args, logger):
             if i % args.batch_size == 0:
                 elbo.backward()
                 optim.step()
-                logger.info(f'epoch: {epoch: <5}  ' \
-                            f'batch: {i // args.batch_size }/{int(len(dataset) / args.batch_size): <10} ' \
-                            f'ELBO: {float(elbo) / (args.batch_size * dataset.size):<10.3f}')
+                logger.info(f'{"epoch=" + str(epoch):<20}  ' \
+                            f'{"batch=" + str(i // args.batch_size) + "/" + str(int(len(dataset) / args.batch_size)):<20} ' \
+                            f'{"ELBO=" + str(round(float(elbo) / (args.batch_size * dataset.size), 3)):<20}')
                 elbo = beer.evidence_lower_bound(datasize=dataset.size)
                 optim.init_step()
-            break
-        break
 
     logger.debug('save the model on disk...')
     with open(args.out, 'wb') as f:
         pickle.dump(model, f)
 
-    logger.info(f'finished training after {args.epochs} epochs.' \
+    logger.info(f'finished training after {args.epochs} epochs. ' \
                 f'KL(q || p) = {float(model.kl_div_posterior_prior()): .3f}')
 
 if __name__ == "__main__":
