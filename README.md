@@ -1,4 +1,4 @@
-BEER: the Bayesian Speech Recognizer
+BEER: the Bayesian spEEch Recognizer
 ====================================
 
 Beer is a toolkit that provide Bayesian machine learning tools for
