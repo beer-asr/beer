@@ -29,6 +29,7 @@ feaconf = {
     'n_dct_coeff': 13,
     'lifter_coeff': 22,
     'utt_mnorm': False,
+    'add_energy': True,
 }
 
 
@@ -105,7 +106,7 @@ def main(args, logger):
 
         # Mel spectrum.
         logger.debug('extracting STFT')
-        features, fft_len = beer.features.short_term_mspec(
+        melspec, fft_len = beer.features.short_term_mspec(
             signal,
             flen=feaconf['window_len'],
             frate=feaconf['framerate'],
@@ -119,20 +120,22 @@ def main(args, logger):
             fbank = beer.features.create_fbank(feaconf['nfilters'], fft_len,
                                                lowfreq=feaconf['cutoff_lfreq'],
                                                highfreq=feaconf['cutoff_hfreq'])
-            features = features @ fbank.T
+            melspec = melspec @ fbank.T
 
         # Take the logarithm of the magnitude spectrum.
         logger.debug('log of the STFT')
-        features = np.log(1e-6 + features)
+        log_melspec = np.log(1e-6 + melspec)
+
+        # HTK compatibility normalization (probably doesn't change
+        # the accuracy of the recognition).
+        norm = np.sqrt(2. / feaconf['nfilters'])
 
         # DCT transform.
         if feaconf['apply_dct']:
             logger.debug('cosine transform of the log STFT')
-            features = features @ dct_bases
+            features = log_melspec @ dct_bases
 
-            # HTK compatibility steps (probably doesn't change
-            # the accuracy of the recognition).
-            features *= np.sqrt(2. / feaconf['nfilters'])
+            features *= norm
 
             # Liftering.
             logger.debug('cepstrum liftering')
@@ -140,18 +143,21 @@ def main(args, logger):
             lifter = 1 + (l_coeff / 2) * np.sin(np.pi * \
                 (1 + np.arange(feaconf['n_dct_coeff'])) / l_coeff)
             features *= lifter
+        else:
+            features = log_melspec
 
         # Deltas.
         if feaconf['apply_deltas']:
             logger.debug('concatenating derivatives')
-            l_coeff = feaconf['lifter_coeff']
-            lifter = 1 + (l_coeff / 2) * np.sin(np.pi * \
-                (1 + np.arange(feaconf['n_dct_coeff'])) / l_coeff)
-            features *= lifter
             delta_order = feaconf['delta_order']
             delta_winlen = feaconf['delta_winlen']
             features = beer.features.add_deltas(features,
                 tuple([delta_winlen] * delta_order))
+
+        if feaconf['add_energy']:
+            logger.debug('add the energy to the features')
+            energy = log_melspec.sum(axis=-1) * norm
+            features = np.c_[energy, features]
 
         # Mean normalization.
         if feaconf['utt_mnorm']:

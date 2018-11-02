@@ -10,20 +10,24 @@ framerate: 0.01     # Frame rate of the features (second)
 # Filterbank.
 apply_fbank: yes    # Set to 'no' to keep just the (log) magnitude spectrum.
 nfilters: 26        # Number of filters in the filterbank.
-cutoff_hfreq: 7600  # high cut-off frequency of the filterbank (Hz)
-cutoff_lfreq: 20    # low cut-off frequency of the filterbank (Hz)
+cutoff_hfreq: 7500  # high cut-off frequency of the filterbank (Hz)
+cutoff_lfreq: 80    # low cut-off frequency of the filterbank (Hz)
                     # center of the filters.
 
 # Deltas
-apply_deltas: yes    # Set to 'yes' to stack derivatives to the signal.
+apply_deltas: no    # Set to 'yes' to stack derivatives to the signal.
 delta_order: 2      # Number of deltas added to the features (0 means
                     # no deltas).
 delta_winlen: 2     # Window length to compute the delta features.
 
 # MFCC features.
 apply_dct: yes      # Set to 'yes' to get the MFCC features.
-n_dct_coeff: 13     # Number of DCT coefficent to keep.
+n_dct_coeff: 12     # Number of DCT coefficent to keep.
 lifter_coeff: 22    # Liftering coefficient.
+
+# Energy features.
+add_energy: yes     # Per-frame energy inserted as the first dimension
+                    # of the features.
 
 # Post-processing.
 utt_mnorm: yes      # Per-utterance mean normalization.

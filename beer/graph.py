@@ -294,7 +294,7 @@ class CompiledGraph:
         '''
         log_alphas = self._baum_welch_forward(llhs)
         log_betas = self._baum_welch_backward(llhs)
-        lognorm = logsumexp((log_alphas + log_betas)[0].view(-1, 1), dim=0)
+        lognorm = logsumexp(log_alphas + log_betas, dim=1)
         state_posts = (log_alphas + log_betas - lognorm[:, None]).exp()
         if trans_posteriors:
             log_A = self.trans_log_probs

@@ -33,14 +33,21 @@ class NormalSet(BayesianModelSet, metaclass=abc.ABCMeta):
     @staticmethod
     def create(mean, cov, size, prior_strength=1, noise_std=1.,
                cov_type='full', shared_cov=False):
+        cov = torch.tensor(cov)
+        if len(cov.shape) <= 1:
+            std_dev = cov.sqrt()
+        else:
+            std_dev = cov.diag().sqrt()
         if shared_cov:
             return NormalSetSharedCovariance.create(mean, cov, size,
                                                     prior_strength,
-                                                    noise_std, cov_type)
+                                                    noise_std * std_dev,
+                                                    cov_type)
         else:
             return NormalSetNonSharedCovariance.create(mean, cov, size,
                                                        prior_strength,
-                                                       noise_std,cov_type)
+                                                       noise_std * std_dev,
+                                                       cov_type)
 
     @property
     @abc.abstractmethod
