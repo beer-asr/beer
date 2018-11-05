@@ -9,7 +9,7 @@ feadir=features
 expdir=exp
 
 # Data
-db=zrc2019
+db=mboshi
 dataset=train
 
 # Features
@@ -22,12 +22,14 @@ batch_size=400
 
 #######################################################################
 
+source activate beer
 
 mkdir -p $datadir $expdir $feadir
 
 
 echo "--> Preparing data for the $db database"
 local/$db/prepare_data.sh $datadir/$db || exit 1
+
 
 
 echo "--> Extracting features for the $db database"
