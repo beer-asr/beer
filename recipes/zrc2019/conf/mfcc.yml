@@ -15,7 +15,7 @@ cutoff_lfreq: 80    # low cut-off frequency of the filterbank (Hz)
                     # center of the filters.
 
 # Deltas
-apply_deltas: no    # Set to 'yes' to stack derivatives to the signal.
+apply_deltas: yes   # Set to 'yes' to stack derivatives to the signal.
 delta_order: 2      # Number of deltas added to the features (0 means
                     # no deltas).
 delta_winlen: 2     # Window length to compute the delta features.

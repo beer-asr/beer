@@ -7,14 +7,13 @@ import sys
 
 import beer
 
-
 START_SYM = '\<s\>'
 END_SYM = '\</s\>'
 PIVOT_SYM = '#1'
 
 
 def setup(parser):
-    parser.add_argument('-s', '--sil-prefix',
+    parser.add_argument('-s', '--sil-prefix', action='store_true',
                         help='prefix for the silence phones')
     parser.add_argument('phone_list', help='list of phones files or "-" '\
                         'for stdin')

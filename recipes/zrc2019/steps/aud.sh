@@ -25,7 +25,7 @@ fi
 # Create the phone-loop model.
 if [ ! -f $outdir/ploop_init.mdl ]; then
     beer hmm phonelist $outdir/hmms.mdl | \
-        beer hmm mkphoneloopgraph -s sil - \
+        beer hmm mkphoneloopgraph - \
         $outdir/ploop_graph.pkl || exit 1
     beer hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
         $outdir/decode_graph.pkl || exit 1
@@ -41,16 +41,14 @@ if [ ! -f $outdir/final.mdl ]; then
     echo "training..."
     beer hmm train -l $lrate -b $bsize -e $epochs \
         $outdir/ploop_init.mdl $dataset $outdir/final.mdl
+
+    # Creating the most likely transcription.
+    echo "generating transcription for the $dataset dataset..."
+    beer hmm decode $outdir/final.mdl $dataset > $outdir/trans.txt || exit 1
 else
     echo "Model already trained. Skipping."
 fi
 
 
-# Creating the most likely transcription.
-if [ ! -f $outdir/trans.txt ]; then
-    echo "generating transcription for the $dataset dataset..."
-    beer hmm decode $outdir/final.mdl $dataset > $outdir/trans.txt || exit 1
-else
-    echo "Transcription already generated. Skipping."
-fi
+
 

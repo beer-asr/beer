@@ -146,6 +146,12 @@ def main(args, logger):
         else:
             features = log_melspec
 
+        # Signal enery (per-frame).
+        if feaconf['add_energy']:
+            logger.debug('add the energy to the features')
+            energy = log_melspec.sum(axis=-1) * norm
+            features = np.c_[energy, features]
+
         # Deltas.
         if feaconf['apply_deltas']:
             logger.debug('concatenating derivatives')
@@ -153,11 +159,6 @@ def main(args, logger):
             delta_winlen = feaconf['delta_winlen']
             features = beer.features.add_deltas(features,
                 tuple([delta_winlen] * delta_order))
-
-        if feaconf['add_energy']:
-            logger.debug('add the energy to the features')
-            energy = log_melspec.sum(axis=-1) * norm
-            features = np.c_[energy, features]
 
         # Mean normalization.
         if feaconf['utt_mnorm']:
