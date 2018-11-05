@@ -264,8 +264,8 @@ class CompiledGraph:
         log_alphas[0] = llhs[0] + self.init_log_probs
         for i in range(1, llhs.shape[0]):
             log_alphas[i] = llhs[i]
-            log_alphas[i] += logsumexp(log_alphas[i-1] + log_trans_mat.t(),
-                                        dim=1).view(-1)
+            log_alphas[i] += torch.logsumexp(log_alphas[i-1] + log_trans_mat.t(),
+                                             dim=1).view(-1)
         return log_alphas
 
     def _baum_welch_backward(self, llhs):
@@ -273,7 +273,7 @@ class CompiledGraph:
         log_betas = torch.zeros_like(llhs) - float('inf')
         log_betas[-1] = self.final_log_probs
         for i in reversed(range(llhs.shape[0]-1)):
-            log_betas[i] = logsumexp(log_trans_mat + llhs[i+1] + \
+            log_betas[i] = torch.logsumexp(log_trans_mat + llhs[i+1] + \
                            log_betas[i+1], dim=1).view(-1)
         return log_betas
 
@@ -294,15 +294,15 @@ class CompiledGraph:
         '''
         log_alphas = self._baum_welch_forward(llhs)
         log_betas = self._baum_welch_backward(llhs)
-        lognorm = logsumexp(log_alphas + log_betas, dim=1)
-        state_posts = (log_alphas + log_betas - lognorm[:, None]).exp()
+        lognorm = torch.logsumexp((log_alphas + log_betas)[0], dim=0)
+        state_posts = (log_alphas + log_betas - lognorm).exp()
         if trans_posteriors:
             log_A = self.trans_log_probs
             log_xi = log_alphas[:-1, :, None] + log_A[None] + \
                      (llhs + log_betas)[1:, None, :]
             log_xi = log_xi.view(-1, len(log_A) * len(log_A))
-            lnorm = logsumexp(log_xi, dim=-1)
-            trans_posts = (log_xi - lnorm[:, None]).exp()
+            lnorm = torch.logsumexp(log_xi[0], dim=0)
+            trans_posts = (log_xi - lnorm).exp()
             trans_posts = torch.where(trans_posts != trans_posts,
                                      torch.zeros_like(trans_posts),
                                      trans_posts)

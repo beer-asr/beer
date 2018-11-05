@@ -40,7 +40,7 @@ class HMM(DiscreteLatentBayesianModel):
         order = inference_graph.pdf_id_mapping
         return self.modelset.expected_log_likelihood(stats, order)
 
-    def _inference(self, pc_llhs, inference_graph, viterbi=False,
+    def _inference(self, pc_llhs, inference_graph, viterbi=True,
                    state_path=None, trans_posteriors=False):
         if viterbi or state_path is not None:
             if state_path is None:
@@ -74,7 +74,7 @@ class HMM(DiscreteLatentBayesianModel):
         return self.modelset.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats, inference_graph=None,
-                                viterbi=False, state_path=None):
+                                viterbi=True, state_path=None):
         if inference_graph is None:
             inference_graph = self.graph.value
         pc_llhs = self._pc_llhs(stats, inference_graph)
