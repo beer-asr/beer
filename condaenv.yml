@@ -1,6 +1,5 @@
 name: beer
 channels:
-  - pytorch
   - anaconda
   - defaults
 dependencies:
@@ -18,7 +17,6 @@ dependencies:
   - pango=1.42.4
   - pcre=8.42
   - pixman=0.34.0
-  - appnope=0.1.0
   - backcall=0.1.0
   - blas=1.0
   - bleach=3.0.2
@@ -44,16 +42,12 @@ dependencies:
   - jupyterlab=0.35.2
   - jupyterlab_server=0.2.0
   - kiwisolver=1.0.1
-  - libcxx=4.0.1
-  - libcxxabi=4.0.1
   - libedit=3.1.20170329
   - libffi=3.2.1
-  - libgfortran=3.0.1
   - libpng=1.6.35
   - libsodium=1.0.16
   - libtiff=4.0.9
   - markupsafe=1.0
-  - matplotlib=3.0.1
   - mistune=0.8.4
   - mkl=2019.0
   - mkl_fft=1.0.6
@@ -107,8 +101,4 @@ dependencies:
   - yaml=0.1.7
   - zeromq=4.2.5
   - zlib=1.2.11
-  - pytorch=0.4.1
-  - torchvision=0.2.1
-  - pip:
-    - torch==0.4.1
 
