@@ -1,7 +1,8 @@
 'Structure over a dataset.'
 
+from dataclasses import dataclass, field
 import random
-from typing import NamedTuple
+from typing import NamedTuple, Any
 import numpy as np
 import torch
 
@@ -34,13 +35,25 @@ class UtteranceIterator:
         return Utterance(id=uttid, features=features)
 
 
-class Dataset(NamedTuple):
+@dataclass
+class Dataset:
     'A collection of utterances with their features and meta-data.'
 
     feapath: str
     mean: torch.Tensor
     var: torch.Tensor
     size: int
+    _fea_dict: Any = field(default=None)
+
+    @property
+    def fea_dict(self):
+        if self._fea_dict is None:
+            self._fea_dict = np.load(self.feapath)
+        return self._fea_dict
+
+    def __getstate__(self):
+        self._fea_dict = None
+        return self.__dict__
 
     def __len__(self):
         features = np.load(self.feapath)
@@ -57,9 +70,12 @@ class Dataset(NamedTuple):
             ``iterable``
 
         '''
-        fea_dict = np.load(self.feapath)
-        uttsid = sorted(list(fea_dict.keys()))
+        uttsid = sorted(list(self.fea_dict.keys()))
         if random_order:
             random.shuffle(uttsid)
-        return UtteranceIterator(uttsid, fea_dict)
+        return UtteranceIterator(uttsid, self.fea_dict)
+
+    def __getitem__(self, key):
+        features = torch.from_numpy(self.fea_dict[key]).float()
+        return Utterance(key, features)
 
