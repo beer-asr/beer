@@ -16,10 +16,19 @@ installed we recommend to create a new anaconda environment with
 the given environment file:
 
 ```
-    $ conda env create -f condaenv.yml
+   $ conda env create -f condaenv.yml
 ```
 
-This will create a new environment name `beer`.
+This will create a new environment name `beer`. Then you need to
+install *pytorch* in the beer environment:
+
+```
+   $ source activate beer
+   $ conda install -c pytorch pytorch
+```
+
+Note that it is necessary to install pytorch as the last step.
+
 
 Installation
 ------------
@@ -37,3 +46,4 @@ Usage
 -----
 
 Have a look to the [recipe](https://github.com/beer-asr/beer/tree/zrc/recipes/zrc2019) to get started with beer.
+

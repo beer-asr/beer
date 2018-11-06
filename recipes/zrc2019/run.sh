@@ -16,7 +16,12 @@ dataset=train
 feaname=mfcc
 
 # AUD training
-epochs=5
+# The number of epochs probably needs to be tuned to the final data.
+epochs=10
+
+# These parameter will be ignore if you do parallel training. More
+# precisely, the learning rate will be set to 1 and the batch
+# size to the number of utterances in the training data.
 lrate=0.1
 batch_size=400
 
@@ -47,9 +52,16 @@ steps/create_dataset.sh $datadir/$db/$dataset \
 
 
 echo "--> Acoustic Unit Discovery on $db database"
-#steps/aud.sh conf/hmm.yml $expdir/$db/datasets/${dataset}.pkl \
-#    $epochs $lrate $batch_size $expdir/$db/aud
+steps/aud.sh conf/hmm.yml $expdir/$db/datasets/${dataset}.pkl \
+    $epochs $lrate $batch_size $expdir/$db/aud
 
-steps/aud_parallel.sh conf/hmm.yml data/$db/train/uttids $expdir/$db/datasets/${dataset}.pkl \
-    $epochs $expdir/$db/aud
+# Parallel training. Much faster (and more accurate). This is the
+# recommended training way. However, you need to have Sun Grid Engine
+# like (i.e. qsub command) to run it. If you have a different
+# enviroment please see utils/parallel/sge/* to see how to adapt
+# this recipe to you system.
+#steps/aud_parallel.sh conf/hmm.yml \
+#    data/$db/train/uttids \
+#    $expdir/$db/datasets/${dataset}.pkl \
+#    $epochs $expdir/$db/aud
 

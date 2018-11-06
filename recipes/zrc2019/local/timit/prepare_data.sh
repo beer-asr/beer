@@ -103,6 +103,6 @@ for x in train dev test; do
     cp $dir/${x}_wav.scp $outdir/$x/wavs.scp
 done
 
-date > $dir/.done
+date > $outdir/.done
 echo "Data preparation succeeded"
 

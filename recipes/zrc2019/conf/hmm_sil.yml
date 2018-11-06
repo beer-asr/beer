@@ -1,0 +1,51 @@
+# HMM structure with a specific "phone" target to model silence.
+# The silence HMM has 5 emitting states and a specific topolgy
+# taken from Kaldi.
+
+# Non-speech unit(s).
+- group_name: sil
+  n_units: 1
+  n_normal_per_state: 10
+  prior_strength: 1.
+  noise_std: 0.1
+  cov_type: diagonal
+  shared_cov: no
+  topology:
+  - {start_id: 0, end_id: 1, trans_prob: 1.0}
+  - {start_id: 1, end_id: 1, trans_prob: 0.25}
+  - {start_id: 1, end_id: 2, trans_prob: 0.25}
+  - {start_id: 1, end_id: 3, trans_prob: 0.25}
+  - {start_id: 1, end_id: 4, trans_prob: 0.25}
+  - {start_id: 2, end_id: 2, trans_prob: 0.25}
+  - {start_id: 2, end_id: 3, trans_prob: 0.25}
+  - {start_id: 2, end_id: 4, trans_prob: 0.25}
+  - {start_id: 2, end_id: 5, trans_prob: 0.25}
+  - {start_id: 3, end_id: 2, trans_prob: 0.25}
+  - {start_id: 3, end_id: 3, trans_prob: 0.25}
+  - {start_id: 3, end_id: 4, trans_prob: 0.25}
+  - {start_id: 3, end_id: 5, trans_prob: 0.25}
+  - {start_id: 4, end_id: 2, trans_prob: 0.25}
+  - {start_id: 4, end_id: 3, trans_prob: 0.25}
+  - {start_id: 4, end_id: 4, trans_prob: 0.25}
+  - {start_id: 4, end_id: 5, trans_prob: 0.25}
+  - {start_id: 5, end_id: 5, trans_prob: 0.75}
+  - {start_id: 5, end_id: 6, trans_prob: 0.25}
+
+
+# Speech units (e.g. phones).
+- group_name: au
+  n_units: 100
+  n_normal_per_state: 4
+  prior_strength: 1.
+  noise_std: 0.1
+  cov_type: diagonal
+  shared_cov: no
+  topology:
+  - {start_id: 0, end_id: 1, trans_prob: 1.0}
+  - {start_id: 1, end_id: 1, trans_prob: 0.75}
+  - {start_id: 1, end_id: 2, trans_prob: 0.25}
+  - {start_id: 2, end_id: 2, trans_prob: 0.75}
+  - {start_id: 2, end_id: 3, trans_prob: 0.25}
+  - {start_id: 3, end_id: 3, trans_prob: 0.75}
+  - {start_id: 3, end_id: 4, trans_prob: 0.25}
+
