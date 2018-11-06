@@ -18,14 +18,24 @@ class BayesianModelOptimizer:
                 non-Bayesian parameters (i.e. standard ``pytorch``
                 parameters)
         '''
-        parameters = []
-        for group in groups:
-            parameters += [param for param in group]
-        self._parameters = parameters
+        self._parameters = None # will be set when we defined the grouprs.
+        self.groups = groups
         self._lrate = lrate
         self._std_optim = std_optim
         self._groups = groups
         self._update_count = 0
+
+    @property
+    def groups(self):
+        return self._groups
+
+    @groups.setter
+    def groups(self, value):
+        self._groups = value
+        parameters = []
+        for group in value:
+            parameters += [param for param in group]
+        self._parameters = parameters
 
     def init_step(self):
         'Set all the standard/Bayesian parameters gradient to zero.'
@@ -108,7 +118,7 @@ class SCVBOptimizer:
                 parameter.add_stats(parameter.stats)
             else:
                 parameter.natural_grad_update(self._lrate)
-                
+
 
 
 __all__ = ['BayesianModelOptimizer', 'CVBOptimizer', 'SCVBOptimizer']

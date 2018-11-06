@@ -6,11 +6,13 @@ from . import mkdecodegraph
 from . import mkphoneloop
 from . import mkphoneloopgraph
 from . import mkphones
+from . import optimizer
 from . import phonelist
 from . import train
+from . import update
 
 cmds = [accumulate, decode, mkdecodegraph, mkphoneloop, mkphoneloopgraph,
-        mkphones, phonelist, train]
+        mkphones, optimizer, phonelist, train, update]
 
 def setup(parser):
     subparsers = parser.add_subparsers(title='possible commands', metavar='<cmd>')

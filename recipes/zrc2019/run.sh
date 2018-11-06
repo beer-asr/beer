@@ -9,7 +9,7 @@ feadir=features
 expdir=exp
 
 # Data
-db=mboshi
+db=timit
 dataset=train
 
 # Features
@@ -47,6 +47,9 @@ steps/create_dataset.sh $datadir/$db/$dataset \
 
 
 echo "--> Acoustic Unit Discovery on $db database"
-steps/aud.sh conf/hmm.yml $expdir/$db/datasets/${dataset}.pkl \
-    $epochs $lrate $batch_size $expdir/$db/aud
+#steps/aud.sh conf/hmm.yml $expdir/$db/datasets/${dataset}.pkl \
+#    $epochs $lrate $batch_size $expdir/$db/aud
+
+steps/aud_parallel.sh conf/hmm.yml data/$db/train/uttids $expdir/$db/datasets/${dataset}.pkl \
+    $epochs $expdir/$db/aud
 

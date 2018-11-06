@@ -7,15 +7,15 @@
 #
 # This is a slightly adapted version of the original Kaldi script.
 #
+rootdir=/export/corpora5/LDC/LDC93S1/timit/TIMIT
 
-if [ $# -ne 2 ]; then
-    echo "$0 <timit-root-dir> <out-dir>"
+if [ $# -ne 1 ]; then
+    echo "$0 <out-dir>"
     exit 1;
 fi
 
 conf=$(dirname $0)
-rootdir=$1
-outdir=$2
+outdir=$1
 dir=$(pwd)/$outdir/local
 mkdir -p $outdir/local
 
