@@ -43,25 +43,6 @@ else
     echo "Phone Loop model already created. Skipping."
 fi
 
-
-#beer hmm train -l $lrate -b $bsize -e $epochs \
-#    $outdir/ploop_init.mdl $dataset $outdir/final.mdl
-
-#cmd="python utils/hmm-align.py \
-#--ali-graphs $mdl_dir/ali_graphs.npz \
-#$mdl_dir/$mdl  $data_train_dir/feats.npz  $tmpdir"
-#utils/parallel/submit_parallel.sh \
-#"$parallel_env" \
-#"hmm-align-iter$iter" \
-#"$hmm_align_parallel_opts" \
-#"$hmm_align_njobs" \
-#"$data_train_dir/uttids" \
-#"$cmd" \
-#$mdl_dir || exit 1
-#find $tmpdir -name '*npy' | \
-#  zip -j -@ $mdl_dir/alis.npz > /dev/null || exit 1
-
-
 # Training.
 if [ ! -f $outdir/final.mdl ]; then
     echo "training..."
@@ -100,14 +81,17 @@ if [ ! -f $outdir/final.mdl ]; then
     done
 
     cp $outdir/$mdl $outdir/final.mdl
-
-    # Creating the most likely transcription.
-    echo "generating transcription for the $dataset dataset..."
-    beer hmm decode $outdir/final.mdl $dataset > $outdir/trans.txt || exit 1
 else
     echo "Model already trained. Skipping."
 fi
 
-
-
+# Generating labels.
+if [ ! -f $outdir/trans.txt ]; then
+    # Creating the most likely transcription.
+    echo "generating transcription for the $dataset dataset..."
+    beer hmm decode --per-frame $outdir/final.mdl \
+        $dataset > $outdir/trans.txt || exit 1
+else
+    echo "transcription already generated. Skipping."
+fi
 

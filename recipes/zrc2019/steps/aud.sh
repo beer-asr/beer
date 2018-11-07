@@ -41,14 +41,17 @@ if [ ! -f $outdir/final.mdl ]; then
     echo "training..."
     beer hmm train -l $lrate -b $bsize -e $epochs \
         $outdir/ploop_init.mdl $dataset $outdir/final.mdl
-
-    # Creating the most likely transcription.
-    echo "generating transcription for the $dataset dataset..."
-    beer hmm decode $outdir/final.mdl $dataset > $outdir/trans.txt || exit 1
 else
     echo "Model already trained. Skipping."
 fi
 
-
-
+# Generating labels.
+if [ ! -f $outdir/trans.txt ]; then
+    # Creating the most likely transcription.
+    echo "generating transcription for the $dataset dataset..."
+    beer hmm decode --per-frame $outdir/final.mdl \
+        $dataset > $outdir/trans.txt || exit 1
+else
+    echo "transcription already generated. Skipping."
+fi
 

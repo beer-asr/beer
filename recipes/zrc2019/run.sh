@@ -9,7 +9,7 @@ feadir=features
 expdir=exp
 
 # Data
-db=timit
+db=zrc2019
 dataset=train
 
 # Features
