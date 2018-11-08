@@ -13,7 +13,19 @@ setup(
         'torch',
     ],
     version=1.0,
-    packages=['beer', 'beer.priors', 'beer.models', 'beer.nnet', 'beer.inference']
+    packages=[
+        'beer',
+        'beer.priors',
+        'beer.models',
+        'beer.nnet',
+        'beer.inference',
+        'beer.cli',
+        'beer.cli.subcommands',
+        'beer.cli.subcommands.dataset',
+        'beer.cli.subcommands.features',
+        'beer.cli.subcommands.hmm',
+    ],
+    scripts=['beer/cli/beer']
 )
 
 

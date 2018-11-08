@@ -1,63 +1,28 @@
 'Acoustic graph for the HMM.'
 
 from collections import defaultdict, OrderedDict
+from dataclasses import dataclass, field
+from typing import Set, Dict, TypeVar, Generic
 import torch
 from .utils import logsumexp
 
-
-class Arc:
-    '''Arc between to state (i.e. node) of a graph with a weight.
-
-    Attributes:
-        start (int): Identifier of the starting state.
-        end (int): Identifier of the ending state.
-        weight (float): Weight of the arc.
-    '''
-    __repr_str = 'Arc(start={}, end={}, weight={})'
-
-    def __init__(self, start, end, weight):
-        '''
-        Args:
-            start (State): Starting state.
-            end (State): Final state,
-            weight (int): Weight of the arc.
-        '''
-        self.start = start
-        self.end = end
-        self.weight = weight
-
-    def __hash__(self):
-        return hash('{}:{}'.format(self.start, self.end))
-
-    def __repr__(self):
-        return self.__repr_str.format(self.start, self.end, self.weight)
+StateType = TypeVar('StateType')
+ArcType = TypeVar('ArcType')
 
 
-class State:
-    '''State (or node) of a graph.
+@dataclass
+class State(Generic[StateType]):
+    'State (i.e. node) of a graph.'
+    id: int
+    pdf_id: int
 
-    Attributes:
-        unit_id (obj): Identifier of the parent unit.
-        state_id (int): Unique identifier of the state within the unit.
-        pdf_id (int): Idenitifier of the probability density function
-            associated with this state.
-    '''
-    __repr_str = 'State(state_id={}, pdf_id={})'
 
-    def __init__(self, state_id, pdf_id):
-        self.state_id = state_id
-        self.pdf_id = pdf_id
-
-    def __hash__(self):
-        return hash(self.state_id)
-
-    def __repr__(self):
-        return self.__repr_str.format(self.state_id, self.pdf_id)
-
-    def __eq__(self, other):
-        if isinstance(other, State):
-            return hash(self) == hash(other)
-        return NotImplemented
+@dataclass(unsafe_hash=True)
+class Arc(Generic[ArcType]):
+    'Arc between 2 states (i.e. node) of a graph with a weight.'
+    start: int
+    end: int
+    weight: float = field(compare=False)
 
 
 def _state_name(symbols, state_id):
@@ -67,56 +32,61 @@ def _state_name(symbols, state_id):
         name = str(state_id)
     return name
 
+
+def _show_graph(graph):
+    # We import the module here as it is only needed by the Jupyter
+    # notebook.
+    import graphviz
+    dot = graphviz.Digraph()
+    dot.graph_attr['rankdir'] = 'LR'
+    for state_id in graph.states():
+        attrs = {'shape': 'circle'}
+        if state_id == graph.start_state:
+            attrs.update(penwidth='2.0')
+        if state_id == graph.end_state:
+            attrs.update(shape='doublecircle')
+        dot.node(_state_name(graph.symbols, state_id), **attrs)
+    for arc in graph.arcs():
+        dot.edge(_state_name(graph.symbols, arc.start),
+                 _state_name(graph.symbols, arc.end),
+                 label=str(round(arc.weight, 3)))
+    return graphviz.Source(dot.source)._repr_svg_()
+
+
+@dataclass
 class Graph:
-    '''Graph.
 
-    Attributes:
-        states (dictionary): All the states of the graph.
-        arcs (dictionary): All the arcs of the graph.
-    '''
-
-    def __init__(self):
-        self._state_count = 0
-        self._states = OrderedDict()
-        self._arcs = set()
-        self.symbols = {}
-        self.start_state = None
-        self.end_state = None
-
-    def __repr__(self):
-        retval = ''
-        for i, state in enumerate(self._states):
-            retval += repr(state)
-            if i <= len(self._states) - 1:
-                retval += '\n'
-        return retval
+    _state_count: int = field(default=0, init=False, repr=False)
+    _states: Dict[int, StateType] = field(default_factory=OrderedDict, init=False,
+                                          repr=False)
+    _arcs: Set[ArcType] = field(default_factory=set, init=False, repr=False)
+    symbols: Dict[int, str] = field(default_factory=dict, init=False,
+                                    repr=False)
+    start_state: int = field(default=None, init=False, repr=False)
+    end_state: int = field(default=None, init=False, repr=False)
 
     def _repr_svg_(self):
-        # We import the module here as it is only needed by the Jupyter
-        # notebook.
-        import graphviz
-        dot = graphviz.Digraph()
-        dot.graph_attr['rankdir'] = 'LR'
-        for state_id in self.states():
-            attrs = {'shape': 'circle'}
-            if state_id == self.start_state:
-                attrs.update(penwidth='2.0')
-            if state_id == self.end_state:
-                attrs.update(shape='doublecircle')
-            dot.node(_state_name(self.symbols, state_id), **attrs)
-        for arc in self.arcs():
-            dot.edge(_state_name(self.symbols, arc.start),
-                     _state_name(self.symbols, arc.end),
-                     label=str(round(arc.weight, 3)))
-        return graphviz.Source(dot.source)._repr_svg_()
+        return _show_graph(self)
 
     def states(self):
-        '''Iterate over the states.'''
+        'Iterator over the states.'
         return self._states.keys()
 
+    def state_from_id(self, state_id):
+        return self._states[state_id]
+
     def arcs(self, state_id=None, incoming=False):
-        '''Iterates over the arcs. If state is provided enumerate the
-        outgoing args from "state_id"
+        '''Iterator over the arcs.
+
+        Args:
+            state_id (int): If provided, consider only the incoming/
+                outgoing arcs from the given states.
+            incomping (boolean): If True/False, only iterates over the
+                incoming/outgoing arcs. This field is used only if
+                state_id is provided.
+
+        Yields:
+            ``Arc``.
         '''
         for arc in self._arcs:
             if not incoming:
@@ -130,7 +100,7 @@ class Graph:
         state_id = self._state_count
         self._state_count += 1
         new_state = State(state_id, pdf_id)
-        self._states[new_state.state_id] = new_state
+        self._states[new_state.id] = new_state
         return state_id
 
     def add_arc(self, start, end, weight=1.0):
@@ -179,7 +149,7 @@ class Graph:
             self._arcs.remove(arc)
         del self._states[old_state_id]
 
-    def _find_next_pdf_ids(self, start_state, init_weight):
+    def find_next_pdf_ids(self, start_state, init_weight=1.0):
         to_explore = [(arc, init_weight) for arc in self.arcs(start_state)]
         visited = set([start_state])
         while to_explore:
@@ -193,7 +163,7 @@ class Graph:
                                     for arc in self.arcs(arc.end)]
                     visited.add(arc.end)
 
-    def _find_previous_pdf_ids(self, start_state, init_weight):
+    def find_previous_pdf_ids(self, start_state, init_weight=1.0):
         to_explore = [(arc, init_weight)
                       for arc in self.arcs(start_state, incoming=True)]
         visited = set([start_state])
@@ -209,7 +179,8 @@ class Graph:
                     visited.add(arc.start)
 
     def compile(self):
-        '''Compile the graph.'''
+        'Compile the graph.'
+
         # Total number of emitting states.
         tot_n_states = 0
         pdf_id_mapping = []
@@ -225,12 +196,12 @@ class Graph:
         trans_probs = torch.zeros(tot_n_states, tot_n_states)
 
         # Init probs.
-        for state_id, weight in self._find_next_pdf_ids(self.start_state, 1.0):
+        for state_id, weight in self.find_next_pdf_ids(self.start_state, 1.0):
             init_probs[state2pdf_id[state_id]] += weight
         init_probs /= init_probs.sum()
 
         # Init probs.
-        for state_id, weight in self._find_previous_pdf_ids(self.end_state, 1.0):
+        for state_id, weight in self.find_previous_pdf_ids(self.end_state, 1.0):
             final_probs[state2pdf_id[state_id]] += weight
         final_probs /= final_probs.sum()
 
@@ -247,7 +218,7 @@ class Graph:
             # We need to follow the path until the next valid pdf_id
             pdf_id1 = state2pdf_id[arc.start]
             if pdf_id2 is None:
-                for state_id, weight in self._find_next_pdf_ids(arc.end, weight):
+                for state_id, weight in self.find_next_pdf_ids(arc.end, weight):
                     trans_probs[pdf_id1, state2pdf_id[state_id]] += weight
             else:
                 trans_probs[pdf_id1, state2pdf_id[arc.end]] += weight
@@ -261,99 +232,122 @@ class Graph:
                 trans_probs[dim, :] /= norms / (1 - diag)
                 trans_probs[dim, dim] =  diag
 
-        return CompiledGraph(init_probs, final_probs, trans_probs, pdf_id_mapping)
+        return CompiledGraph(init_probs.log(), final_probs.log(),
+                             trans_probs.log(), pdf_id_mapping)
 
 
 class CompiledGraph:
     '''Inference graph for a HMM model.'''
 
-    def __init__(self, init_probs, final_probs, trans_probs, pdf_id_mapping=None):
+    def __init__(self, init_log_probs, final_log_probs, trans_log_probs,
+                 pdf_id_mapping=None):
         '''
         Args:
-            init_probs (``torch.Tensor``): Initial probabilities.
-            final_probs (``torch.Tensor``): Final probabilities.
-            trans_probs (``torch.Tensor``): Transition probabilities.
+            init_log_probs (``torch.Tensor``): Initial log probabilities.
+            final_log_probs (``torch.Tensor``): Final log probabilities.
+            trans_log_probs (``torch.Tensor``): Transition log probabilities.
             pdf_id_mapping (list): Mapping of the pdf ids (optional)
         '''
-        self.init_probs = init_probs
-        self.final_probs = final_probs
-        self.trans_probs = trans_probs
+        self.init_log_probs = init_log_probs
+        self.final_log_probs = final_log_probs
+        self.trans_log_probs = trans_log_probs
         self.pdf_id_mapping = pdf_id_mapping
 
     @property
     def n_states(self):
         'Total number of states in the graph.'
-        return len(self.trans_probs)
+        return len(self.trans_log_probs)
 
-    def _baum_welch_forward(self, lhs, eps=1e-6):
-        alphas = torch.zeros_like(lhs)
-        consts = torch.zeros(len(lhs), dtype=lhs.dtype, device=lhs.device)
-        trans_mat = self.trans_probs
-        res = lhs[0] * self.init_probs
-        consts[0] = res.sum()
-        alphas[0] = res / consts[0]
-        for i in range(1, lhs.shape[0]):
-            res = lhs[i] * (trans_mat.t() @ (alphas[i-1] + eps))
-            consts[i] = res.sum()
-            alphas[i] = res / consts[i]
-        return alphas, consts
+    def _baum_welch_forward(self, llhs):
+        log_trans_mat = self.trans_log_probs
+        log_alphas = torch.zeros_like(llhs) - float('inf')
+        log_alphas[0] = llhs[0] + self.init_log_probs
+        for i in range(1, llhs.shape[0]):
+            log_alphas[i] = llhs[i]
+            log_alphas[i] += torch.logsumexp(log_alphas[i-1] + log_trans_mat.t(),
+                                             dim=1).view(-1)
+        return log_alphas
 
-    def _baum_welch_backward(self, lhs, consts, eps=1e-6):
-        betas = torch.zeros_like(lhs)
-        trans_mat = self.trans_probs
-        betas[-1] = self.final_probs
-        for i in reversed(range(lhs.shape[0] - 1)):
-            res = trans_mat @ (lhs[i+1] * (betas[i+1] + eps))
-            betas[i] = res / consts[i+1]
-        return betas
+    def _baum_welch_backward(self, llhs):
+        log_trans_mat = self.trans_log_probs
+        log_betas = torch.zeros_like(llhs) - float('inf')
+        log_betas[-1] = self.final_log_probs
+        for i in reversed(range(llhs.shape[0]-1)):
+            log_betas[i] = torch.logsumexp(log_trans_mat + llhs[i+1] + \
+                           log_betas[i+1], dim=1).view(-1)
+        return log_betas
 
-    def posteriors(self, llhs, eps=1e-6):
-        # Scale the log-likelihoods to avoid overflow.
-        max_val = llhs.max()
-        lhs = (llhs - max_val).exp() + eps
+    def posteriors(self, llhs, trans_posteriors=False):
+        '''Compute the posterior of the state given the
+        (log-)likelihood of the data.
 
-        # Scaled forward-backward algorithm.
-        alphas, consts = self._baum_welch_forward(lhs, eps)
-        betas = self._baum_welch_backward(lhs, consts + eps, eps)
-        posts = (alphas + eps) * (betas + eps)
-        norm = posts.sum(dim=1)
-        posts /= norm[:, None]
+        Args:
+            llhs (``torch.Tensor[N, K]``): Log-likelihood per frame and
+                state.
+            trans_posteriors (boolean): If true, also compute the
+                transition posterior.
 
-        return posts
+        Returns:
+            ``torch.FloatTensor[N, K]``: state posteriors.
+            ``torch.FloatTensor[N-1, K, K]``: transition posteriors
+
+        '''
+        log_alphas = self._baum_welch_forward(llhs)
+        log_betas = self._baum_welch_backward(llhs)
+        lognorm = torch.logsumexp((log_alphas + log_betas)[0], dim=0)
+        state_posts = (log_alphas + log_betas - lognorm).exp()
+        if trans_posteriors:
+            log_A = self.trans_log_probs
+            log_xi = log_alphas[:-1, :, None] + log_A[None] + \
+                     (llhs + log_betas)[1:, None, :]
+            log_xi = log_xi.view(-1, len(log_A) * len(log_A))
+            lnorm = torch.logsumexp(log_xi[0], dim=0)
+            trans_posts = (log_xi - lnorm).exp()
+            trans_posts = torch.where(trans_posts != trans_posts,
+                                     torch.zeros_like(trans_posts),
+                                     trans_posts)
+            trans_posts = trans_posts.view(-1, len(log_A), len(log_A))
+            retval = state_posts, trans_posts
+        else:
+            retval = state_posts
+        return retval
+
 
     def best_path(self, llhs):
-        init_log_prob = self.init_probs.log()
-        backtrack = torch.zeros_like(llhs, dtype=torch.long, device=llhs.device)
+        init_log_prob = self.init_log_probs
+        backtrack = torch.zeros_like(llhs, dtype=torch.long,
+                                     device=llhs.device)
         omega = llhs[0] + init_log_prob
-        log_trans_mat = self.trans_probs.log()
+        log_trans_mat = self.trans_log_probs
 
         for i in range(1, llhs.shape[0]):
             hypothesis = omega + log_trans_mat.t()
             backtrack[i] = torch.argmax(hypothesis, dim=1)
             omega = llhs[i] + hypothesis[range(len(log_trans_mat)), backtrack[i]]
 
-        path = [torch.argmax(omega + self.final_probs.log())]
+        path = [torch.argmax(omega + self.final_log_probs)]
         for i in reversed(range(1, len(llhs))):
             path.insert(0, backtrack[i, path[0]])
         return torch.LongTensor(path)
 
     def float(self):
-            return CompiledGraph(self.init_probs.float(),
-                                 self.final_probs.float(),
-                                 self.trans_probs.float(),
+            return CompiledGraph(self.init_log_probs.float(),
+                                 self.final_log_probs.float(),
+                                 self.trans_log_probs.float(),
                                  self.pdf_id_mapping)
 
     def double(self):
-        return CompiledGraph(self.init_probs.double(),
-                                 self.final_probs.double(),
-                                 self.trans_probs.double(),
+        return CompiledGraph(self.init_log_probs.double(),
+                                 self.final_log_probs.double(),
+                                 self.trans_log_probs.double(),
                                  self.pdf_id_mapping)
 
     def to(self, device):
-        return CompiledGraph(self.init_probs.to(device),
-                                 self.final_probs.to(device),
-                                 self.trans_probs.to(device),
+        return CompiledGraph(self.init_log_probs.to(device),
+                                 self.final_log_probs.to(device),
+                                 self.trans_log_probs.to(device),
                                  self.pdf_id_mapping)
 
 
 __all__ = ['Graph']
+

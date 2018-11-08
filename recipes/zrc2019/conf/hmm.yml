@@ -1,0 +1,17 @@
+# Speech units (e.g. phones).
+- group_name: au
+  n_units: 100
+  n_normal_per_state: 4
+  prior_strength: 1.
+  noise_std: 0.1
+  cov_type: diagonal
+  shared_cov: no
+  topology:
+  - {start_id: 0, end_id: 1, trans_prob: 1.0}
+  - {start_id: 1, end_id: 1, trans_prob: 0.75}
+  - {start_id: 1, end_id: 2, trans_prob: 0.25}
+  - {start_id: 2, end_id: 2, trans_prob: 0.75}
+  - {start_id: 2, end_id: 3, trans_prob: 0.25}
+  - {start_id: 3, end_id: 3, trans_prob: 0.75}
+  - {start_id: 3, end_id: 4, trans_prob: 0.25}
+

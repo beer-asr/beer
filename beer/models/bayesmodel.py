@@ -17,17 +17,6 @@ class BayesianModel(metaclass=abc.ABCMeta):
         parameters (list): List of :any:`BayesianParameter` that the
             model has registered.
 
-    Note:
-        All the classes that inherits from :any:`BayesianModel`  are
-        callable, i.e.:
-
-        .. code-block:: python
-
-           llh = model(some_data)
-
-        Calling a model will by default call the :any:`forward` method
-        of the object and return the expected log-likelihood of the data
-        given the model.
     '''
 
     def __init__(self):
@@ -99,20 +88,6 @@ class BayesianModel(metaclass=abc.ABCMeta):
         if isinstance(value, torch.nn.Module):
             self._register_module(name, value)
         super().__setattr__(name, value)
-
-    def __call__(self, data, **kwargs):
-        return self.forward(data, **kwargs)
-
-    def __hash__(self):
-        return hash(repr(self))
-
-    @property
-    def mean_field_groups(self):
-        '''All the Bayes parameters of the model organized into groups
-        to be optimized with a coordinate ascent algorithm.
-
-        '''
-        return self.mean_field_factorization()
 
     @property
     def cache(self):
@@ -257,7 +232,7 @@ class BayesianModel(metaclass=abc.ABCMeta):
         '''
         pass
 
-    def forward(self, s_stats, **kwargs):
+    def expected_log_likelihood(self, s_stats, **kwargs):
         '''Abstract method to be implemented by subclasses of
         :any:`BayesianModel`.
 
@@ -307,37 +282,6 @@ class BayesianModel(metaclass=abc.ABCMeta):
         pass
 
 
-class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
-    '''Abstract base class for a set of the :any:`BayesianModel`.
-
-    This model is used by model having discrete latent variable such
-    as Mixture models  or Hidden Markov models.
-
-    Note:
-        subclasses of :any:`BayesianModelSet` are expected to be
-        iterable and therefore should implement at minima:
-
-        .. code-block:: python
-
-           MyBayesianModelSet:
-
-               def __getitem__(self, key):
-                  ...
-
-               def __len__(self):
-                  ...
-
-    '''
-
-    @abc.abstractmethod
-    def __getitem__(self, key):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def __len__(self):
-        raise NotImplementedError
-
-
 class DiscreteLatentBayesianModel(BayesianModel, metaclass=abc.ABCMeta):
     '''Abstract base class for a set of :any:`BayesianModel` with
     discrete latent variable.
@@ -369,6 +313,6 @@ class DiscreteLatentBayesianModel(BayesianModel, metaclass=abc.ABCMeta):
 
 __all__ = [
     'BayesianModel',
-    'BayesianModelSet',
     'DiscreteLatentBayesianModel',
 ]
+

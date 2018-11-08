@@ -9,11 +9,13 @@ import scipy.signal
 
 def hz2mel(freq_hz):
     'Convert Hertz to Mel value(s).'
-    return 2595 * np.log10(1 + freq_hz / 700.)
+    return 1127 * (np.log(1 + (freq_hz / 700.0)))
+    #return 2595 * np.log10(1 + freq_hz / 700.)
 
 def mel2hz(mel):
     'Convert Mel value(s) to Hertz.'
-    return 700*(10**(mel/2595.0)-1)
+    return 700.0 * (np.exp(mel / 1127.0) - 1)
+    #return 700*(10**(mel/2595.0)-1)
 
 
 def hz2bark(freq_hz):
@@ -113,15 +115,8 @@ def short_term_mspec(signal, flen=0.025, frate=0.01, preemph=0.97,
         fft_len (int): Length of the FFT used.
 
     '''
-    # Normalize the the dynamic range of the signal.
-    try:
-        max_val = np.iinfo(signal.dtype).max
-    except ValueError:
-        max_val = np.finfo(signal.dtype).max
-    signal = signal / max_val
-
     # Remove DC offset.
-    signal -= signal.mean()
+    signal = signal - signal.mean()
 
     # Convert the frame rate/length from second to number of samples.
     frate_samp = int(srate * frate)
@@ -130,23 +125,22 @@ def short_term_mspec(signal, flen=0.025, frate=0.01, preemph=0.97,
     # Compute the number of frames.
     nframes = (len(signal) - flen_samp) // frate_samp + 1
 
-    # Pre-emphasis filtering.
-    s_t = np.array(signal, dtype=np.float32)
-    s_t -= preemph * np.r_[s_t[0], s_t[:-1]]
-
     # Extract the overlapping frames.
-    isize = s_t.dtype.itemsize
-    sframes = np.lib.stride_tricks.as_strided(s_t, shape=(nframes, flen_samp),
+    isize = signal.dtype.itemsize
+    sframes = np.lib.stride_tricks.as_strided(signal, shape=(nframes, flen_samp),
                                               strides=(frate_samp * isize,
                                                        isize),
-                                              writeable=False)
+                                              writeable=False).copy()
+
+    # Pre-emphasis
+    sframes -= preemph * np.c_[sframes[:, 0], sframes[:, :-1]]
 
     # Apply the window function.
-    frames = sframes * window(flen_samp)[None, :]
+    sframes = sframes * window(flen_samp)[None, :]
 
     # Compute FFT.
     fft_len = int(2 ** np.floor(np.log2(flen_samp) + 1))
-    return np.abs(np.fft.rfft(frames, n=fft_len, axis=-1)[:, :-1]), fft_len
+    return np.abs(np.fft.rfft(sframes, n=fft_len, axis=-1)[:, :-1]), fft_len
 
 def fbank(signal, flen=0.025, frate=0.01, hifreq=8000, lowfreq=20, nfilters=26,
           preemph=0.97, srate=16000):

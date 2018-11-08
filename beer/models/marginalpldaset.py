@@ -6,7 +6,7 @@ import torch
 
 from .bayesmodel import BayesianParameter
 from .bayesmodel import BayesianParameterSet
-from .bayesmodel import BayesianModelSet
+from .modelset import BayesianModelSet
 from .normal import Normal
 from .normalset import NormalSetElement
 from ..priors import NormalFullCovariancePrior

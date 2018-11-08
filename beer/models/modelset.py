@@ -1,12 +1,44 @@
 
-
+import abc
 import torch
-from .bayesmodel import BayesianModelSet
+from .bayesmodel import BayesianModel
+
+
+class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
+    '''Abstract base class for a set of the :any:`BayesianModel`.
+
+    This model is used by model having discrete latent variable such
+    as Mixture models  or Hidden Markov models.
+
+    Note:
+        subclasses of :any:`BayesianModelSet` are expected to be
+        iterable and therefore should implement at minima:
+
+        .. code-block:: python
+
+           MyBayesianModelSet:
+
+               def __getitem__(self, key):
+                  ...
+
+               def __len__(self):
+                  ...
+
+    '''
+
+    @abc.abstractmethod
+    def __getitem__(self, key):
+        pass
+
+    @abc.abstractmethod
+    def __len__(self):
+        pass
+
 
 
 class JointModelSet(BayesianModelSet):
-    '''Set of concatenated model sets having the same type of sufficient
-    statistics.
+    '''Set of concatenated model sets having the same type of
+    sufficient statistics.
     '''
 
     def __init__(self, modelsets):
@@ -75,6 +107,61 @@ class JointModelSet(BayesianModelSet):
         return length
 
 
+class DynamicallyOrderedModelSet(BayesianModelSet):
+    '''Set of model for which the order of the components might
+    change for each called.
+
+    Attributes:
+        original_modelset (:any:`BayesianModelSet`): original model.
+        order (sequence of integer): new order of the model set.
+
+    Note:
+        The ordering sequence can contain several time the index
+        of the same components. This is useful for sharing parameters.
+
+    '''
+
+    def __init__(self, original_modelset):
+        super().__init__()
+        self.original_modelset = original_modelset
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
+
+    def mean_field_factorization(self):
+        return self.original_modelset.mean_field_factorization()
+
+    def sufficient_statistics(self, data):
+        return self.original_modelset.sufficient_statistics(data)
+
+    def expected_log_likelihood(self, stats, order=None):
+        if order is None:
+            order = list(range(len(self.original_modelset)))
+        dtype, device = stats.dtype, stats.device
+        pc_exp_llh = self.original_modelset.expected_log_likelihood(stats)
+        self.cache['order'] = order
+        return pc_exp_llh[:, order]
+
+    def accumulate(self, stats, resps):
+        order = self.cache['order']
+        new_resps = torch.zeros((len(stats), len(self.original_modelset)),
+                                 dtype=resps.dtype, device=resps.device)
+        for i, val in enumerate(resps.t()):
+            new_resps[:, order[i]] += val
+        return self.original_modelset.accumulate(stats, new_resps)
+
+    ####################################################################
+    # BayesianModelSet interface.
+    ####################################################################
+
+    def __getitem__(self, key):
+        return self.original_modelset[key]
+
+    def __len__(self):
+        return len(self.original_modelset)
+
+
 class RepeatedModelSet(BayesianModelSet):
     '''Model set where an internal model set is repeated K times. This
     object is used in mixture-like models when the components of the
@@ -122,4 +209,5 @@ class RepeatedModelSet(BayesianModelSet):
         return len(self.modelset) * self.repeat
 
 
-__all__ = ['RepeatedModelSet', 'JointModelSet']
+__all__ = ['DynamicallyOrderedModelSet', 'JointModelSet', 'RepeatedModelSet']
+
