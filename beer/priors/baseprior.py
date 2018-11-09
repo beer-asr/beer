@@ -2,6 +2,7 @@
 distribution.'''
 
 import abc
+from dataclasses import dataclass, field
 import torch
 import torch.autograd as ta
 
@@ -10,12 +11,14 @@ def _bregman_divergence(f_val1, f_val2, grad_f_val2, val1, val2):
     return f_val1 - f_val2 - torch.sum(grad_f_val2 * (val1 - val2))
 
 
+@dataclass(repr=False, eq=False)
 class ExpFamilyPrior(metaclass=abc.ABCMeta):
     '''Abstract base class for (conjugate) priors from the exponential
     family of distribution.
 
     '''
-    __repr_str = '{classname}(natural_params={nparams})'
+    _natural_params: torch.Tensor
+    _cache: dict = field(default=dict, repr=False, init=False, compare=False)
 
     @staticmethod
     def kl_div(model1, model2):
@@ -37,21 +40,25 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             model1.natural_parameters
         )
 
-    def __init__(self, natural_parameters):
-        '''Initialize the base class.
+    def __getstate__(self):
+        self._cache = {}
+        return self.__dict__
 
-        Args:
-            natural_parameters (``torch.Tensor``): Natural parameters of
-                the distribution.
-        '''
-        self._natural_params = natural_parameters.detach()
+    def __eq__(self, other):
+        if self.__class__ == other.__class__:
+            return torch.allclose(self.natural_parameters,
+                                  other.natural_parameters)
+        return NotImplemented
+
+    @property
+    def natural_parameters(self):
+        '``torch.Tensor``: Natural parameters.'
+        return self._natural_params
+
+    @natural_parameters.setter
+    def natural_parameters(self, value):
+        self._natural_params = value.detach()
         self.cache = {}
-
-    def __repr__(self):
-        return self.__repr_str.format(
-            classname=self.__class__.__name__,
-            nparams=self.natural_hparams
-        )
 
     def float(self):
         self.natural_parameters = self.natural_parameters.float()
@@ -65,19 +72,6 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         self.natural_parameters = self.natural_parameters.to(device)
         return self
 
-    @property
-    def natural_parameters(self):
-        '``torch.Tensor``: Natural parameters.'
-        return self._natural_params
-
-    @natural_parameters.setter
-    def natural_parameters(self, value):
-        self._natural_params = value.detach()
-        self.cache = {}
-
-    def _to_std_parameters(self, natural_parameters=None):
-        pass
-
     def to_std_parameters(self, natural_parameters=None):
         'Convert the natural parameters to their standard form.'
         if natural_parameters is not None:
@@ -89,16 +83,6 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             std_params = self._to_std_parameters(natural_parameters)
             self.cache['std_params'] = std_params
         return std_params
-
-    @abc.abstractmethod
-    def to_natural_parameters(self, std_parameters=None):
-        'Convert the standard parameters to their natural form.'
-        pass
-
-
-    @abc.abstractmethod
-    def _expected_sufficient_statistics(self):
-        pass
 
     def expected_sufficient_statistics(self):
         '''Expected value of the sufficient statistics of the
@@ -127,10 +111,6 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         ta.backward(log_norm)
         return copied_tensor.grad.detach()
 
-    @abc.abstractmethod
-    def _log_norm(self, natural_parameters=None):
-        pass
-
     def log_norm(self, natural_parameters=None):
         '''Abstract method to be implemented by subclasses of
         ``beer.ExpFamilyPrior``.
@@ -156,6 +136,26 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             lnorm = self._log_norm()
             self.cache['lnorm'] = lnorm
         return lnorm
+
+    ###################################################################
+    # To be implemented by its descendant.
+
+    @abc.abstractmethod
+    def to_natural_parameters(self, std_parameters=None):
+        'Convert the standard parameters to their natural form.'
+        pass
+
+    @abc.abstractmethod
+    def _to_std_parameters(self, natural_parameters=None):
+        pass
+
+    @abc.abstractmethod
+    def _expected_sufficient_statistics(self):
+        pass
+
+    @abc.abstractmethod
+    def _log_norm(self, natural_parameters=None):
+        pass
 
 
 __all__ = ['ExpFamilyPrior']

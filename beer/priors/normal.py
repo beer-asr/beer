@@ -1,28 +1,28 @@
 '''Implementation of the Normaldistribution.'''
 
 import math
+from dataclasses import dataclass
 import torch
 from .baseprior import ExpFamilyPrior
 
 
+@dataclass
 class NormalFullCovariancePrior(ExpFamilyPrior):
     '''Normal distribution with full covariance matrix.
 
     parameters:
         mean: mean of the distribution
         scale: scale of the precision matrix (scalar)
-        precision: Precision matrix (given by another distribution)
 
     natural parameters:
-        eta1 = scale * mean
-        eta2 = - 0.5 * scale
+        eta1 = - 0.5 * scale
+        eta2 = scale * mean
 
     sufficient statistics (x is a DxD positive definite matrix):
         T_1(x) = precision * mean
-        T_2(x) = mean^T * precision * mean
+        T_2(x) = mean * mean^T
 
     '''
-    __repr_str = '{classname}(mean={shape}, scale={rate}, precision_prior={precision})'
 
     def __init__(self, mean, scale, precision_prior):
         '''
@@ -35,6 +35,11 @@ class NormalFullCovariancePrior(ExpFamilyPrior):
         nparams = self.to_natural_parameters(mean, scale)
         super().__init__(nparams)
 
+    @property
+    def mean(self):
+        return mean
+
+        
     def __repr__(self):
         mean, scale = self.to_std_parameters(self.natural_parameters)
         return self.__repr_str.format(

@@ -1,6 +1,7 @@
 '''Implementation of the matrix Normal prior.'''
 
 import math
+from dataclasses import dataclass
 import torch
 from .baseprior import ExpFamilyPrior
 from .wishart import _logdet
@@ -22,7 +23,6 @@ class MatrixNormalPrior(ExpFamilyPrior):
         T_2(W) = vec(W)
 
     '''
-    __repr_str = '{classname}(mean={mean}, cov={cov})'
 
     def __init__(self, mean, cov):
         '''
@@ -30,17 +30,24 @@ class MatrixNormalPrior(ExpFamilyPrior):
             mean (``torch.Tensor[dim,dim]``)): Matrix mean.
             cov (``torch.tensor[1]``): Covariance matrix.
         '''
-        self.dims = mean.shape
+        self._dim = mean.shape
         nparams = self.to_natural_parameters(mean, cov)
         super().__init__(nparams)
 
     def __repr__(self):
-        mean, cov = self.to_std_parameters(self.natural_parameters)
-        return self.__repr_str.format(
-            classname=self.__class__.__name__,
-            mean=repr(mean),
-            cov=repr(cov)
-        )
+        return f'{self.__class__.__qualname__}(mean={self.mean}, cov={self.cov})'
+
+    @property
+    def dim(self):
+        return self._dim
+
+    @property
+    def mean(self):
+        return self.to_std_parameters(self.natural_parameters)[0]
+
+    @property
+    def cov(self):
+        return self.to_std_parameters(self.natural_parameters)[1]
 
     def expected_value(self):
         mean, _ = self.to_std_parameters(self.natural_parameters)
@@ -54,7 +61,7 @@ class MatrixNormalPrior(ExpFamilyPrior):
     def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
-        dim1, dim2 = self.dims
+        dim1, dim2 = self.dim
         precision = - 2 *natural_parameters[:int(dim1**2)].view(dim1, dim1)
         cov = precision.inverse()
         mean = cov @ natural_parameters[int(dim1**2):].view(dim1, dim2)
@@ -63,7 +70,7 @@ class MatrixNormalPrior(ExpFamilyPrior):
     def _expected_sufficient_statistics(self):
         mean, cov = self.to_std_parameters(self.natural_parameters)
         return torch.cat([
-            (self.dims[1] * cov + mean @ mean.t()).view(-1),
+            (self.dim[1] * cov + mean @ mean.t()).view(-1),
             mean.view(-1)
         ])
 
@@ -72,9 +79,10 @@ class MatrixNormalPrior(ExpFamilyPrior):
             natural_parameters = self.natural_parameters
         mean, cov = self.to_std_parameters(natural_parameters)
         precision = cov.inverse()
-        log_norm = - self.dims[1] * .5 * _logdet(precision)
+        log_norm = - self.dim[1] * .5 * _logdet(precision)
         log_norm += .5 * torch.trace(mean.t() @ precision @  mean)
         return log_norm
 
 
 __all__ = ['MatrixNormalPrior']
+
