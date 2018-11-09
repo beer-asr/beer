@@ -9,7 +9,6 @@ from .parameters import BayesianParameter
 from .parameters import BayesianParameterSet
 
 
-
 class BayesianModel(metaclass=abc.ABCMeta):
     '''Abstract base class for all the models.
 

@@ -3,6 +3,7 @@ distribution.'''
 
 import abc
 from dataclasses import dataclass, field
+from typing import Dict, Any
 import torch
 import torch.autograd as ta
 
@@ -18,7 +19,8 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
 
     '''
     _natural_params: torch.Tensor
-    _cache: dict = field(default=dict, repr=False, init=False, compare=False)
+    _cache: Dict[Any, Any] = field(default_factory=dict, repr=False,
+                                   init=False, compare=False)
 
     @staticmethod
     def kl_div(model1, model2):
@@ -58,7 +60,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
     @natural_parameters.setter
     def natural_parameters(self, value):
         self._natural_params = value.detach()
-        self.cache = {}
+        self._cache = {}
 
     def float(self):
         self.natural_parameters = self.natural_parameters.float()
@@ -78,10 +80,10 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             return self._to_std_parameters(natural_parameters)
 
         try:
-            std_params = self.cache['std_params']
+            std_params = self._cache['std_params']
         except KeyError:
             std_params = self._to_std_parameters(natural_parameters)
-            self.cache['std_params'] = std_params
+            self._cache['std_params'] = std_params
         return std_params
 
     def expected_sufficient_statistics(self):
@@ -93,10 +95,10 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             ``torch.Tensor``
         '''
         try:
-            exp_stats = self.cache['exp_stats']
+            exp_stats = self._cache['exp_stats']
         except KeyError:
             exp_stats = self._expected_sufficient_statistics()
-            self.cache['exp_stats'] = exp_stats
+            self._cache['exp_stats'] = exp_stats
         return exp_stats
 
     def expected_value(self):
@@ -131,10 +133,10 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
             return self._log_norm(natural_parameters)
 
         try:
-            lnorm = self.cache['lnorm']
+            lnorm = self._cache['lnorm']
         except KeyError:
             lnorm = self._log_norm()
-            self.cache['lnorm'] = lnorm
+            self._cache['lnorm'] = lnorm
         return lnorm
 
     ###################################################################
