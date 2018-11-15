@@ -1,89 +1,85 @@
 '''Implementation of the Normaldistribution.'''
 
 import math
-from dataclasses import dataclass
 import torch
 from .baseprior import ExpFamilyPrior
+from .wishart import _logdet
 
 
-@dataclass
 class NormalFullCovariancePrior(ExpFamilyPrior):
     '''Normal distribution with full covariance matrix.
 
     parameters:
         mean: mean of the distribution
-        scale: scale of the precision matrix (scalar)
+        cov: covariatnce matrix
 
     natural parameters:
-        eta1 = - 0.5 * scale
-        eta2 = scale * mean
+        eta1 = cov^{-1} * mean
+        eta2 = - 0.5 * cov^{-1}
 
-    sufficient statistics (x is a DxD positive definite matrix):
-        T_1(x) = precision * mean
-        T_2(x) = mean * mean^T
+    sufficient statistics:
+        T_1(x) = x
+        T_2(x) = x * x^T
 
     '''
 
-    def __init__(self, mean, scale, precision_prior):
-        '''
-        Args:
-            mean (``torch.Tensor[dim,dim]``)): Scale matrix.
-            scale (``torch.tensor[1]``): Scale of the precision matrix.
-            precision_prior (:any:`Wishart`): Prior over the precision.
-        '''
-        self.precision_prior = precision_prior
-        nparams = self.to_natural_parameters(mean, scale)
+    def __init__(self, mean, cov):
+        self._dim = len(mean)
+        nparams = self.to_natural_parameters(mean, cov)
         super().__init__(nparams)
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(mean={self.mean}, cov={self.cov})'
+
+    @property
+    def dim(self):
+        return self._dim
 
     @property
     def mean(self):
-        return mean
+        return self.to_std_parameters(self.natural_parameters)[0]
 
-        
-    def __repr__(self):
-        mean, scale = self.to_std_parameters(self.natural_parameters)
-        return self.__repr_str.format(
-            classname=self.__class__.__name__,
-            shape=repr(mean), rate=repr(scale),
-            precision=repr(self.precision_prior)
-        )
+    @property
+    def cov(self):
+        return self.to_std_parameters(self.natural_parameters)[1]
+
+    def moments(self):
+        stats = self.expected_sufficient_statistics()
+        return stats[:self.dim], stats[self.dim:]
 
     def expected_value(self):
         mean, _ = self.to_std_parameters(self.natural_parameters)
         return mean
 
-    def to_natural_parameters(self, mean, scale):
-        return torch.cat([scale * mean, -.5 * scale.view(1)])
+    def to_natural_parameters(self, mean, cov):
+        prec = cov.inverse()
+        return torch.cat([prec @ mean, -.5 * prec.reshape(-1)])
 
     def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
-        scale = - 2 * natural_parameters[-1]
-        mean = natural_parameters[:-1] / scale
-        return mean, scale
+        precision = - 2 * natural_parameters[self.dim:]
+        cov = precision.reshape(self.dim, self.dim).inverse()
+        mean = cov @ natural_parameters[:self.dim:]
+        return mean, cov
 
     def _expected_sufficient_statistics(self):
-        mean, scale = self.to_std_parameters(self.natural_parameters)
-        dim = len(mean)
-        precision = self.precision_prior.expected_value()
-        mean_quad = torch.trace(precision @ torch.ger(mean, mean))
+        mean, cov = self.to_std_parameters(self.natural_parameters)
         return torch.cat([
-            precision.inverse() @ mean,
-            (mean_quad + dim / scale).view(1)
+            mean,
+            (cov + torch.ger(mean, mean)).reshape(-1)
         ])
 
     def _log_norm(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
-        mean, scale = self.to_std_parameters(natural_parameters)
-        dim = len(mean)
-        precision_stats = self.precision_prior.expected_sufficient_statistics()
-        precision = precision_stats[:-1].reshape((dim, dim))
-        logdet_precision = precision_stats[-1]
-        log_norm = .5 * scale * torch.trace(torch.ger(mean, mean) @ precision)
-        log_norm -= .5 * logdet_precision
-        log_norm -= .5 * dim * scale.log()
-        return log_norm
+        mean, cov = self.to_std_parameters(natural_parameters)
+        precision = -2 * natural_parameters[self.dim:]
+        precision = precision.reshape(self.dim, self.dim)
+        log_norm = .5 * mean @ precision @ mean
+        log_norm -= .5 * _logdet(precision).sum()
+        return log_norm + .5 * self.dim * math.log(2*math.pi)
 
 
 __all__ = ['NormalFullCovariancePrior']
+

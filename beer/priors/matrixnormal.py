@@ -1,7 +1,6 @@
 '''Implementation of the matrix Normal prior.'''
 
 import math
-from dataclasses import dataclass
 import torch
 from .baseprior import ExpFamilyPrior
 from .wishart import _logdet
@@ -49,29 +48,39 @@ class MatrixNormalPrior(ExpFamilyPrior):
     def cov(self):
         return self.to_std_parameters(self.natural_parameters)[1]
 
+    def moments(self):
+        dim = self.dim[0] * self.dim[1]
+        stats = self.expected_sufficient_statistics()
+        W = stats[:dim].reshape(*self.dim)
+        WW = stats[dim:].reshape(self.dim[0], self.dim[0])
+        return W, WW
+
     def expected_value(self):
         mean, _ = self.to_std_parameters(self.natural_parameters)
         return mean
 
     def to_natural_parameters(self, mean, cov):
         prec = cov.inverse().contiguous()
-        return torch.cat([-.5 * prec.view(-1),
-                          (prec @ mean).contiguous().view(-1)])
+        return torch.cat([
+           (prec @ mean).contiguous().view(-1),
+            -.5 * prec.view(-1)
+        ])
 
     def _to_std_parameters(self, natural_parameters=None):
         if natural_parameters is None:
             natural_parameters = self.natural_parameters
         dim1, dim2 = self.dim
-        precision = - 2 *natural_parameters[:int(dim1**2)].view(dim1, dim1)
+        dim = dim1 * dim2
+        precision = - 2 *natural_parameters[dim:].view(dim1, dim1)
         cov = precision.inverse()
-        mean = cov @ natural_parameters[int(dim1**2):].view(dim1, dim2)
+        mean = cov @ natural_parameters[:dim].view(dim1, dim2)
         return mean, cov
 
     def _expected_sufficient_statistics(self):
         mean, cov = self.to_std_parameters(self.natural_parameters)
         return torch.cat([
-            (self.dim[1] * cov + mean @ mean.t()).view(-1),
-            mean.view(-1)
+            mean.view(-1),
+            (self.dim[1] * cov + mean @ mean.t()).view(-1)
         ])
 
     def _log_norm(self, natural_parameters=None):
