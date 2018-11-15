@@ -25,9 +25,9 @@ class GeneralizedSubspaceModel(BayesianModel):
 
     '''
 
-    @classmethod
-    def create(cls, llh_func, mean_subspace, global_mean, noise_std=0.,
-               prior_strength=1.):
+    @staticmethod
+    def create(llh_func, mean_subspace, global_mean, noise_std=0.,
+               prior_strength=1., hessian_type='full'):
         '''Create a Bayesian Generalized Subspace Model.
 
         Args:
@@ -43,8 +43,108 @@ class GeneralizedSubspaceModel(BayesianModel):
                 random initialization of the subspace.
             prior_strength (float): Strength of the prior over the
                 bases of the subspace and the global mean.
+            hessian_type (string): Type of approximation. Possible
+                choices are "full" (no approximation), "diagonal"
+                or "scalar".
 
         '''
+        args = (
+            llh_func, mean_subspace, global_mean, noise_std,
+            prior_strength
+        )
+        if hessian_type == 'full':
+            return GeneralizedSubspaceModelFull.create(*args)
+        elif hessian_type == 'diagonal':
+            return GeneralizedSubspaceModelDiagonal.create(*args)
+        elif hessian_type == 'scalar':
+            return GeneralizedSubspaceModelScalar.create(*args)
+        else:
+            raise ValueError(f'Unknown hessian type: "{hessian_type}"')
+
+
+    def __init__(self, llh_func, subspace_prior, subspace_posterior,
+                 mean_prior, mean_posterior, latent_prior):
+        super().__init__()
+        self.subspace = BayesianParameter(subspace_prior, subspace_posterior)
+        self.mean = BayesianParameter(mean_prior, mean_posterior)
+        self.latent_prior = ConstantParameter(latent_prior)
+        self.llh_func = llh_func
+
+    def _create_latent_posteriors(self, n):
+        std_params = self.latent_prior.value.to_std_parameters()
+        return [NormalFullCovariancePrior(*std_params) for i in range(n)]
+
+    def _extract_moments(self):
+        m, mm = self.mean.posterior.moments()
+        W, WW = self.subspace.posterior.moments()
+        return m, mm, W, WW
+
+    # Quadratic approximation of the likelihood functions given the
+    # maximized latent posteriors.
+    @abc.abstractmethod
+    def _quad_approx(self, cache):
+        pass
+
+    def _latent_kl_div(self, l_posts):
+        kl_div_func = self.latent_prior.value.kl_div
+        nparams_0 = self.latent_prior.value.natural_parameters
+        dtype, device = nparams_0.dtype, nparams_0.device
+        kl_divs = [kl_div_func(l_post, self.latent_prior.value)
+                   for l_post in l_posts]
+        return torch.tensor(kl_divs, dtype=dtype, device=device)
+
+    @abc.abstractmethod
+    def latent_posteriors(self, data, cache=False):
+        '''Compute the latent posteriors for the given data.
+
+        Args:
+            data (``torch.Tensor``: Accumulated statistics of the
+                likelihood functions and the the number of data points
+                per function.
+            cache (boolean): If true, cache the intermediate
+                computation into a dictionary and return it.
+
+        Returns:
+            list of :any:`NormalFullCovariancePrior`
+            (dict: intermediate computation)
+
+        '''
+        pass
+
+    ####################################################################
+    # BayesianModel interface.
+    ####################################################################
+
+    def mean_field_factorization(self):
+        return [[self.mean, self.subspace]]
+
+    @staticmethod
+    def sufficient_statistics(data):
+        return data
+
+    def expected_log_likelihood(self, stats):
+        l_posts, cache = self.latent_posteriors(stats, cache=True)
+        approx_llh, cache = self._quad_approx(cache)
+        self.cache.update(cache)
+        return (approx_llh - self._latent_kl_div(l_posts)) / stats[:, -1]
+
+    @abc.abstractmethod
+    def accumulate(self, stats):
+        pass
+
+
+class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
+    '''Bayesian Generalized Subspace Model.
+
+    Attributes:
+        weights: weights matrix parameter.
+        precision: precision parameter.
+
+    '''
+
+    @classmethod
+    def create(cls, llh_func, mean_subspace, global_mean, noise_std=0.,
+               prior_strength=1.):
         dim_s = len(mean_subspace)
         dim_o = len(global_mean)
         dtype, device = mean_subspace.dtype, mean_subspace.device
@@ -74,25 +174,6 @@ class GeneralizedSubspaceModel(BayesianModel):
             return cls(llh_func, subspace_prior, subspace_posterior,
                        mean_prior, mean_posterior, latent_prior)
 
-    def __init__(self, llh_func, subspace_prior, subspace_posterior,
-                 mean_prior, mean_posterior, latent_prior):
-        super().__init__()
-        self.subspace = BayesianParameter(subspace_prior, subspace_posterior)
-        self.mean = BayesianParameter(mean_prior, mean_posterior)
-        self.latent_prior = ConstantParameter(latent_prior)
-        self.llh_func = llh_func
-
-    def _create_latent_posteriors(self, n):
-        std_params = self.latent_prior.value.to_std_parameters()
-        return [NormalFullCovariancePrior(*std_params) for i in range(n)]
-
-    def _extract_moments(self):
-        m, mm = self.mean.posterior.moments()
-        W, WW = self.subspace.posterior.moments()
-        return m, mm, W, WW
-
-    # Quadratic approximation of the likelihood functions given the
-    # maximized latent posteriors.
     def _quad_approx(self, cache):
         opt, hessians = cache['opt'], cache['hessians']
         m, mm = cache['m'], cache['mm']
@@ -122,14 +203,6 @@ class GeneralizedSubspaceModel(BayesianModel):
         return  self.llh_func(opt, stats, counts) \
                      + .5 * (hWHWh + mHm + quad_opt  \
                             + 2 * (mHWh - oHm - oHWh)), new_cache
-
-    def _latent_kl_div(self, l_posts):
-        kl_div_func = self.latent_prior.value.kl_div
-        nparams_0 = self.latent_prior.value.natural_parameters
-        dtype, device = nparams_0.dtype, nparams_0.device
-        kl_divs = [kl_div_func(l_post, self.latent_prior.value)
-                   for l_post in l_posts]
-        return torch.tensor(kl_divs, dtype=dtype, device=device)
 
     def latent_posteriors(self, data, cache=False):
         '''Compute the latent posteriors for the given data.
@@ -198,19 +271,6 @@ class GeneralizedSubspaceModel(BayesianModel):
     # BayesianModel interface.
     ####################################################################
 
-    def mean_field_factorization(self):
-        return [[self.mean, self.subspace]]
-
-    @staticmethod
-    def sufficient_statistics(data):
-        return data
-
-    def expected_log_likelihood(self, stats):
-        l_posts, cache = self.latent_posteriors(stats, cache=True)
-        approx_llh, cache = self._quad_approx(cache)
-        self.cache.update(cache)
-        return approx_llh - self._latent_kl_div(l_posts)
-
     def accumulate(self, stats):
         counts = stats[:, -1]
         hessians = self.cache['hessians']
@@ -241,6 +301,7 @@ class GeneralizedSubspaceModel(BayesianModel):
             self.mean: mean_stats,
             self.subspace: subspace_stats
         }
+
 
 
 __all__ = [
