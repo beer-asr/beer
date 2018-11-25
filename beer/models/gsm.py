@@ -218,7 +218,7 @@ class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
         m, mm, W, WW = self._extract_moments()
 
         opt = self.llh_func.argmax(stats, counts)
-        hessians = self.llh_func.hessian(opt, counts, mode='full')
+        hessians = self.llh_func.hessian(opt, stats, counts, mode='full')
 
         U = self.subspace.posterior.cov
         tr_hessians = _trace_array(hessians)
@@ -276,18 +276,24 @@ class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
 
         # Mean stats.
         HWh_o = torch.sum(hessians * (opt - hW)[:, None, :], dim=-1)
+        #sum_hessians = make_symposdef(.5 * hessians.sum(dim=0))
+        sum_hessians = .5 * hessians.sum(dim=0)
         mean_stats = torch.cat([
             -HWh_o.sum(dim=0),
-            .5 * hessians.sum(dim=0).reshape(-1)
+            sum_hessians.reshape(-1)
         ], dim=-1)
 
         # Subspace stats.
+        #idxs = tuple(range(hessians.shape[-1]))
+        #isometric_params = hessians[:, idxs, idxs].max(dim=-1)[0][:, None]
         isometric_params = tr_hessians[:, None] / len(m)
         to_m = (opt - m) * isometric_params
         tHH = HH * isometric_params
+        #tHH = make_symposdef(.5 * tHH.sum(dim=0).reshape(HH.shape[-1], -1))
+        tHH = .5 * tHH.sum(dim=0).reshape(HH.shape[-1], -1)
         subspace_stats = torch.cat([
             -(H.t() @ to_m).reshape(-1),
-            .5 * tHH.sum(dim=0)
+            tHH.reshape(-1)
         ])
 
         return {
@@ -364,7 +370,7 @@ class GeneralizedSubspaceModelDiagonal(GeneralizedSubspaceModel):
         m, mm, W, WW = self._extract_moments()
 
         opt = self.llh_func.argmax(stats, counts)
-        hessians = self.llh_func.hessian(opt, counts, mode='diagonal')
+        hessians = self.llh_func.hessian(opt, stats, counts, mode='diagonal')
 
         U = self.subspace.posterior.cov
         tr_hessians = hessians.sum(dim=-1)
@@ -430,6 +436,7 @@ class GeneralizedSubspaceModelDiagonal(GeneralizedSubspaceModel):
         ], dim=-1)
 
         # Subspace stats.
+        #isometric_params = hessians.max(dim=-1)[0][:, None]
         isometric_params = tr_hessians[:, None] / len(m)
         to_m = (opt - m) * isometric_params
         tHH = HH * isometric_params
@@ -512,7 +519,7 @@ class GeneralizedSubspaceModelScalar(GeneralizedSubspaceModel):
         m, mm, W, WW = self._extract_moments()
 
         opt = self.llh_func.argmax(stats, counts)
-        hessians = self.llh_func.hessian(opt, counts, mode='scalar')
+        hessians = self.llh_func.hessian(opt, stats, counts, mode='scalar')
 
         U = self.subspace.posterior.cov
         tr_hessians = hessians * len(m)
