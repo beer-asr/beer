@@ -107,7 +107,10 @@ for x in train dev test; do
     cp $dir/$x.uttids $outdir/$x/uttids
     cp $dir/${x}_wav.scp $outdir/$x/wavs.scp
     cp $dir/${x}\.text $outdir/$x/trans.txt
+
 done
+mkdir -p $outdir/lang
+cp $conf/au2phones.txt $outdir/lang
 
 date > $outdir/.done
 echo "Data preparation succeeded"

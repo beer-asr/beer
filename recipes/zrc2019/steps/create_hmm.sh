@@ -2,7 +2,6 @@
 
 args=()
 outdir="./"
-phone_map=""
 
 while [[ $# -gt 0 ]]; do
     key="$1"
@@ -12,8 +11,8 @@ while [[ $# -gt 0 ]]; do
             shift
             shift
             ;;
-        --phone-map)
-            phone_map="$2"
+        --mapping)
+            phone_map="--mapping $2"
             shift
             shift
             ;;
@@ -39,7 +38,8 @@ mkdir -p $outdir
 # Create the units' HMM.
 if [ ! -f $outmodel ]; then
     # Create the phones' HMM.
-    beer hmm mkphones -d $dataset $modelconf $outdir/hmms.mdl || exit 1
+    beer hmm mkphones -d $dataset $phone_map $modelconf \
+        $outdir/hmms.mdl || exit 1
 
     # Make the phone-loop graph.
     beer hmm phonelist $outdir/hmms.mdl | \

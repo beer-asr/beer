@@ -66,6 +66,8 @@ def setup(parser):
     group.add_argument('-d', '--dataset', help='dataset for initialization')
     group.add_argument('-D', '--dimension', type=int,
                         help='dimension of features for the pdf')
+    parser.add_argument('-m', '--mapping', default=None,
+                        help='unit name mapping')
     parser.add_argument('conf', help='configuration file')
     parser.add_argument('out', help='output phone HMMs')
 
@@ -87,6 +89,14 @@ def main(args, logger):
             dataset = pickle.load(f)
         mean, var = dataset.mean, dataset.var
 
+    if args.mapping:
+        logger.debug(f'using name mapping: "{args.mapping}"')
+        mapping = {}
+        with open(args.mapping, 'r') as f:
+            for line in f:
+                key, value = line.strip().split()
+                mapping[key] = value
+
     start_pdf_id = 0
     pdfs = []
     units = {}
@@ -98,6 +108,8 @@ def main(args, logger):
         tot_emitting_states = 0
         for i in range(1, unit_group['n_units'] + 1):
             unit_name = prefix + str(i)
+            if args.mapping:
+                unit_name = mapping[unit_name]
             graph, start_pdf_id = create_unit_graph(unit_group['topology'],
                                                     start_pdf_id)
             units[unit_name] = graph

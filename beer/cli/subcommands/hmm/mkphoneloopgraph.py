@@ -13,7 +13,7 @@ PIVOT_SYM = '#1'
 
 
 def setup(parser):
-    parser.add_argument('-s', '--sil-prefix', action='store_true',
+    parser.add_argument('-s', '--sil-prefix', default='sil',
                         help='prefix for the silence phones')
     parser.add_argument('phone_list', help='list of phones files or "-" '\
                         'for stdin')
@@ -47,15 +47,15 @@ def main(args, logger):
     state2phone = {state:phone for phone, state in phone2state.items()}
 
 
-    if args.sil_prefix:
-        logger.debug(f'using "{args.sil_prefix}*" phones as start/end states')
-        starting_phones = []
-        ending_phones = []
-        for phone in phones:
-            if phone.startswith(args.sil_prefix):
-                starting_phones.append(phone)
-                ending_phones.append(phone)
+    logger.debug(f'using "{args.sil_prefix}*" phones as start/end states')
+    starting_phones = []
+    ending_phones = []
+    for phone in phones:
+        if phone.startswith(args.sil_prefix):
+            starting_phones.append(phone)
+            ending_phones.append(phone)
     else:
+        logger.debug('no silence units specified.')
         starting_phones = [state2phone[pivot_state]]
         ending_phones = [state2phone[pivot_state]]
 
