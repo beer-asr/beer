@@ -98,9 +98,15 @@ for x in train dev test; do
     # Make the utt2spk and spk2utt files.
     cut -f1 -d'_'  $dir/${x}.uttids | paste -d' ' $dir/$x.uttids - > $dir/$x.utt2spk
 
+    # Prepare the transcription.
+    cat $dir/${x}.trans | python $conf/timit-norm-trans.py \
+        --map-60-48  $conf/phones.60-48-39.map \
+        | sort > $dir/${x}.text || exit 1;
+
     mkdir -p $outdir/${x}
     cp $dir/$x.uttids $outdir/$x/uttids
     cp $dir/${x}_wav.scp $outdir/$x/wavs.scp
+    cp $dir/${x}\.text $outdir/$x/trans.txt
 done
 
 date > $outdir/.done

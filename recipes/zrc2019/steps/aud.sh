@@ -15,26 +15,8 @@ mkdir -p $outdir
 
 
 # Create the units' HMM.
-if [ ! -f $outdir/hmms.mdl ]; then
-    beer hmm mkphones -d $dataset $modelconf $outdir/hmms.mdl || exit 1
-else
-    echo "units' HMM already created. Skipping."
-fi
-
-
-# Create the phone-loop model.
-if [ ! -f $outdir/ploop_init.mdl ]; then
-    beer hmm phonelist $outdir/hmms.mdl | \
-        beer hmm mkphoneloopgraph - \
-        $outdir/ploop_graph.pkl || exit 1
-    beer hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
-        $outdir/decode_graph.pkl || exit 1
-    beer hmm mkphoneloop $outdir/decode_graph.pkl $outdir/hmms.mdl \
-        $outdir/ploop_init.mdl
-else
-    echo "Phone Loop model already created. Skipping."
-fi
-
+steps/create_hmm.sh --outdir $outdir $modelconf $dataset \
+    $outdir/ploop_init.mdl || exit 1
 
 # Training.
 if [ ! -f $outdir/final.mdl ]; then
