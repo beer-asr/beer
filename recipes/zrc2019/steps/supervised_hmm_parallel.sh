@@ -6,17 +6,18 @@ parallel_env=sge
 parallel_opts=""
 parallel_njobs=10
 
-if [ $# -ne 6 ]; then
-    echo "usage: <model-conf> <phone-mapping> <uttids> <dataset> <epochs> <out-dir>"
+if [ $# -ne 7 ]; then
+    echo "usage: <model-conf> <phone-mapping> <trans> <uttids> <dataset> <epochs> <out-dir>"
     exit 1
 fi
 
 modelconf=$1
 phone_mapping=$2
-uttids=$3
-dataset=$4
-epochs=$5
-outdir=$6
+trans=$3
+uttids=$4
+dataset=$5
+epochs=$6
+outdir=$7
 mkdir -p $outdir
 
 
@@ -24,7 +25,25 @@ mkdir -p $outdir
 steps/create_hmm.sh --outdir $outdir --mapping $phone_mapping \
     $modelconf $dataset $outdir/0.mdl || exit 1
 
-exit 0
+# Create the alignments graphs.
+if [ ! -f $outdir/alis.npz ]; then
+    echo "compiling alignment graphs"
+    tmpdir=$(mktemp -d /tmp/beer.XXXX);
+    trap 'rm -rf "$tmpdir"' EXIT
+    cat $trans | beer hmm aligraph - $outdir/hmms.mdl \
+        $tmpdir || exit 1
+    find $tmpdir -name '*npy' | zip -@ -j $outdir/alis.npz \
+        > /dev/null || exit 1
+else
+    echo "Alignments graph already created. Skipping."
+fi
+
+
+if [ ! -f $outdir/optim_0.pkl ]; then
+    beer hmm optimizer $outdir/0.mdl $outdir/optim_0.pkl || exit 1
+else
+    echo "Optimizer already created. Skipping."
+fi
 
 
 # Training.
@@ -38,13 +57,13 @@ if [ ! -f $outdir/final.mdl ]; then
     echo $epoch
 
     # ...and the optimizer.
-    optim=optim_${epoch}.mdl
+    optim=optim_${epoch}.pkl
 
     while [ $((++epoch)) -le $epochs ]; do
         echo "epoch: $epoch"
 
         # Accumulate the statistics in parallel.
-        cmd="beer hmm accumulate $outdir/$mdl $dataset \
+        cmd="beer hmm accumulate -a $outdir/alis.npz $outdir/$mdl $dataset \
              $outdir/epoch${epoch}/elbo_JOBID.pkl"
         utils/parallel/submit_parallel.sh \
             "$parallel_env" \

@@ -33,7 +33,6 @@ def main(args, logger):
     with open(args.out, 'wb') as f:
         pickle.dump(ploop, f)
 
-
     logger.info('successfully created a phone-loop model with ' \
                 f'{len(start_pdf)} phones')
 

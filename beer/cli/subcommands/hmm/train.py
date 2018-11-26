@@ -2,13 +2,17 @@
 'train a HMM based model'
 
 import argparse
+from collections import defaultdict
 import pickle
 import sys
 
+import numpy as np
 import beer
 
 
 def setup(parser):
+    parser.add_argument('-a', '--alignments', default=None,
+                        help='alignments as a "npz" archive')
     parser.add_argument('-b', '--batch-size', type=int, default=-1,
                         help='batch size in number of utterance ' \
                              '(-1 means all the utterances as one batch)')
@@ -22,6 +26,11 @@ def setup(parser):
 
 
 def main(args, logger):
+    alis = defaultdict(lambda: None)
+    if args.alignments:
+        logger.debug(f'using alignments: {args.alignments}')
+        alis = np.load(args.alignments)
+
     logger.debug('load the model')
     with open(args.model, 'rb') as f:
         model = pickle.load(f)
@@ -40,7 +49,8 @@ def main(args, logger):
         for i, utt in enumerate(dataset.utterances(), start=1):
             logger.debug(f'processing utterance: {utt.id}')
             elbo += beer.evidence_lower_bound(model, utt.features,
-                                              datasize=dataset.size)
+                                              datasize=dataset.size,
+                                              inference_graph=alis[utt.id][0])
 
             # Update the model after N utterances.
             if i % args.batch_size == 0:
