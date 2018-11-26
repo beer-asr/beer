@@ -50,7 +50,7 @@ class HMM(DiscreteLatentBayesianModel):
             posts = onehot(path, inference_graph.n_states,
                            dtype=pc_llhs.dtype, device=pc_llhs.device)
             if trans_posteriors:
-                n_states = self.graph.value.n_states
+                n_states = inference_graph.n_states
                 trans_posts = torch.zeros(len(pc_llhs) - 1, n_states, n_states)
                 for i, transition in enumerate(zip(path[:-1], path[1:])):
                     src, dest = transition
@@ -85,6 +85,7 @@ class HMM(DiscreteLatentBayesianModel):
         exp_llh = (pc_llhs * resps).sum(dim=-1)
         self.cache['resps'] = resps
         self.cache['trans_resps'] = trans_resps
+        self.cache['inference_graph'] = inference_graph
 
         # We ignore the KL divergence term. It biases the
         # lower-bound (it may decrease) a little bit but will not affect

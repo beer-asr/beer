@@ -9,11 +9,14 @@ feadir=features
 expdir=exp
 
 # Data
-db=zrc2019
+db=timit
 dataset=train
 
 # Features
 feaname=mfcc
+
+# Model.
+modelconf=conf/hmm.yml
 
 # AUD training
 # The number of epochs probably needs to be tuned to the final data.
@@ -27,14 +30,13 @@ batch_size=400
 
 #######################################################################
 
-source activate beer
+. path.sh
 
 mkdir -p $datadir $expdir $feadir
 
 
 echo "--> Preparing data for the $db database"
 local/$db/prepare_data.sh $datadir/$db || exit 1
-
 
 
 echo "--> Extracting features for the $db database"
@@ -51,17 +53,19 @@ steps/create_dataset.sh $datadir/$db/$dataset \
     $expdir/$db/datasets/${dataset}.pkl
 
 
-echo "--> Acoustic Unit Discovery on $db database"
-steps/aud.sh conf/hmm.yml $expdir/$db/datasets/${dataset}.pkl \
+echo "--> Acoustic Unit Discovery on the $db database"
+steps/aud.sh $modelconf $expdir/$db/datasets/${dataset}.pkl \
     $epochs $lrate $batch_size $expdir/$db/aud
+
+
 
 # Parallel training. Much faster (and more accurate). This is the
 # recommended training way. However, you need to have Sun Grid Engine
 # like (i.e. qsub command) to run it. If you have a different
 # enviroment please see utils/parallel/sge/* to see how to adapt
 # this recipe to you system.
-#steps/aud_parallel.sh conf/hmm.yml \
-#    data/$db/train/uttids \
-#    $expdir/$db/datasets/${dataset}.pkl \
-#    $epochs $expdir/$db/aud
+steps/aud_parallel.sh $modelconf \
+    data/$db/train/uttids \
+    $expdir/$db/datasets/${dataset}.pkl \
+    $epochs $expdir/$db/aud
 

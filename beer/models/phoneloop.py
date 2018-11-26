@@ -54,12 +54,25 @@ class PhoneLoop(HMM):
 
     def accumulate(self, stats, parent_msg=None):
         retval = super().accumulate(stats, parent_msg)
-        trans_resps = self.cache['trans_resps'].sum(dim=0)
+        dtype = self.cache['resps'].dtype
+        device = self.cache['resps'].device
+
+        # Re-map the responsibilities.
+        nstates = self.graph.value.n_states
+        trans_resps = torch.zeros(nstates, nstates, dtype=dtype, device=device)
+        mapping = self.cache['inference_graph'].pdf_id_mapping
+        tmp = trans_resps[mapping, :]
+        tmp[:, mapping] = self.cache['trans_resps'].sum(dim=0)
+        trans_resps[mapping, :] = tmp
+        resps = torch.zeros(len(self.cache['resps']), nstates, dtype=dtype,
+                            device=device)
+        resps[:, mapping] = self.cache['resps']
+
         start_idxs = [value for value in self.start_pdf.values()]
         end_idxs = [value for value in self.end_pdf.values()]
         phone_resps = trans_resps[:, start_idxs]
         phone_resps = phone_resps[end_idxs, :].sum(dim=0)
-        phone_resps += self.cache['resps'][0][start_idxs]
+        phone_resps += resps[0][start_idxs]
         retval.update({self.weights: phone_resps})
         return retval
 

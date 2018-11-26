@@ -82,10 +82,10 @@ class Normal(BayesianModel):
     def expected_log_likelihood(self, stats):
         nparams = self.mean_precision.expected_natural_parameters()
         return (stats * nparams[None]).sum(dim=-1)  -.5 * self.dim * math.log(2 * math.pi)
-    
+
     def marginal_log_likelihood(prior, stats):
         return self._marginal_log_likelihood(self.mean_precision.posterior, stats)
-    
+
     def accumulate(self, stats, parent_msg=None):
         return {self.mean_precision: torch.tensor(stats.sum(dim=0))}
 
@@ -120,7 +120,7 @@ class NormalIsotropicCovariance(Normal):
             .5 * dim * torch.ones(len(data), 1, dtype=dtype, device=device),
         ], dim=-1)
 
-    
+
     @staticmethod
     def _marginal_log_likelihood(prior, stats):
         mean, scale, shape, rate = prior.to_std_parameters()
@@ -163,7 +163,7 @@ class NormalDiagonalCovariance(Normal):
 
     @property
     def cov(
-    
+
     ):
         _, precision = self.mean_precision.expected_value()
         return (1. / precision).diag()
@@ -177,7 +177,7 @@ class NormalDiagonalCovariance(Normal):
             -.5 * torch.ones(len(data), 1, dtype=dtype, device=device),
             .5 * torch.ones(len(data), 1, dtype=dtype, device=device),
         ], dim=-1)
-    
+
     @staticmethod
     def _marginal_log_likelihood(prior, stats):
         mean, scale, shape, rates = prior.to_std_parameters()
