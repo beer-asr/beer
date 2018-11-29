@@ -17,7 +17,7 @@ feaname=mfcc
 
 # AUD training
 # The number of epochs probably needs to be tuned to the final data.
-epochs=10
+epochs=5
 
 # These parameter will be ignore if you do parallel training. More
 # precisely, the learning rate will be set to 1 and the batch
@@ -36,7 +36,6 @@ echo "--> Preparing data for the $db database"
 local/$db/prepare_data.sh $datadir/$db || exit 1
 
 
-
 echo "--> Extracting features for the $db database"
 steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$dataset \
      $feadir/$db/$dataset || exit 1
@@ -52,8 +51,9 @@ steps/create_dataset.sh $datadir/$db/$dataset \
 
 
 echo "--> Acoustic Unit Discovery on $db database"
-steps/aud.sh conf/hmm.yml $expdir/$db/datasets/${dataset}.pkl \
-    $epochs $lrate $batch_size $expdir/$db/aud
+#steps/aud.sh conf/hmm.yml $expdir/$db/datasets/${dataset}.pkl \
+#    $epochs $lrate $batch_size $expdir/$db/aud
+
 
 # Parallel training. Much faster (and more accurate). This is the
 # recommended training way. However, you need to have Sun Grid Engine
@@ -64,4 +64,22 @@ steps/aud.sh conf/hmm.yml $expdir/$db/datasets/${dataset}.pkl \
 #    data/$db/train/uttids \
 #    $expdir/$db/datasets/${dataset}.pkl \
 #    $epochs $expdir/$db/aud
+
+
+# Parallel training using GNU parallel, it will allow to
+# train in multiple cores in the same computer
+#
+# To run this you will need to install gnu parallel,
+# check how to install in:
+#
+# https://www.gnu.org/software/parallel/parallel_tutorial.html
+#
+# section "Prerequisites". Once installed you will 
+# activate the package by running it once and accepting the
+# conditions
+#
+steps/aud_gnu_parallel.sh conf/hmm.yml \
+    data/$db/train/uttids \
+    $expdir/$db/datasets/${dataset}.pkl \
+    $epochs $expdir/$db/aud
 
