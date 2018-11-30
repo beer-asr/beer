@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 #######################################################################
 ## SETUP
 
@@ -17,7 +19,8 @@ feaname=mfcc
 
 # AUD training
 # The number of epochs probably needs to be tuned to the final data.
-epochs=5
+epochs=2
+njobs=40
 
 # These parameter will be ignore if you do parallel training. More
 # precisely, the learning rate will be set to 1 and the batch
@@ -27,7 +30,7 @@ batch_size=400
 
 #######################################################################
 
-source activate beer
+. path.sh
 
 mkdir -p $datadir $expdir $feadir
 
@@ -38,7 +41,7 @@ local/$db/prepare_data.sh $datadir/$db || exit 1
 
 echo "--> Extracting features for the $db database"
 steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$dataset \
-     $feadir/$db/$dataset || exit 1
+     $feadir/$db/$dataset || exit 1
 
 
 # Create a "dataset". This "dataset" is just an object
@@ -50,7 +53,7 @@ steps/create_dataset.sh $datadir/$db/$dataset \
     $expdir/$db/datasets/${dataset}.pkl
 
 
-echo "--> Acoustic Unit Discovery on $db database"
+#echo "--> Acoustic Unit Discovery on $db database"
 #steps/aud.sh conf/hmm.yml $expdir/$db/datasets/${dataset}.pkl \
 #    $epochs $lrate $batch_size $expdir/$db/aud
 
@@ -81,5 +84,5 @@ echo "--> Acoustic Unit Discovery on $db database"
 steps/aud_gnu_parallel.sh conf/hmm.yml \
     data/$db/train/uttids \
     $expdir/$db/datasets/${dataset}.pkl \
-    $epochs $expdir/$db/aud
+    $epochs $njobs $expdir/$db/aud
 
