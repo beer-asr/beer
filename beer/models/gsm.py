@@ -4,7 +4,7 @@ import torch
 
 from .bayesmodel import BayesianModel
 from .parameters import BayesianParameter, ConstantParameter
-from ..priors import NormalFullCovariancePrior
+from ..priors import NormalIsotropicCovariancePrior
 from ..priors import GammaPrior
 from ..priors import JointGammaPrior
 from ..priors import MatrixNormalPrior
@@ -101,7 +101,6 @@ class GeneralizedSubspaceModel(BayesianModel):
         'Posterior over the latent variable the "i-vector".'
         pass
 
-    @abc.abstractmethod
     def latent_posteriors(self, data, max_iter=20, conv_threshold=1e-3):
         '''Compute the latent posteriors for the given data.
 
@@ -126,7 +125,8 @@ class GeneralizedSubspaceModel(BayesianModel):
             prior_means = cache['latent_means'] @ cache['W'] + cache['m']
 
             quad_approx = float(cache['quad_approx'].sum())
-            if abs(quad_approx - previous_quad_approx) <= conv_threshold:
+            diff = abs(quad_approx - previous_quad_approx)
+            if diff <= conv_threshold:
                 break
             previous_quad_approx = quad_approx
         return cache
@@ -180,8 +180,9 @@ class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
             # Global mean prior/posterior.
             S = prior_strength * torch.eye(dim_o, dim_o, dtype=dtype,
                                            device=device)
-            mean_prior = NormalFullCovariancePrior(global_mean, S)
-            mean_posterior = NormalFullCovariancePrior(global_mean, S)
+            var = torch.tensor(prior_strength, dtype=dtype, device=device)
+            mean_prior = NormalIsotropicCovariancePrior(global_mean, var)
+            mean_posterior = NormalIsotropicCovariancePrior(global_mean, var)
 
             # Precision prior/posterior.
             shape = torch.tensor(prior_strength, dtype=dtype, device=device)
