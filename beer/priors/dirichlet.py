@@ -28,7 +28,7 @@ class DirichletPrior(ExpFamilyPrior):
         alphas = self.to_std_parameters()
         return self.__repr_str.format(
             classname=self.__class__.__name__,
-            alphas=alphas
+            alphas=self.natural_parameters
         )
 
     def expected_value(self):
