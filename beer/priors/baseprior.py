@@ -82,7 +82,7 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
         try:
             std_params = self._cache['std_params']
         except KeyError:
-            std_params = self._to_std_parameters(natural_parameters)
+            std_params = self._to_std_parameters(self.natural_parameters)
             self._cache['std_params'] = std_params
         return std_params
 

@@ -139,10 +139,10 @@ class NormalIsotropicCovariancePrior(ExpFamilyPrior):
         return mean, var
 
     def _expected_sufficient_statistics(self):
-        mean, cov = self.to_std_parameters(self.natural_parameters)
+        mean, var = self.to_std_parameters(self.natural_parameters)
         return torch.cat([
             mean,
-            (cov + torch.ger(mean, mean)).reshape(-1)
+            (self.dim * var + (mean**2).sum()).reshape(-1)
         ])
 
     def _log_norm(self, natural_parameters=None):
@@ -151,7 +151,7 @@ class NormalIsotropicCovariancePrior(ExpFamilyPrior):
         mean, cov = self.to_std_parameters(natural_parameters)
         precision = -2 * natural_parameters[self.dim:]
         log_norm = .5 * precision * (mean**2).sum()
-        log_norm -= .5 * self.dim * precision
+        log_norm -= .5 * self.dim * precision.log()
         return log_norm + .5 * self.dim * math.log(2*math.pi)
 
 

@@ -31,12 +31,14 @@ def plot_covariance(fig, covariance, n_std_dev=2, npoints=100, transform=None,
         plot_circle(fig, std_dev, npoints, tensor_metric=tensor_metric.T, 
                     transform=transform, **kwargs)
 
-def plot_normal(fig, mean, cov, n_std_dev=2, npoints=100, **kwargs):
+def plot_normal(fig, mean, cov, n_std_dev=2, npoints=100, transform=None, **kwargs):
     'Plot a Normal density'
         
-    def transform(xy):
-        return mean + xy
-    plot_covariance(fig, cov, n_std_dev, npoints, transform=transform,
+    if transform is None:
+        transform = lambda x: x
+    def new_transform(xy):
+        return mean + transform(xy)
+    plot_covariance(fig, cov, n_std_dev, npoints, transform=new_transform,
                     **kwargs)
 
 

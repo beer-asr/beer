@@ -12,6 +12,23 @@ from ..priors.wishart import _logdet
 from ..utils import make_symposdef
 
 
+def kl_div_std_norm(means, cov):
+    '''KL divergence between a set of Normal distributions with a
+    shared covariance matrix and a standard Normal N(0, I).
+    Args:
+        means (``torch.Tensor[N, dim]``): Means of the
+            Normal distributions where N is  the number of frames and
+            dim is the dimension of the random variable.
+        cov (``torch.Tensor[s_dim, s_dim]``): Shared covariance matrix.
+    Returns:
+        ``torch.Tensor[N]``: Per-distribution KL-divergence.
+    '''
+    dim = means.size(1)
+    _, logdet = torch.slogdet(cov)
+    return .5 * (-dim - logdet + torch.trace(cov) + \
+        torch.sum(means ** 2, dim=1))
+
+
 def batch_inverse(b_mat):
     eye = b_mat.new_ones(b_mat.size(-1)).diag().expand_as(b_mat)
     b_inv, _ = torch.gesv(eye, b_mat)
@@ -86,10 +103,10 @@ class GeneralizedSubspaceModel(BayesianModel):
         self.llh_func = llh_func
 
     def _extract_moments(self):
-        prec = self.precision.expected_value()
+        prec, log_prec = self.precision.expected_natural_parameters()
         m, mm = self.mean.posterior.moments()
         W, WW = self.subspace.posterior.moments()
-        return prec, m, mm, W, WW
+        return prec, log_prec, m, mm, W, WW
 
     @abc.abstractmethod
     def _params_posterior(self, data, prior_mean, cache):
@@ -120,7 +137,7 @@ class GeneralizedSubspaceModel(BayesianModel):
         prior_means = cache['m'][None, :]
         previous_quad_approx = float('-inf')
         for i in range(max_iter):
-            cache = self._params_posterior(data.double(), prior_means, cache)
+            cache = self._params_posterior(data, prior_means, cache)
             cache = self._latents_posterior(cache['params_mean'], cache)
             prior_means = cache['latent_means'] @ cache['W'] + cache['m']
 
@@ -131,30 +148,102 @@ class GeneralizedSubspaceModel(BayesianModel):
             previous_quad_approx = quad_approx
         return cache
 
+    def _compute_delta(self, cache):
+        Wh = cache['latent_means'] @ cache['W']
+        prior_means = Wh + cache['m']
+        params_mean = cache['params_mean']
+        latent_means = cache['latent_means']
+        m = cache['m']
+        mm = cache['mm']
+        W = cache['W']
+        vec_WW = cache['WW'].reshape(-1)
+        h = cache['latent_means']
+        vec_hh = (cache['latent_cov'][None, :, :] + \
+                  h[:, :, None] * h[:, None, :]).reshape(len(h), -1)
+        hWWh = vec_hh @ vec_WW
+        Wm = W @ m
+        mWh = torch.sum(Wm[None, :] * h, dim=-1)
+        delta = -.5 * cache['params_tr_m2'] + (prior_means * params_mean).sum(dim=-1)
+        delta -= .5 * (hWWh + mm) + mWh
+        cache.update({
+            'Wh': Wh,
+            'vec_hh': vec_hh,
+            'vec_WW': vec_WW,
+        })
+        return delta, cache
+
     ####################################################################
     # BayesianModel interface.
     ####################################################################
 
     def mean_field_factorization(self):
-        return [[self.mean], [self.subspace]]
+        return [[self.precision], [self.mean], [self.subspace], [self.scale]]
 
     @staticmethod
     def sufficient_statistics(data):
         return data
 
-    def expected_log_likelihood(self, stats):
-        l_posts, cache = self.latent_posteriors(stats, cache=True)
-        cache.update(self._params_posterior())
+    def expected_log_likelihood(self, stats, max_iter=20, conv_threshold=1e-3):
+        cache = self.latent_posteriors(stats, max_iter, conv_threshold)
+        delta, cache = self._compute_delta(cache)
+        cache['delta'] = delta
         quad_approx = cache['quad_approx']
-        param_entropy = cache['param_entropy']
-        param_llh = cache['param_llh']
-        param_kl_div = param_llh - param_entropy
-        latent_kl_div = cache['latent_kl_div']
-        return quad_approx - param_kl_div -latent_kl_div
+        latent_kl_div = kl_div_std_norm(cache['latent_means'],
+                                        cache['latent_cov'])
+        self.cache.update(cache)
+        dim = len(cache['m'])
+        param_kl_div = -cache['prec'] * delta - .5 * dim * cache['log_prec']
+        param_kl_div += .5 * dim * math.log(2 * math.pi)
+        param_kl_div -= cache['params_entropy']
+        llh = quad_approx #+ cache['prec'] * delta
+        return llh - param_kl_div - latent_kl_div
 
-    @abc.abstractmethod
     def accumulate(self, stats):
-        pass
+        # Mean stats.
+        Wh = self.cache['Wh']
+        prec = self.cache['prec']
+        psi = self.cache['params_mean']
+        mean_stats = torch.cat([
+            prec * (psi - Wh).sum(dim=0),
+            -.5 * len(Wh) * prec.reshape(-1)
+        ], dim=-1)
+
+        # Subspace stats.
+        mean = self.cache['m']
+        h = self.cache['latent_means']
+        vec_hh = self.cache['vec_hh']
+        psi_mean = (psi - mean)
+        subspace_stats = torch.cat([
+            prec * (h.t() @ psi_mean).reshape(-1),
+            -.5 * prec * vec_hh.sum(dim=0)
+        ])
+
+        # Precision stats.
+        delta = self.cache['delta']
+        s2 = .5 * len(h) * len(mean)
+        dtype, device = mean.dtype, mean.device
+        prec_stats = torch.cat([
+            delta.sum(dim=0).reshape(-1),
+            torch.tensor(s2, dtype=dtype, device=device).reshape(-1),
+        ])
+
+        # Scale stats.
+        M, U = self.subspace.prior.to_std_parameters()
+        diag_WW = torch.diag(self.cache['vec_WW'].reshape(U.shape[0], -1))
+        diag_WM = torch.diag(self.cache['W'] @ M.t() )
+        diag_MM = torch.diag(M @ M.t())
+        s2 = .5 * len(mean)
+        scale_stats = torch.cat([
+            -.5 * (diag_WW + diag_MM) + diag_WM,
+            torch.tensor(s2, dtype=dtype, device=device).reshape(-1)
+        ])
+
+        return {
+            self.mean: mean_stats,
+            self.subspace: subspace_stats,
+            self.precision: prec_stats,
+            self.scale: scale_stats
+        }
 
 
 class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
@@ -169,7 +258,7 @@ class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
             # Subspace prior/posterior.
             mean_subspace.requires_grad = False
             global_mean.requires_grad = False
-            U = torch.eye(dim_s, dtype=dtype, device=device)
+            U = torch.eye(dim_s, dtype=dtype, device=device) * (1/prior_strength)
             r_M = mean_subspace + noise_std * torch.randn(dim_s,
                                                           dim_o,
                                                           dtype=dtype,
@@ -178,9 +267,7 @@ class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
             subspace_posterior = MatrixNormalPrior(r_M, U)
 
             # Global mean prior/posterior.
-            S = prior_strength * torch.eye(dim_o, dim_o, dtype=dtype,
-                                           device=device)
-            var = torch.tensor(prior_strength, dtype=dtype, device=device)
+            var = torch.tensor(1./prior_strength, dtype=dtype, device=device)
             mean_prior = NormalIsotropicCovariancePrior(global_mean, var)
             mean_posterior = NormalIsotropicCovariancePrior(global_mean, var)
 
@@ -205,7 +292,7 @@ class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
                        scale_prior, scale_posterior)
 
     def _precompute(self, data):
-        prec, m, mm, W, WW = self._extract_moments()
+        prec, log_prec, m, mm, W, WW = self._extract_moments()
         dtype, device = m.dtype, m.device
         max_psis = self.llh_func.argmax(data)
         hessians = self.llh_func.hessian(max_psis, data, mode='full')
@@ -216,18 +303,17 @@ class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
         logdets = torch.cat([_logdet(cov) for cov in covs])
         dim = max_psis.shape[-1]
         entropy = .5 * (logdets + dim * math.log(2 * math.pi) + dim)
-
         latent_prec = torch.eye(W.shape[0], dtype=dtype, device=device) + \
                       prec * WW
         latent_cov = torch.inverse(latent_prec)
-
         return {
+            'log_prec': log_prec,
             'prec': prec,
             'max_psis': max_psis,
             'hessians': hessians,
             'hessian_psis': hessian_psis,
             'params_cov': covs,
-            'entropy': entropy,
+            'params_entropy': entropy.reshape(-1),
             'm': m,
             'mm': mm,
             'W': W,
@@ -243,10 +329,15 @@ class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
         covs = cache['params_cov']
         means = (covs * (prior_prec * prior_mean - \
                          hessian_psis)[:, None, :]).sum(dim=-1)
-        psi_maxpsi = (prior_mean - max_psis)
-        Hpsi_maxpsi = (hessians * psi_maxpsi[:, None, :]).sum(dim=-1)
-        quad_approx = self.llh_func(max_psis, data) + \
-                      .5 * torch.sum(Hpsi_maxpsi * psi_maxpsi, dim=-1)
+
+        psis_m2 = covs + means[:, :, None] * means[:, None, :]
+        psisHpsis = torch.sum(hessians.reshape(len(max_psis), -1) * \
+                              psis_m2.reshape(len(max_psis), -1), dim=-1)
+        Hmax_psis = (hessians * max_psis[:, None, :]).sum(dim=-1)
+        max_psisHmax_psis = (Hmax_psis * max_psis).sum(dim=-1)
+        psisHmax_psis = (Hmax_psis * means).sum(dim=-1)
+        quad_approx = self.llh_func(max_psis, data)
+        quad_approx += .5 * (psisHpsis + max_psisHmax_psis) - psisHmax_psis
         idxs = tuple(range(covs.shape[-1]))
         tr_m2 = covs[:, idxs, idxs].sum(dim=-1) + torch.sum(means**2, dim=-1)
         cache.update({
@@ -266,69 +357,11 @@ class GeneralizedSubspaceModelFull(GeneralizedSubspaceModel):
         })
         return cache
 
-    def _quad_approx(self, cache):
-        opt, hessians = cache['opt'], cache['hessians']
-        m, mm = cache['m'], cache['mm']
-        W, WW, U = cache['W'], cache['WW'], cache['U']
-        WHW = cache['WHW']
-        H, HH = cache['H'], cache['HH']
-        stats = cache['stats']
-
-        mHm = torch.sum(hessians.reshape(len(hessians), -1) * mm, dim=-1)
-        hW = H @ W
-        Hm = hessians @ m
-        mHWh = (hW * Hm).sum(dim=-1)
-        oHm = torch.sum(opt * Hm, dim=-1)
-        oH = (hessians * opt[:, None, :]).sum(dim=-1)
-        oHWh = torch.sum(oH * hW, dim=-1)
-        hWHWh = (HH * WHW).sum(dim=-1)
-
-        opt_quad = opt[:, :, None] * opt[:, None, :]
-        opt_quad = opt_quad.reshape(len(opt), -1)
-        rs_hessians = hessians.reshape(len(opt), -1)
-        quad_opt = torch.sum(rs_hessians * opt_quad, dim=-1)
-
-        new_cache = {**cache,
-            'hW': hW,
-        }
-
-        return  self.llh_func(opt, stats) \
-                     + .5 * (hWHWh + mHm + quad_opt  \
-                            + 2 * (mHWh - oHm - oHWh)), new_cache
-
-        nparams_0 = self.latent_prior.value.natural_parameters
-        for i, l_post in enumerate(l_posts):
-            l_post.natural_parameters = nparams_0 + acc_stats[i]
-
-        if not cache:
-            return l_posts
-
-        # TODO: possible optimization by doing a single for-loop.
-        H = torch.cat([pdf.moments()[0][None, :]
-                       for pdf in l_posts], dim=0)
-        HH = torch.cat([pdf.moments()[1][None, :]
-                        for pdf in l_posts], dim=0)
-        cache = {
-            'U': U,
-            'opt': opt,
-            'hessians': hessians,
-            'tr_hessians': tr_hessians,
-            'm': m,
-            'mm': mm,
-            'W': W,
-            'WW': WW,
-            'H': H,
-            'HH': HH,
-            'stats': stats,
-            'WHW': WHW,
-        }
-        return l_posts, cache
-
     ####################################################################
     # BayesianModel interface.
     ####################################################################
 
-    def accumulate(self, stats):
+    def accumulate2(self, stats):
         hessians = self.cache['hessians']
         tr_hessians = self.cache['tr_hessians']
         hW = self.cache['hW']
