@@ -11,6 +11,8 @@ import beer
 
 
 def setup(parser):
+    parser.add_argument('-u', '--utts',
+                        help='decode the given utterances ("-") for stdin')
     parser.add_argument('--per-frame', action='store_true',
                         help='output the per-frame transcription')
     parser.add_argument('model', help='hmm based model')
@@ -41,8 +43,18 @@ def main(args, logger):
     with open(args.dataset, 'rb') as f:
         dataset = pickle.load(f)
 
+    if args.utts:
+        if args.utts == '-':
+            utts = [line.strip().split()[0] for line in sys.stdin.readlines()]
+        else:
+            with open(args.utts, 'r') as f:
+                utts = [line.strip().split()[0] for line in f.readlines()]
+    else:
+        utts = list([utt.id for utt in dataset.utterances(random_order=False)])
+
     count = 0
-    for utt in dataset.utterances(random_order=False):
+    for uttname in utts:
+        utt = dataset[uttname]
         logger.debug(f'processing utterance: {utt.id}')
         path_ids = [int(unit) for unit in model.decode(utt.features)]
         phones = state2phone(path_ids, model.start_pdf, args.per_frame)
