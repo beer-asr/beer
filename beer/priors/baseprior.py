@@ -52,6 +52,10 @@ class ExpFamilyPrior(metaclass=abc.ABCMeta):
                                   other.natural_parameters)
         return NotImplemented
 
+    def clear_cache(self):
+        'Invalidate all currently store computation.'
+        self._cache = {}
+
     @property
     def natural_parameters(self):
         '``torch.Tensor``: Natural parameters.'

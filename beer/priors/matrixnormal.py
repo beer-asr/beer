@@ -79,8 +79,8 @@ class MatrixNormalPrior(ExpFamilyPrior):
     def _expected_sufficient_statistics(self):
         mean, cov = self.to_std_parameters(self.natural_parameters)
         return torch.cat([
-            mean.view(-1),
-            (self.dim[1] * cov + mean @ mean.t()).view(-1)
+            mean.reshape(-1),
+            (self.dim[1] * cov + mean @ mean.t()).reshape(-1)
         ])
 
     def _log_norm(self, natural_parameters=None):
@@ -93,5 +93,68 @@ class MatrixNormalPrior(ExpFamilyPrior):
         return log_norm
 
 
-__all__ = ['MatrixNormalPrior']
+
+
+class HierarchicalMatrixNormalPrior(MatrixNormalPrior):
+    '''Matrix Normal prior with a hyper-prior over the diagional
+    of the precision matrix.
+
+    parameters:
+        M: mean of the distribution (n x p matrix)
+        U: covariance matrix (n x n positive definite matrix)
+
+    natural parameters:
+        eta1 = vec(- 0.5 * inv(U))
+        eta2 = vec(inv(U) * M)
+
+    sufficient statistics (W is a nxp real matrix):
+        T_1(W) =  vec(W * W^T)
+        T_2(W) = vec(W)
+
+    '''
+
+    def __init__(self, mean, hyper_prior):
+        '''
+        Args:
+            mean (``torch.Tensor[dim,dim]``)): Matrix mean.
+            cov (``torch.tensor[1]``): Covariance matrix.
+        '''
+        self._dim = mean.shape
+        self._hyper_prior = hyper_prior
+        cov = torch.diag(1./hyper_prior.expected_value())
+        nparams = self.to_natural_parameters(mean, cov)
+        super(MatrixNormalPrior, self).__init__(nparams)
+
+    @property
+    def hyper_prior(self):
+        return self._hyper_prior
+
+    def to_natural_parameters(self, mean, cov):
+        prec = torch.diag(self.hyper_prior.expected_value())
+        return torch.cat([
+           (prec @ mean).reshape(-1),
+            -.5 * prec.view(-1)
+        ])
+
+    def _to_std_parameters(self, natural_parameters=None):
+        if natural_parameters is None:
+            natural_parameters = self.natural_parameters
+        dim1, dim2 = self.dim
+        dim = dim1 * dim2
+        cov = torch.diag(1./self.hyper_prior.expected_value())
+        mean = cov @ natural_parameters[:dim].reshape(dim1, dim2)
+        return mean, cov
+
+    def _log_norm(self, natural_parameters=None):
+        if natural_parameters is None:
+            natural_parameters = self.natural_parameters
+        mean, _ = self.to_std_parameters(natural_parameters)
+        precision = torch.diag(self.hyper_prior.expected_value())
+        log_prec = self.hyper_prior.expected_sufficient_statistics()[self.dim[0]:]
+        log_norm = - self.dim[1] * .5 * log_prec.sum()
+        log_norm += .5 * torch.trace(mean.t() @ precision @  mean)
+        return log_norm
+
+
+__all__ = ['MatrixNormalPrior', 'HierarchicalMatrixNormalPrior']
 

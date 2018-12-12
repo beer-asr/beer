@@ -81,6 +81,80 @@ class NormalFullCovariancePrior(ExpFamilyPrior):
         return log_norm + .5 * self.dim * math.log(2*math.pi)
 
 
+class NormalDiagonalCovariancePrior(ExpFamilyPrior):
+    '''Normal distribution with diagonal covariance matrix.
+
+    parameters:
+        mean: mean of the distribution
+        dcov: diagonal of the covariance matrix
+
+    natural parameters:
+        eta1 = (1/dcov) * mean
+        eta2 = - (1/(2 * dcov)
+
+    sufficient statistics:
+        T_1(x) = x
+        T_2(x) = diag(x * x^T)
+
+    '''
+
+    def __init__(self, mean, dcov):
+        self._dim = len(mean)
+        nparams = self.to_natural_parameters(mean, dcov)
+        super().__init__(nparams)
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(mean={self.mean}, dcov={self.dcov})'
+
+    @property
+    def dim(self):
+        return self._dim
+
+    @property
+    def mean(self):
+        return self.to_std_parameters(self.natural_parameters)[0]
+
+    @property
+    def dcov(self):
+        return self.to_std_parameters(self.natural_parameters)[1]
+
+    def moments(self):
+        stats = self.expected_sufficient_statistics()
+        return stats[:self.dim], stats[self.dim:]
+
+    def expected_value(self):
+        mean, _ = self.to_std_parameters(self.natural_parameters)
+        return mean
+
+    def to_natural_parameters(self, mean, dcov):
+        prec = 1/dcov
+        return torch.cat([prec * mean, -.5 * prec])
+
+    def _to_std_parameters(self, natural_parameters=None):
+        if natural_parameters is None:
+            natural_parameters = self.natural_parameters
+        precision = - 2 * natural_parameters[self.dim:]
+        dcov = 1/precision
+        mean = dcov * natural_parameters[:self.dim]
+        return mean, dcov
+
+    def _expected_sufficient_statistics(self):
+        mean, dcov = self.to_std_parameters(self.natural_parameters)
+        return torch.cat([
+            mean,
+            (dcov + mean**2)
+        ])
+
+    def _log_norm(self, natural_parameters=None):
+        if natural_parameters is None:
+            natural_parameters = self.natural_parameters
+        mean, dcov = self.to_std_parameters(natural_parameters)
+        precision = 1. / dcov
+        log_norm = .5 * (precision * mean**2).sum()
+        log_norm -= .5 * precision.log().sum()
+        return log_norm + .5 * self.dim * math.log(2*math.pi)
+
+
 class NormalIsotropicCovariancePrior(ExpFamilyPrior):
     '''Normal distribution with isotropic covariance matrix.
 
@@ -155,5 +229,6 @@ class NormalIsotropicCovariancePrior(ExpFamilyPrior):
         return log_norm + .5 * self.dim * math.log(2*math.pi)
 
 
-__all__ = ['NormalFullCovariancePrior', 'NormalIsotropicCovariancePrior']
+__all__ = ['NormalFullCovariancePrior', 'NormalDiagonalCovariancePrior',
+           'NormalIsotropicCovariancePrior']
 
