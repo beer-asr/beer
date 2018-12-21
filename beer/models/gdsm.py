@@ -237,7 +237,6 @@ class GeneralizedDiscriminantSubspaceModel(BayesianModel):
         '''
         cache = self._precompute(data)
         oh_labels = onehot(labels, self.nclasses, data.dtype, data.device)
-        #prior_means = cache['m'][None, :]
         prior_means = cache['max_psis']
         previous_quad_approx = float('-inf')
         for i in range(max_iter):

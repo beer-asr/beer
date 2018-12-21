@@ -13,7 +13,7 @@ def _logdet(mats):
     for mat in vmats:
         if mat.requires_grad:
             mat.register_hook(lambda grad: .5 * (grad + grad.t()))
-        retval.append(2 * torch.log(torch.diag(torch.potrf(mat))).sum().view(1))
+        retval.append(2 * torch.log(torch.diag(torch.cholesky(mat))).sum().view(1))
     return torch.cat(retval).view(-1, 1)
 
 

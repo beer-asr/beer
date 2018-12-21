@@ -134,13 +134,13 @@ class CollapsedEvidenceLowerBoundInstance:
         # just before to compute the gradient.
         if self._elbo_value.requires_grad:
             (-self._elbo_value).backward()
-            
+
         for parameter in self._model_parameters:
             acc_stats = self._acc_stats[parameter].detach()
             parameter.store_stats(acc_stats)
 
         return self._acc_stats
-    
+
 class StochasticCollapsedEvidenceLowerBoundInstance:
     '''Collapsed Evidence Lower Bound of a data set given a model.
 
@@ -175,14 +175,14 @@ class StochasticCollapsedEvidenceLowerBoundInstance:
         # just before to compute the gradient.
         if self._elbo_value.requires_grad:
             (-self._elbo_value).backward()
-            
+
         scale = self._datasize / self._minibatchsize
         for parameter in self._model_parameters:
             acc_stats = self._acc_stats[parameter].detach()
             parameter.store_stats(scale * acc_stats)
 
         return self._acc_stats
-    
+
 
 def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
                          fast_eval=False, **kwargs):
@@ -253,7 +253,7 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
     else:
         kl_div = 0.
     elbo_value = float(scale) * exp_llh.sum() - kl_div
-    acc_stats = model.accumulate(torch.tensor(stats))
+    acc_stats = model.accumulate(stats.clone().detach())
     model.clear_cache()
 
     return EvidenceLowerBoundInstance(elbo_value, acc_stats,
@@ -290,7 +290,7 @@ def collapsed_evidence_lower_bound(model=None, minibatch_data=None, **kwargs):
                                                model.bayesian_parameters())
 
 
-def stochastic_collapsed_evidence_lower_bound(model, minibatch_data, datasize=-1, 
+def stochastic_collapsed_evidence_lower_bound(model, minibatch_data, datasize=-1,
                                               **kwargs):
     '''Collapsed Evidence Lower Bound objective function of Variational
     Bayes Inference.

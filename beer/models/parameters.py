@@ -72,11 +72,11 @@ class BayesianParameter:
             torch.zeros_like(self.prior.natural_parameters, dtype=dtype,
                             device=device, requires_grad=False)
         self.uuid = uuid.uuid4()
-    
+
     def __getstate__(self):
         self.stats = torch.tensor(self.stats)
         return self.__dict__
-    
+
     def __repr__(self):
         return self.__repr_str.format(prior=self.prior, posterior=self.posterior)
 
@@ -137,10 +137,9 @@ class BayesianParameter:
     def natural_grad_update(self, lrate):
         grad = self.prior.natural_parameters + self.stats - \
                self.posterior.natural_parameters
-        self.posterior.natural_parameters = torch.tensor(
-            self.posterior.natural_parameters + lrate * grad,
-            requires_grad=False
-        )
+        self.posterior.natural_parameters = self.posterior.natural_parameters \
+                                            + lrate * grad
+
         # Notify the observers the parameters has changed.
         self._dispatch()
 
