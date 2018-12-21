@@ -12,6 +12,7 @@ from .hmm import *
 from .phoneloop import *
 from .vae import *
 from .gsm import *
+from .gdsm import *
 
 # Concrete model set.
 from .mixtureset import *

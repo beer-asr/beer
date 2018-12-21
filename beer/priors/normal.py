@@ -45,7 +45,7 @@ class NormalFullCovariancePrior(ExpFamilyPrior):
 
     def moments(self):
         stats = self.expected_sufficient_statistics()
-        return stats[:self.dim], stats[self.dim:]
+        return stats[:self.dim], stats[self.dim:].reshape(self.dim, self.dim)
 
     def expected_value(self):
         mean, _ = self.to_std_parameters(self.natural_parameters)
