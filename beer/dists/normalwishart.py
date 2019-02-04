@@ -1,12 +1,10 @@
-
-__all__ = ['NormalWishart', 'NormalWishartStdParams']
-
 import abc
 from dataclasses import dataclass
 import math
 import torch
-
 from .basedist import ExponentialFamily
+
+__all__ = ['NormalWishart', 'NormalWishartStdParams']
 
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
@@ -49,14 +47,6 @@ class NormalWishartStdParams(torch.nn.Module):
 
         return cls(mean, scale, scale_matrix, dof)
 
-    def __eq__(self, other):
-        if self.__class__ is other.__class__:
-            return torch.allclose(self.mean, other.mean) \
-                and torch.allclose(self.scale, other.scale) \
-                and torch.allclose(self.scale_matrix, other.scale_matrix) \
-                and torch.allclose(self.dof, other.dof)
-        return NotImplemented
-
 
 class NormalWishart(ExponentialFamily):
     'Normal-Wishart pdf.'
@@ -70,33 +60,11 @@ class NormalWishart(ExponentialFamily):
 
     @property
     def dim(self):
-        return len(self.mean)
-
-    def natural_parameters(self):
-        '''Natural form of the current parameterization. For the
-        standard parameters (m=mean, k=scale, W=W, v=dof) the natural
-        parameterization is given by:
-
-        nparams = (
-            k * m ,
-            -.5 * W^{-1} + k * m * m^T,
-            -.5 * k,
-            .5 * (v - D)
-        )
-
-        Note: "D" is the dimension of "m"
-
-        Returns:
-            ``torch.Tensor[D + D^2 + 2]``
+        '''Return a tuple with the dimension of the normal and the
+        dimension of the Wishart: example (2, (2x2))
 
         '''
-        return torch.cat([
-            self.scale * self.mean,
-            -.5 * (self.scale_matrix.inverse() \
-                + self.scale * torch.ger(self.mean, self.mean)).reshape(-1),
-            -.5 * self.scale.reshape(1),
-            .5 * (self.dof - self.dim).reshape(1)
-        ])
+        return len(self.mean), tuple(self.scale_matrix.shape)
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -127,19 +95,19 @@ class NormalWishart(ExponentialFamily):
             and "psi" is the "digamma" function.
 
         '''
-        idxs = torch.arange(0, self.dim, dtype=self.mean.dtype,
+        idxs = torch.arange(1, self.dim[0] + 1, dtype=self.mean.dtype,
                             device=self.mean.device)
         L = torch.cholesky(self.scale_matrix, upper=False)
-        logdet = torch.log(L.diag()).sum()
+        logdet = 2 * torch.log(L.diag()).sum()
         mean_quad = torch.ger(self.mean, self.mean)
         exp_prec = self.dof * self.scale_matrix
         return torch.cat([
            exp_prec @ self.mean,
             exp_prec.reshape(-1),
-            ((self.dim / self.scale) \
+            ((self.dim[0] / self.scale) \
                 + (exp_prec @ mean_quad).trace()).reshape(1),
             (torch.digamma(.5 * (self.dof + 1 - idxs)).sum() \
-                + self.dim * math.log(2) + logdet).reshape(1)
+                + self.dim[0] * math.log(2) + logdet).reshape(1)
         ])
 
     def expected_value(self):
@@ -147,19 +115,19 @@ class NormalWishart(ExponentialFamily):
         return self.mean, self.dof * self.scale_matrix
 
     def log_norm(self):
-        idxs = torch.arange(0, self.dim, dtype=self.mean.dtype,
+        idxs = torch.arange(1, self.dim[0] + 1, dtype=self.mean.dtype,
                             device=self.mean.device)
         L = torch.cholesky(self.scale_matrix, upper=False)
         logdet = 2 * torch.log(L.diag()).sum()
-        return .5 * self.dof * logdet + .5 * self.dof * self.dim * math.log(2) \
-               + .25 * self.dim * (self.dim - 1) * math.log(math.pi) \
+        return .5 * self.dof * logdet + .5 * self.dof * self.dim[0] * math.log(2) \
+               + .25 * self.dim[0] * (self.dim[0] - 1) * math.log(math.pi) \
                + torch.lgamma(.5 * (self.dof + 1 - idxs)).sum() \
-               + .5 * self.dim * torch.log(self.scale) \
-               + .5 * self.dim * math.log(2 * math.pi)
+               + .5 * self.dim[0] * torch.log(self.scale) \
+               + .5 * self.dim[0] * math.log(2 * math.pi)
 
-    # TODO:
-    #def sample(self, nsamples):
-    #    pass
+    # TODO
+    def sample(self, nsamples):
+        raise NotImplementedError
 
     def natural_parameters(self):
         '''Natural form of the current parameterization. For the
@@ -184,6 +152,9 @@ class NormalWishart(ExponentialFamily):
             -.5 * (self.scale_matrix.inverse() \
                 + self.scale * torch.ger(self.mean, self.mean)).reshape(-1),
             -.5 * self.scale.reshape(1),
-            .5 * (self.dof - self.dim).reshape(1)
+            .5 * (self.dof - self.dim[0]).reshape(1)
         ])
+
+    def update_from_natural_parameters(self, natural_params):
+        self.params = self.params.from_natural_parameters(natural_params)
 

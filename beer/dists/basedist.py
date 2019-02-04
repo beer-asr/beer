@@ -123,6 +123,7 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
         'Log-normalization constant given the current parameters.'
         pass
 
+    @abc.abstractmethod
     def sample(self, nsamples):
         'Draw values of the random variable given the current parameters.'
         pass
@@ -130,6 +131,11 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def natural_parameters(self):
         'Natural/canonical form of the current parameterization.'
+        pass
+
+    @abc.abstractmethod
+    def update_from_natural_parameters(self):
+        'Uptate the parameters given the new natural parameters.'
         pass
 
 

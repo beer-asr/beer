@@ -1,90 +1,27 @@
-
-'''Implementation of the models\' parameters.'''
-
-import uuid
+from dataclasses import dataclass
+import typing
 import torch
 from ..priors import ExpFamilyPrior
+from ..dists import ExponentialFamily
 
+@dataclass(init=False)
+class BayesianParameter(torch.nn.Module):
+    'Parameter which has a *prior* and a *posterior* distribution.'
 
-class ConstantParameter:
-    'Simple wrapper over ``torch.Tensor`` to handle fixed parameters.'
-
-    __repr_str = '{classname}(value={value})'
-
-    def __init__(self, tensor, fixed_dtype=False):
-        self.fixed_dtype = fixed_dtype
-        self.value = tensor
-        self.uuid = uuid.uuid4()
-
-    def __repr__(self):
-        return self.__repr_str.format(classname=self.__class__.__name__,
-                                      value=self.value)
-
-    def __hash__(self):
-        return hash(self.uuid)
-
-    def float_(self):
-        'Convert value of the parameter to float precision.'
-        if not self.fixed_dtype:
-            self.value = self.value.float()
-
-    def double_(self):
-        'Convert the value of the parameter to double precision.'
-        if not self.fixed_dtype:
-            self.value = self.value.double()
-
-    def to_(self, device):
-        '''Move the internal buffer of the parameter to the given
-        device.
-
-        Parameters:
-            device (``torch.device``): Device on which to move on
-
-        '''
-        self.value = self.value.to(device)
-
-
-class BayesianParameter:
-    '''Parameter which has a *prior* and a *posterior* distribution.
-
-    Note:
-        This class is hashable and therefore can be used as a key in a
-        dictionary.
-
-    Attributes:
-        natural_grad (``torch.Tensor``): Natural gradient of the ELBO
-            w.r.t. to the hyper-parameters of the posterior
-            distribution.
-        prior (:any:`beer.ExpFamilyPrior`): Prior distribution over the
-            parameter.
-        posterior (:any:`beer.ExpFamilyPrior`): Posterior distribution
-            over the parameter.
-    '''
-    __repr_str = 'BayesianParameter(prior={prior}, posterior={posterior})'
-
+    prior: ExponentialFamily
+    posterior: ExponentialFamily
+    stats: torch.Tensor
+    _callbacks: typing.Set
 
     def __init__(self, prior, posterior):
+        super().__init__()
+        self.prior = prior
+        self.posterior = posterior
+        self.stats = None
         self._callbacks = set()
-        self.prior, self.posterior = prior, posterior
-        dtype = self.prior.natural_parameters.dtype
-        device = self.prior.natural_parameters.device
-        self.stats = \
-            torch.zeros_like(self.prior.natural_parameters, dtype=dtype,
-                            device=device, requires_grad=False)
-        self.uuid = uuid.uuid4()
-    
-    def __getstate__(self):
-        self.stats = torch.tensor(self.stats)
-        return self.__dict__
-    
-    def __repr__(self):
-        return self.__repr_str.format(prior=self.prior, posterior=self.posterior)
 
     def __hash__(self):
-        return hash(self.uuid)
-
-    def __eq__(self, other):
-        return hash(self) == hash(other)
+        return hash(id(self))
 
     def _dispatch(self):
         for callback in self._callbacks:
@@ -92,10 +29,7 @@ class BayesianParameter:
 
     def register_callback(self, callback):
         '''Register a callback function that will be called every time
-        the parameters if updated.
-
-        Args:
-            callback (fucntion): Function to call.
+        the parameters if updated. The function takes no argument.
 
         '''
         self._callbacks.add(callback)
@@ -104,8 +38,6 @@ class BayesianParameter:
         '''Expected value of the parameter w.r.t. the posterior
         distribution of the parameter.
 
-        Returns:
-            ``torch.Tensor``
         '''
         return self.posterior.expected_value()
 
@@ -126,57 +58,30 @@ class BayesianParameter:
                 of the parameter.
 
         '''
-        self.stats = acc_stats
-
-    def remove_stats(self, acc_stats):
-        self.posterior.natural_parameters = self.posterior.natural_parameters - acc_stats
-
-    def add_stats(self, acc_stats):
-        self.posterior.natural_parameters = self.posterior.natural_parameters + acc_stats
+        # To avoid memory issue, we make sure that the stored
+        # statistics are not differentiable (therefore they do not keep
+        # track of the computation graph).
+        if acc_stats.requires_grad:
+            self.stats = acc_stats.clone().detach()
+        else:
+            self.stats = acc_stats
 
     def natural_grad_update(self, lrate):
-        grad = self.prior.natural_parameters + self.stats - \
-               self.posterior.natural_parameters
-        self.posterior.natural_parameters = torch.tensor(
-            self.posterior.natural_parameters + lrate * grad,
-            requires_grad=False
-        )
-        # Notify the observers the parameters has changed.
+        prior_nparams = self.prior.natural_parameters()
+        posterior_nparams = self.posterior.natural_parameters()
+        natural_grad = prior_nparams + self.stats - posterior_nparams
+        new_nparams = posterior_nparams + lrate * natural_grad
+        self.posterior.update_from_natural_parameters(new_nparams)
+
+        # Notify the observers the parameter has changed.
         self._dispatch()
 
-    def kl_div(self):
-        '''KL divergence posterior/prior.'''
-        return ExpFamilyPrior.kl_div(self.posterior, self.prior)
 
-    def float_(self):
-        '''Convert value of the parameter to float precision.'''
-        self.prior = self.prior.float()
-        self.posterior = self.posterior.float()
-        self.stats = self.stats.float()
-
-    def double_(self):
-        '''Convert the value of the parameter to double precision.'''
-        self.prior = self.prior.double()
-        self.posterior = self.posterior.double()
-        self.stats = self.stats.double()
-
-    def to_(self, device):
-        '''Move the internal buffer of the parameter to the given
-        device.
-
-        Parameters:
-            device (``torch.device``): Device on which to move on
-
-        '''
-        self.prior = self.prior.to(device)
-        self.posterior = self.posterior.to(device)
-        self.stats = self.stats.to(device)
-
-
-class BayesianParameterSet:
+class BayesianParameterSet(torch.nn.Module):
     '''Set of Bayesian parameters.'''
 
     def __init__(self, parameters):
+        super().__init__()
         self.__parameters = parameters
 
     def __len__(self):
