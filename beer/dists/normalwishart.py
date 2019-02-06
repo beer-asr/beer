@@ -122,7 +122,7 @@ class NormalWishart(ExponentialFamily):
         return .5 * self.dof * logdet + .5 * self.dof * self.dim[0] * math.log(2) \
                + .25 * self.dim[0] * (self.dim[0] - 1) * math.log(math.pi) \
                + torch.lgamma(.5 * (self.dof + 1 - idxs)).sum() \
-               + .5 * self.dim[0] * torch.log(self.scale) \
+               - .5 * self.dim[0] * torch.log(self.scale) \
                + .5 * self.dim[0] * math.log(2 * math.pi)
 
     # TODO

@@ -15,15 +15,15 @@ class DirichletStdParams(torch.nn.Module):
     concentrations: torch.Tensor
 
     def __init__(self, concentrations):
-        super.__init__()
+        super().__init__()
         self.register_buffer('concentrations', concentrations)
 
     @classmethod
-    def from_natural_parameters(self, natural_params):
-        return natural_parameters + 1
+    def from_natural_parameters(cls, natural_params):
+        return cls(natural_params + 1)
 
 
-class DirichletPrior(ExponentialFamily):
+class Dirichlet(ExponentialFamily):
     'Dirichlet Distribution.'
 
     _std_params_def = {

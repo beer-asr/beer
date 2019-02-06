@@ -142,7 +142,8 @@ class NormalDiagonalCovariance(Normal):
         posterior = NormalGamma(params)
         return cls(prior, posterior)
 
-    def sufficient_statistics(self, data):
+    @staticmethod
+    def sufficient_statistics(data):
         dtype, device = data.dtype, data.device
         return torch.cat([
             data,
@@ -178,7 +179,8 @@ class NormalFullCovariance(Normal):
         posterior = NormalWishart(params)
         return cls(prior, posterior)
 
-    def sufficient_statistics(self, data):
+    @staticmethod
+    def sufficient_statistics(data):
         dtype, device = data.dtype, data.device
         data_quad = data[:, :, None] * data[:, None, :]
         return torch.cat([
@@ -187,6 +189,7 @@ class NormalFullCovariance(Normal):
             -.5 * torch.ones(data.size(0), 1, dtype=dtype, device=device),
             .5 * torch.ones(data.size(0), 1, dtype=dtype, device=device),
         ], dim=-1)
+
 
 # Different type of covariance and their respective constructor.
 cov_types = {

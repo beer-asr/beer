@@ -4,6 +4,10 @@ import torch
 from ..priors import ExpFamilyPrior
 from ..dists import ExponentialFamily
 
+
+__all__ = ['BayesianParameter', 'BayesianParameterSet']
+
+
 @dataclass(init=False)
 class BayesianParameter(torch.nn.Module):
     'Parameter which has a *prior* and a *posterior* distribution.'
@@ -17,7 +21,8 @@ class BayesianParameter(torch.nn.Module):
         super().__init__()
         self.prior = prior
         self.posterior = posterior
-        self._stats = torch.zeros_like(self.prior.natural_parameters())
+        stats = torch.zeros_like(self.prior.natural_parameters())
+        self.register_buffer('_stats', stats)
         self._callbacks = set()
 
     def __hash__(self):
@@ -81,12 +86,16 @@ class BayesianParameter(torch.nn.Module):
         self._dispatch()
 
 
+@dataclass(init=False)
 class BayesianParameterSet(torch.nn.Module):
     '''Set of Bayesian parameters.'''
 
     def __init__(self, parameters):
         super().__init__()
-        self.__parameters = parameters
+        self.__parameters = torch.nn.ModuleList(parameters)
+
+    def __hash__(self):
+        return hash(id(self))
 
     def __len__(self):
         return len(self.__parameters)
@@ -105,31 +114,3 @@ class BayesianParameterSet(torch.nn.Module):
         return torch.cat([param.expected_natural_parameters().view(1, -1)
                           for param in self.__parameters], dim=0)
 
-    def float_(self):
-        '''Convert value of the parameter to float precision in-place.'''
-        for param in self.__parameters:
-            param.float_()
-
-    def double_(self):
-        '''Convert the value of the parameter to double precision
-        in-place.'''
-        for param in self.__parameters:
-            param.double_()
-
-    def to_(self, device):
-        '''Move the internal buffer of the parameter to the given
-        device in-place.
-
-        Parameters:
-            device (``torch.device``): Device on which to move on
-
-        '''
-        for param in self.__parameters:
-            param.to_(device)
-
-
-__all__ = [
-    'ConstantParameter',
-    'BayesianParameter',
-    'BayesianParameterSet'
-]

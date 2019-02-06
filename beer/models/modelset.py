@@ -1,10 +1,14 @@
 
 import abc
 import torch
-from .bayesmodel import BayesianModel
+from .basemodel import Model
 
 
-class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
+__all__ = ['DynamicallyOrderedModelSet', 'JointModelSet', 'ModelSet',
+           'RepeatedModelSet']
+
+
+class ModelSet(Model, metaclass=abc.ABCMeta):
     '''Abstract base class for a set of the :any:`BayesianModel`.
 
     This model is used by model having discrete latent variable such
@@ -36,7 +40,7 @@ class BayesianModelSet(BayesianModel, metaclass=abc.ABCMeta):
 
 
 
-class JointModelSet(BayesianModelSet):
+class JointModelSet(ModelSet):
     '''Set of concatenated model sets having the same type of
     sufficient statistics.
     '''
@@ -107,7 +111,7 @@ class JointModelSet(BayesianModelSet):
         return length
 
 
-class DynamicallyOrderedModelSet(BayesianModelSet):
+class DynamicallyOrderedModelSet(ModelSet):
     '''Set of model for which the order of the components might
     change for each called.
 
@@ -162,7 +166,7 @@ class DynamicallyOrderedModelSet(BayesianModelSet):
         return len(self.original_modelset)
 
 
-class RepeatedModelSet(BayesianModelSet):
+class RepeatedModelSet(ModelSet):
     '''Model set where an internal model set is repeated K times. This
     object is used in mixture-like models when the components of the
     mixture are shared across several classes.
@@ -207,7 +211,4 @@ class RepeatedModelSet(BayesianModelSet):
 
     def __len__(self):
         return len(self.modelset) * self.repeat
-
-
-__all__ = ['DynamicallyOrderedModelSet', 'JointModelSet', 'RepeatedModelSet']
 
