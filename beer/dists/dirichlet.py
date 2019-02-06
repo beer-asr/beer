@@ -1,60 +1,92 @@
-'''Implementation of the Dirichlet distribution.'''
-
+import abc
+from dataclasses import dataclass
+import math
 import torch
-from .baseprior import ExpFamilyPrior
+from .basedist import ExponentialFamily
 
 
-class DirichletPrior(ExpFamilyPrior):
-    '''Dirichlet Distribution.
+__all__ = ['Dirichlet', 'DirichletStdParams']
 
-    parameters:
-        alpha[k] > 0
 
-    natural parameters:
-        eta[k] = alphas[k] - 1
+@dataclass(init=False, eq=False, unsafe_hash=True)
+class DirichletStdParams(torch.nn.Module):
+    'Standard parameterization of the Dirichlet pdf.'
 
-    sufficient statistics:
-        T(x) = ln x
+    concentrations: torch.Tensor
 
-    '''
+    def __init__(self, concentrations):
+        super.__init__()
+        self.register_buffer('concentrations', concentrations)
 
-    __repr_str = '{classname}(alphas={alphas})'
+    @classmethod
+    def from_natural_parameters(self, natural_params):
+        return natural_parameters + 1
 
-    def __init__(self, alphas):
-        nparams = self.to_natural_parameters(alphas)
-        super().__init__(nparams)
 
-    def __repr__(self):
-        alphas = self.to_std_parameters()
-        return self.__repr_str.format(
-            classname=self.__class__.__name__,
-            alphas=alphas
+class DirichletPrior(ExponentialFamily):
+    'Dirichlet Distribution.'
+
+    _std_params_def = {
+        'concentrations': 'Concentrations parameter.'
+    }
+
+    @property
+    def dim(self):
+        return len(self.concentrations)
+
+    def expected_sufficient_statistics(self):
+        '''Expected sufficient statistics given the current
+        parameterization.
+
+        For the random variable p (vector of probabilities)
+        the sufficient statistics of the Dirichlet are
+        given by:
+
+        stats = (
+            ln(p)
         )
 
+        For the standard parameters (a=concentrations) expectation of
+        the sufficient statistics is given by:
+
+        E[stats] = (
+            psi(a) - psi(\sum_i a_i)
+        )
+
+        Note: ""D" is the dimenion of "m"
+            and "psi" is the "digamma" function.
+
+        '''
+        return torch.digamma(self.concentrations) \
+               - torch.digamma(self.concentrations.sum())
+
     def expected_value(self):
-        alphas = self.to_std_parameters(self.natural_parameters)
-        return alphas / alphas.sum()
+        'Expected distribution p.'
+        return self.concentrations / self.concentrations.sum()
 
-    def to_natural_parameters(self, std_parameters=None):
-        if std_parameters is None:
-            std_parameters = self.std_parameters
-        return (std_parameters - 1)
+    def log_norm(self):
+        return torch.lgamma(self.concentrations).sum() \
+               - torch.lgamma(self.concentrations.sum())
 
-    def _to_std_parameters(self, natural_parameters=None):
-        if natural_parameters is None:
-            natural_parameters = self.natural_parameters
-        return (natural_parameters + 1)
+    # TODO
+    def sample(self, nsamples):
+        raise NotImplementedError
 
-    def _expected_sufficient_statistics(self):
-        alphas = self.to_std_parameters(self.natural_parameters)
-        return (torch.digamma(alphas) - torch.digamma(alphas.sum()))
+    def natural_parameters(self):
+        '''Natural form of the current parameterization. For the
+        standard parameters (a=concentrations) the natural
+        parameterization is given by:
 
-    def _log_norm(self, natural_parameters=None):
-        if natural_parameters is None:
-            natural_parameters = self.natural_parameters
-        alphas = self.to_std_parameters(natural_parameters)
-        return torch.lgamma(alphas).sum() - torch.lgamma(alphas.sum())
+        nparams = (
+            a - 1,
+        )
 
+        Returns:
+            ``torch.Tensor[D]`` where D is the dimension of the support.
 
-__all__ = ['DirichletPrior']
+        '''
+        return self.concentrations - 1
+
+    def update_from_natural_parameters(self, natural_params):
+        self.params = self.params.from_natural_parameters(natural_params)
 
