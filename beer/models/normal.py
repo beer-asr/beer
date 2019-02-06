@@ -6,7 +6,7 @@ from .basemodel import Model
 from .parameters import BayesianParameter
 from ..dists import NormalWishart, NormalWishartStdParams
 from ..dists import NormalGamma, NormalGammaStdParams
-from ..priors import IsotropicNormalGammaPrior
+from ..dists import IsotropicNormalGamma, IsotropicNormalGammaStdParams
 
 
 __all__ = ['Normal', 'NormalIsotropicCovariance', 'NormalDiagonalCovariance',
@@ -86,17 +86,29 @@ class NormalIsotropicCovariance(Normal):
         dtype, device = mean.dtype, mean.device
         scale = torch.tensor(prior_strength, dtype=dtype, device=device)
         shape = torch.tensor(prior_strength, dtype=dtype, device=device)
-        rate =  torch.tensor(prior_strength * variance, dtype=dtype, device=device)
-        prior = IsotropicNormalGammaPrior(mean, scale, shape, rate)
-        posterior = IsotropicNormalGammaPrior(mean, scale, shape, rate)
+        rate =  prior_strength * variance
+        params = IsotropicNormalGammaStdParams(
+            mean.clone().detach(),
+            scale.clone().detach(),
+            shape.clone().detach(),
+            rate.clone().detach()
+        )
+        prior = IsotropicNormalGamma(params)
+        params = IsotropicNormalGammaStdParams(
+            mean.clone().detach(),
+            scale.clone().detach(),
+            shape.clone().detach(),
+            rate.clone().detach()
+        )
+        posterior = IsotropicNormalGamma(params)
         return cls(prior, posterior)
 
     @staticmethod
     def sufficient_statistics(data):
         dim, dtype, device = data.shape[1], data.dtype, data.device
         return torch.cat([
-            -.5 * torch.sum(data**2, dim=-1).reshape(-1, 1),
             data,
+            -.5 * torch.sum(data**2, dim=-1).reshape(-1, 1),
             -.5 * torch.ones(len(data), 1, dtype=dtype, device=device),
             .5 * dim * torch.ones(len(data), 1, dtype=dtype, device=device),
         ], dim=-1)

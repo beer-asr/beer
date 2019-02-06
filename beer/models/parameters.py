@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import typing
 import torch
 from ..priors import ExpFamilyPrior
@@ -10,14 +10,14 @@ class BayesianParameter(torch.nn.Module):
 
     prior: ExponentialFamily
     posterior: ExponentialFamily
-    stats: torch.Tensor
-    _callbacks: typing.Set
+    _stats: torch.Tensor = field(repr=False)
+    _callbacks: typing.Set = field(repr=False)
 
     def __init__(self, prior, posterior):
         super().__init__()
         self.prior = prior
         self.posterior = posterior
-        self.stats = None
+        self._stats = torch.zeros_like(self.prior.natural_parameters())
         self._callbacks = set()
 
     def __hash__(self):
@@ -41,6 +41,10 @@ class BayesianParameter(torch.nn.Module):
         '''
         return self.posterior.expected_value()
 
+    def zero_stats(self):
+        'Reset the accumulated statistics.'
+        self._stats.zero_()
+
     def expected_natural_parameters(self):
         '''Expected value of the natural form of the parameter w.r.t.
         the posterior distribution of the parameter.
@@ -62,14 +66,14 @@ class BayesianParameter(torch.nn.Module):
         # statistics are not differentiable (therefore they do not keep
         # track of the computation graph).
         if acc_stats.requires_grad:
-            self.stats = acc_stats.clone().detach()
+            self._stats = acc_stats.clone().detach()
         else:
-            self.stats = acc_stats
+            self._stats = acc_stats
 
     def natural_grad_update(self, lrate):
         prior_nparams = self.prior.natural_parameters()
         posterior_nparams = self.posterior.natural_parameters()
-        natural_grad = prior_nparams + self.stats - posterior_nparams
+        natural_grad = prior_nparams + self._stats - posterior_nparams
         new_nparams = posterior_nparams + lrate * natural_grad
         self.posterior.update_from_natural_parameters(new_nparams)
 

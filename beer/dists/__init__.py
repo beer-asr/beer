@@ -3,4 +3,5 @@
 from .basedist import *
 from .normalwishart import *
 from .normalgamma import *
+from .isonormalgamma import *
 

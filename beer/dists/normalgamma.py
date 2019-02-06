@@ -58,7 +58,7 @@ class NormalGamma(ExponentialFamily):
 
     @property
     def dim(self):
-        '''Return a tuple with the dimension of the noram and the
+        '''Return a tuple with the dimension of the Normal and the
         dimension of the joint Gamma densities.
 
         '''
@@ -69,7 +69,7 @@ class NormalGamma(ExponentialFamily):
         parameterization.
 
         For the random variable mu (vector), l (vector with positive
-        elements) the sufficient statistics of the Normal-Wishart are
+        elements) the sufficient statistics of the Normal-Gamma are
         given by:
 
         stats = (
