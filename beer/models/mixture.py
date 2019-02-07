@@ -102,7 +102,7 @@ class Mixture(DiscreteLatentModel):
     def accumulate(self, stats):
         resps = self.cache['resps']
         retval = {
-            self.weights: torch.tensor(resps.sum(dim=0)),
+            self.weights: resps.sum(dim=0),
             **self.modelset.accumulate(stats, resps)
         }
         return retval

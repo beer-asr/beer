@@ -5,7 +5,8 @@ import torch
 from .basedist import ExponentialFamily
 
 
-__all__ = ['IsotropicNormalGamma', 'IsotropicNormalGammaStdParams']
+__all__ = ['IsotropicNormalGamma', 'IsotropicNormalGammaStdParams',
+           'JointIsotropicNormalGamma', 'JointIsotropicNormalGammaStdParams']
 
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
@@ -143,98 +144,133 @@ class IsotropicNormalGamma(ExponentialFamily):
         self.params = self.params.from_natural_parameters(natural_params)
 
 
-class JointIsotropicNormalGammaPrior:
-    '''Joint isotropic NormalGamma  distribution. The set of normal
-    distribution shared the same gamma prior over the precision.
-
-    parameters:
-        means: Set of means (Normals)
-        scales: Set of scales of the precision matrix (Normals)
-        a: shape parameter  (Gamma)
-        b: rates parameter (Gamma)
-
-    natural parameters:
-        eta1 = - 0.5 * sum_k(scales[k] * mean[k]^T mean[k]) - b
-        eta2_k = scales[k] * means[k]
-        eta3 = - 0.5 * scales[k]
-        eta4 = a - 1 + 0.5 * dim * K
-
-    sufficient statistics (mu, l):
-        T_1(mu, l) = l
-        T_2(mu, l) = l * mu[k]
-        T_3(mu, l) = l * mu[k]^T mu[k]
-        T_4(mu, l) = ln l
-
-    '''
-    __repr_str = '{classname}(means={means}, scales={scales}, ' \
-                 'shape={shape}, rate={rate})'
+@dataclass(init=False, eq=False, unsafe_hash=True)
+class JointIsotropicNormalGammaStdParams(torch.nn.Module):
+    means: torch.Tensor
+    scales: torch.Tensor
+    shape: torch.Tensor
+    rate: torch.Tensor
 
     def __init__(self, means, scales, shape, rate):
-        '''
-        Args:
-            means (``torch.Tensor[k,dim]``)): Mean of the Normals.
-            scales (``torch.Tensor[1]``): Scaling of the precision
-                matrix for each Normal.
-            shape (``torch.Tensor[1]`): Shape parameter of the Gamma
-                distribution.
-            rate (``torch.tensor[dim]``): Rate parameter of the Gamma
-                distribution.
-        '''
-        self._ncomp = len(means)
-        nparams = self.to_natural_parameters(means, scales, shape, rate)
-        super().__init__(nparams)
+        super().__init__()
+        self.register_buffer('means', means)
+        self.register_buffer('scales', scales)
+        self.register_buffer('shape', shape)
+        self.register_buffer('rate', rate)
 
-    def __repr__(self):
-        means, scales, shape, rate = self.to_std_parameters()
-        return self.__repr_str.format(
-            classname=self.__class__.__name__,
-            means=repr(means), scales=repr(scales),
-            shape={shape}, rate={rate}
+    @classmethod
+    def from_natural_parameters(cls, natural_params, ncomp):
+        dim = (len(natural_params) - 2 - ncomp) // ncomp
+        np1s = natural_params[:ncomp * dim].reshape(ncomp, dim)
+        np2 = natural_params[ncomp * dim: ncomp * dim + 1]
+        np3s = natural_params[-(ncomp + 1):-1]
+        np4 = natural_params[-1]
+        scales = -2 * np3s
+        shape = np4 + 1 - .5 * dim * ncomp
+        means = np1s / scales[:, None]
+        rate = -np2 - .5 * (scales * (means * means).sum(dim=-1)).sum()
+        return cls(means, scales, shape, rate)
+
+        dim = (len(natural_params)- 2) // 2
+        np1 = natural_params[:dim]
+        np2 = natural_params[dim:2*dim]
+        np3 = natural_params[-2]
+        np4 = natural_params[-1]
+        scale = -2 * np3
+        shape = np4 + .5
+        mean = np1 / scale
+        rate = -np2 - .5 * scale.view(1) * mean**2
+        return cls(mean, scale, shape, rate)
+
+
+class JointIsotropicNormalGamma(ExponentialFamily):
+    '''Set of Normal distributions sharing the same gamma prior over
+    the precision.
+
+    '''
+
+    _std_params_def = {
+        'means': 'Set of mean parameters.',
+        'scales': 'Set of scaling of the precision (for each Normal).',
+        'shape': 'Shape parameter (Gamma).',
+        'rate': 'Rate parameter (Gamma).'
+    }
+
+    @property
+    def dim(self):
+        '''Return a tuple ((k, D), 1)' where K is the number of Normal
+        and D is the dimension of their support.
+
+        '''
+        return (tuple(self.means.shape), 1)
+
+    def expected_sufficient_statistics(self):
+        '''Expected sufficient statistics given the current
+        parameterization.
+
+        For the random variables mu (set of vector), l (positive scalar)
+        the sufficient statistics of the joint isotropic Normal-Gamma
+        are given by:
+
+        stats = (
+            l_1 * mu_1,
+            ...,
+            l_k * mu_k
+            l,
+            l * mu^2_i,
+            D * ln(l)
         )
 
-    def expected_value(self):
-        means, _, shape, rate = self.to_std_parameters()
-        return means, shape / rate
+        For the standard parameters (m=mean, k=scale, a=shape, b=rate)
+        expectation of the sufficient statistics is given by:
 
-    def to_natural_parameters(self, means, scales, shape, rate):
+        E[stats] = (
+            (a / b) * m,
+            (a / b),
+            (D/k) + (a / b) * \sum_i m^2_i,
+            (psi(a) - ln(b))
+        )
+
+        Note: ""D" is the dimenion of "m", "k" is the number of Normal,
+            and "psi" is the "digamma" function.
+
+.        '''
+        dim = self.dim[0][1]
+        precision = self.shape / self.rate
+        logdet = torch.digamma(self.shape) - torch.log(self.rate)
         return torch.cat([
-            (-.5 * (scales * (means * means).sum(dim=-1)).sum() - rate).view(1),
-            (scales[:, None] * means).view(-1),
-            -.5 * scales.view(-1),
-            shape.view(1) - 1 + .5 * means.shape[1] * self._ncomp,
-        ])
-
-    def _to_std_parameters(self, natural_parameters=None):
-        if natural_parameters is None:
-            natural_parameters = self.natural_parameters
-        dim = (len(natural_parameters) - 2 - self._ncomp) // self._ncomp
-        np1 = natural_parameters[0]
-        np2s = natural_parameters[1:1 + self._ncomp * dim].view(self._ncomp, dim)
-        np3s = natural_parameters[-(self._ncomp + 1):-1]
-        np4 = natural_parameters[-1]
-        scales = -2 * np3s
-        shape = np4 + 1 - .5 * dim * self._ncomp
-        means = np2s / scales[:, None]
-        rate = -np1 - .5 * (scales * (means * means).sum(dim=-1)).sum()
-        return means, scales, shape, rate
-
-    def _expected_sufficient_statistics(self):
-        means, scales, shape, rate = self.to_std_parameters()
-        dim = means.shape[1]
-        precision = shape / rate
-        logdet = torch.digamma(shape) - torch.log(rate)
-        return torch.cat([
+            precision * self.means.reshape(-1),
             precision.view(1),
-            precision * means.view(-1),
-            ((dim / scales) + precision * (means * means).sum(dim=-1)).view(-1),
+            ((dim / self.scales) \
+             + precision * (self.means**2).sum(dim=-1)).reshape(-1),
             logdet.view(1)
         ])
 
-    def _log_norm(self, natural_parameters=None):
-        if natural_parameters is None:
-            natural_parameters = self.natural_parameters
-        means, scales, shape, rate = self.to_std_parameters(natural_parameters)
-        dim = means.shape[1]
-        return torch.lgamma(shape) - shape * rate.log() \
-            - .5 * dim * scales.log().sum()
+    def expected_value(self):
+        'Expected means and expected precision (scalar).'
+        return self.means, self.shape / self.rate
+
+    def log_norm(self, natural_parameters=None):
+        dim = self.dim[0][1]
+        return torch.lgamma(self.shape) - self.shape * self.rate.log() \
+            - .5 * dim * self.scales.log().sum()
+
+    # TODO
+    def sample(self, nsamples):
+        raise NotImplementedError
+
+    def natural_parameters(self):
+        dim = self.dim[0][1]
+        ncomp = self.dim[0][0]
+        return torch.cat([
+            (self.scales[:, None] * self.means).reshape(-1),
+            (-.5 * (self.scales * (self.means**2).sum(dim=-1)).sum() \
+             - self.rate).view(1),
+            -.5 * self.scales.view(-1),
+            self.shape.view(1) - 1 + .5 * dim * ncomp,
+        ])
+
+    def update_from_natural_parameters(self, natural_params):
+        ncomp = self.dim[0][0]
+        self.params = self.params.from_natural_parameters(natural_params, ncomp)
 
