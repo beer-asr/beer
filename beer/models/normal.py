@@ -64,6 +64,30 @@ class Normal(Model):
         super().__init__()
         self.mean_precision = BayesianParameter(prior, posterior)
 
+    ####################################################################
+    # The following properties are exposed only for plotting/debugging
+    # purposes.
+
+    @property
+    def expected_mean(self):
+        return self.mean_precision.posterior.expected_value()[0]
+
+    @property
+    def expected_cov(self):
+        precision = self.mean_precision.posterior.expected_value()[1]
+        if len(precision.shape) == 2:
+            # Full covariance matrix.
+            return precision.inverse()
+        elif len(precision.shape) == 1 and precision.shape[0] > 1:
+            # Diagonal covariance matrix.
+            return (1. / precision).diag()
+        # Isotropic covariance matrix.
+        dim = self.mean_precision.prior.dim[0]
+        I = torch.eye(dim, dtype=precision.dtype, device=precision.device)
+        return precision * I
+
+    ####################################################################
+
     def mean_field_factorization(self):
         return [[self.mean_precision]]
 

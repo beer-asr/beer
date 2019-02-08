@@ -248,7 +248,7 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
             rate=posterior.rate
         )
         new_posterior = IsotropicNormalGamma(params)
-        return NormalIsotropicCovariance(prior, posterior)
+        return NormalIsotropicCovariance(new_prior, new_posterior)
 
     def _split_natural_parameters(self, nparams):
         dim = self.means_precision.prior.dim[0][1]
@@ -328,7 +328,7 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
             rates=posterior.rates
         )
         new_posterior = NormalGamma(params)
-        return NormalDiagonalCovariance(prior, posterior)
+        return NormalDiagonalCovariance(new_prior, new_posterior)
 
     def _split_stats(self, stats):
         dim = self.means_precision.prior.dim[0][1]
@@ -411,7 +411,7 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
             dof=posterior.dof
         )
         new_posterior = NormalWishart(params)
-        return NormalFullCovariance(prior, posterior)
+        return NormalFullCovariance(new_prior, new_posterior)
 
     def _split_stats(self, stats):
         dim = self.means_precision.prior.dim[0][1]
