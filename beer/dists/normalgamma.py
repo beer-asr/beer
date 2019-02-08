@@ -5,7 +5,8 @@ import torch
 from .basedist import ExponentialFamily
 
 
-__all__ = ['NormalGamma', 'NormalGammaStdParams']
+__all__ = ['NormalGamma', 'NormalGammaStdParams',
+           'JointNormalGammaStdParams', 'JointNormalGamma']
 
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
@@ -148,102 +149,122 @@ class NormalGamma(ExponentialFamily):
         self.params = self.params.from_natural_parameters(natural_params)
 
 
-class JointNormalGammaPrior(ExponentialFamily):
-    '''Joint NormalGamma distribution.
-
-    parameters:
-        means: mean (Normals)
-        scales: scale of the precision matrix (Normals)
-        a: shape parameter shared across dimension (joint Gamma)
-        b: rates parameter for each dimension (joint Gammas)
-
-    natural parameters:
-        eta1_i_k = - 0.5 * scales[k] * means[k]_i * means[k]_i - b_i
-        eta2_k = scales[k] * means[k]
-        eta3_k = - 0.5 * scales[k]
-        eta4 = a - 0.5
-
-    sufficient statistics (mu, l) (l is the diagonal of the precision):
-        T_1(mu, l)_i = l_i
-        T_2(mu, l)_i_k = l_i * mu[k]_i
-        T_3(mu, l)_k = sum(l_i * mu[k]_i * mu[k]_i)
-        T_4(mu, l) = sum(ln l_i)
-
-    '''
-    __repr_str = '{classname}(means={means}, scale={scale}, ' \
-                 'shape={shape}, rates={rates})'
-
-    _std_params_def = {}
+@dataclass(init=False, eq=False, unsafe_hash=True)
+class JointNormalGammaStdParams(torch.nn.Module):
+    means: torch.Tensor
+    scales: torch.Tensor
+    shape: torch.Tensor
+    rates: torch.Tensor
 
     def __init__(self, means, scales, shape, rates):
-        '''
-        Args:
-            means (``torch.Tensor[dim]``)): Means of the Normals.
-            scales (``torch.Tensor[1]``): Scaling of the precision
-                matrix.
-            shape (``torch.Tensor[1]`): Shape parameter of the
-                Gamma distribution
-            rates (``torch.tensor[dim]``): Rate parameters of the
-                Gamma distribution.
-        '''
-        self._ncomp, self._dim = means.shape
-        nparams = self.to_natural_parameters(means, scales, shape, rates)
-        super().__init__(nparams)
+        super().__init__()
+        self.register_buffer('means', means)
+        self.register_buffer('scales', scales)
+        self.register_buffer('shape', shape)
+        self.register_buffer('rates', rates)
 
-    def __repr__(self):
-        means, scales, shape, rates = self.to_std_parameters()
-        return self.__repr_str.format(
-            classname=self.__class__.__name__,
-            means=repr(means), scales=repr(scales),
-            shape={shape}, rates={rates}
-        )
-
-    def expected_value(self):
-        means, _, shape, rates = self.to_std_parameters()
-        return means, shape / rates
-
-    def to_natural_parameters(self, means, scales, shape, rates):
-        return torch.cat([
-            -.5 * ((scales[:, None] * means) * means).sum(dim=0) - rates,
-            (scales[:, None] * means).view(-1),
-            -.5 * scales.view(-1),
-            shape.view(1) - 1. + .5 * self._ncomp
-        ])
-
-    def _to_std_parameters(self, natural_parameters=None):
-        if natural_parameters is None:
-            natural_parameters = self.natural_parameters
-        ncomp, dim = self._ncomp, self._dim
-        np1 = natural_parameters[:dim]
-        np2s = natural_parameters[dim:dim + ncomp * dim].view((ncomp, dim))
-        np3s = natural_parameters[-(ncomp + 1):-1]
-        np4 = natural_parameters[-1]
-
+    @classmethod
+    def from_natural_parameters(cls, natural_params, ncomp):
+        dim = (len(natural_params) - ncomp - 1) // (ncomp + 1)
+        np1s = natural_params[:ncomp * dim].reshape(ncomp, dim)
+        np2 = natural_params[ncomp * dim : (ncomp + 1) * dim]
+        np3s = natural_params[-(ncomp + 1):-1]
+        np4 = natural_params[-1]
         scales = -2 * np3s
         shape = np4 + 1 - .5 * ncomp
-        means = np2s / scales[:, None]
-        rates = -np1 - .5 * ((scales[:, None] * means) * means).sum(dim=0)
+        means = np1s / scales[:, None]
+        rates = -np2 - .5 * ((scales[:, None] * means) * means).sum(dim=0)
+        return cls(means, scales, shape, rates)
 
-        return means, scales, shape, rates
 
-    def _expected_sufficient_statistics(self):
-        means, scales, shape, rates = self.to_std_parameters()
-        dim = self._dim
-        diag_precision = shape / rates
-        logdet = torch.sum(torch.digamma(shape) - torch.log(rates))
+class JointNormalGamma(ExponentialFamily):
+    '''Set of Normal distributions sharing the same Gamma prior over
+    the diagonal of the precision matrix.
+
+    '''
+
+    _std_params_def = {
+        'means': 'Set of mean parameters.',
+        'scales': 'Set of scaling of the precision (for each Normal).',
+        'shape': 'Shape parameter (Gamma).',
+        'rates': 'Rate parameters (Gamma).'
+    }
+
+    @property
+    def dim(self):
+        '''Return a tuple ((K, D), D)' where K is the number of Normal
+        and D is the dimension of their support.
+
+        '''
+        return (tuple(self.means.shape), self.means.shape[-1])
+
+    def expected_sufficient_statistics(self):
+        '''Expected sufficient statistics given the current
+        parameterization.
+
+        For the random variables mu (set of vector), l (vector of
+        positive values) the sufficient statistics of the joint
+        Normal-Gamma with diagonal precision matrix are given by:
+
+        stats = (
+            l_1 * mu_1,
+            ...,
+            l_k * mu_k
+            l,
+            l * mu^2_i,
+            \sum_i ln(l)_i
+        )
+
+        For the standard parameters (m=mean, k=scale, a=shape, b=rate)
+        expectation of the sufficient statistics is given by:
+
+        E[stats] = (
+            (a / b) * m,
+            (a / b),
+            (D/k) + (a / b) * \sum_i m^2_i,
+            (psi(a) - ln(b))
+        )
+
+        Note: ""D" is the dimenion of "m", "k" is the number of Normal,
+            and "psi" is the "digamma" function.
+
+.       '''
+        dim = self.dim[1]
+        diag_precision = self.shape / self.rates
+        logdet = torch.sum(torch.digamma(self.shape) - torch.log(self.rates))
         return torch.cat([
+            (diag_precision[None] * self.means).reshape(-1),
             diag_precision,
-            (diag_precision[None] * means).view(-1),
-            ((dim / scales) + torch.sum((diag_precision[None] * means) * means,
-                                         dim=-1)).view(-1),
+            ((dim / self.scales) + torch.sum(diag_precision[None] * self.means**2,
+                                             dim=-1)).reshape(-1),
             logdet.view(1)
         ])
 
-    def _log_norm(self, natural_parameters=None):
-        if natural_parameters is None:
-            natural_parameters = self.natural_parameters
-        _, scales, shape, rates = self.to_std_parameters(natural_parameters)
-        dim = self._dim
-        return dim * torch.lgamma(shape) - shape * rates.log().sum() \
-            - .5 * dim * scales.log().sum()
+    def expected_value(self):
+        'Expected means and expected diagonal of the precision matrix.'
+        return self.means, self.shape / self.rates
+
+    def log_norm(self):
+        dim = self.dim[1]
+        return dim * torch.lgamma(self.shape) \
+            - self.shape * self.rates.log().sum() \
+            - .5 * dim * self.scales.log().sum()
+
+    # TODO
+    def sample(self, nsamples):
+        raise NotImplementedError
+
+    def natural_parameters(self):
+        ncomp = self.dim[0][0]
+        return torch.cat([
+            (self.scales[:, None] * self.means).view(-1),
+            -.5 * (self.scales[:, None] * self.means**2).sum(dim=0) \
+                - self.rates,
+            -.5 * self.scales.view(-1),
+            self.shape.view(1) - 1. + .5 * ncomp
+        ])
+
+    def update_from_natural_parameters(self, natural_params):
+        ncomp = self.dim[0][0]
+        self.params = self.params.from_natural_parameters(natural_params, ncomp)
 

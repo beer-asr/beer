@@ -171,17 +171,6 @@ class JointIsotropicNormalGammaStdParams(torch.nn.Module):
         rate = -np2 - .5 * (scales * (means * means).sum(dim=-1)).sum()
         return cls(means, scales, shape, rate)
 
-        dim = (len(natural_params)- 2) // 2
-        np1 = natural_params[:dim]
-        np2 = natural_params[dim:2*dim]
-        np3 = natural_params[-2]
-        np4 = natural_params[-1]
-        scale = -2 * np3
-        shape = np4 + .5
-        mean = np1 / scale
-        rate = -np2 - .5 * scale.view(1) * mean**2
-        return cls(mean, scale, shape, rate)
-
 
 class JointIsotropicNormalGamma(ExponentialFamily):
     '''Set of Normal distributions sharing the same gamma prior over
@@ -234,7 +223,7 @@ class JointIsotropicNormalGamma(ExponentialFamily):
         Note: ""D" is the dimenion of "m", "k" is the number of Normal,
             and "psi" is the "digamma" function.
 
-.        '''
+.       '''
         dim = self.dim[0][1]
         precision = self.shape / self.rate
         logdet = torch.digamma(self.shape) - torch.log(self.rate)
