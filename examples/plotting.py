@@ -60,6 +60,8 @@ def plot_hmm(fig, hmm, n_std_dev=2, npoints=100, colors=None, **kwargs):
     if colors is None:
         colors = [None] * hmm.graph.n_states
     for comp, color in zip(hmm.modelset, colors):
+        if color is not None:
+            kwargs['color'] = color
         plot_normal(fig, comp.expected_mean.numpy(), comp.expected_cov.numpy(),
-                    n_std_dev, npoints, color=color, **kwargs)
+                    n_std_dev, npoints, **kwargs)
         
