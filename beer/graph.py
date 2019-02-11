@@ -259,6 +259,9 @@ class CompiledGraph(torch.nn.Module):
         self.register_buffer('trans_log_probs', trans_log_probs)
         self.pdf_id_mapping = pdf_id_mapping
 
+    def __repr__(self):
+        return '<CompiledGraph>'
+
     @property
     def n_states(self):
         'Total number of states in the graph.'

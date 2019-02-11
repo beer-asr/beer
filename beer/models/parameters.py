@@ -8,7 +8,7 @@ from ..dists import ExponentialFamily
 __all__ = ['BayesianParameter', 'BayesianParameterSet']
 
 
-@dataclass(init=False)
+@dataclass(init=False, repr=False)
 class BayesianParameter(torch.nn.Module):
     'Parameter which has a *prior* and a *posterior* distribution.'
 
@@ -24,6 +24,11 @@ class BayesianParameter(torch.nn.Module):
         stats = torch.zeros_like(self.prior.natural_parameters())
         self.register_buffer('_stats', stats)
         self._callbacks = set()
+
+    # We override the default repr provided by torch's modules to make
+    # the BEER model tree clearer.
+    def __repr__(self):
+        return '<BayesianParameter>'
 
     def __hash__(self):
         return hash(id(self))
@@ -93,6 +98,11 @@ class BayesianParameterSet(torch.nn.Module):
     def __init__(self, parameters):
         super().__init__()
         self.__parameters = torch.nn.ModuleList(parameters)
+
+    # We override the default repr provided by torch's modules to make
+    # the BEER model tree clearer.
+    def __repr__(self):
+        return '<BayesianParameterSet>'
 
     def __hash__(self):
         return hash(id(self))
