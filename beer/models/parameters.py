@@ -111,6 +111,8 @@ class BayesianParameterSet(torch.nn.Module):
         return len(self.__parameters)
 
     def __getitem__(self, key):
+        if not isinstance(key, int):
+            return self.__class__(self.__parameters[key])
         return self.__parameters[key]
 
     def expected_natural_parameters(self):

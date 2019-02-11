@@ -126,6 +126,11 @@ class NormalSetIsotropicCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with isotropic covariance matrix.'''
 
     def __getitem__(self, key):
+        if not isinstance(key, int):
+            prior = self.means_precisions[0].prior
+            posteriors = [bayes_param.posterior
+                          for bayes_param in self.means_precisions[key]]
+            return NormalSetIsotropicCovariance(prior, posteriors)
         bayes_param = self.means_precisions[key]
         prior, posterior = bayes_param.prior, bayes_param.posterior
         return NormalIsotropicCovariance(prior, posterior)
@@ -139,6 +144,11 @@ class NormalSetDiagonalCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with diagonal covariance matrix.'''
 
     def __getitem__(self, key):
+        if not isinstance(key, int):
+            prior = self.means_precisions[0].prior
+            posteriors = [bayes_param.posterior
+                          for bayes_param in self.means_precisions[key]]
+            return NormalSetDiagonalCovariance(prior, posteriors)
         bayes_param = self.means_precisions[key]
         prior, posterior = bayes_param.prior, bayes_param.posterior
         return NormalDiagonalCovariance(prior, posterior)
@@ -152,6 +162,11 @@ class NormalSetFullCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with full covariance matrix.'''
 
     def __getitem__(self, key):
+        if not isinstance(key, int):
+            prior = self.means_precisions[0].prior
+            posteriors = [bayes_param.posterior
+                          for bayes_param in self.means_precisions[key]]
+            return NormalSetFullCovariance(prior, posteriors)
         bayes_param = self.means_precisions[key]
         prior, posterior = bayes_param.prior, bayes_param.posterior
         return NormalFullCovariance(prior, posterior)
@@ -232,6 +247,24 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
 
     def __getitem__(self, key):
         prior = self.means_precision.prior
+        posterior = self.means_precision.posterior
+        if not isinstance(key, int):
+            params = prior.params.__class__(
+                means=prior.means[key],
+                scales=prior.scales[key],
+                shape=prior.shape,
+                rate=prior.rate
+            )
+            new_prior = JointIsotropicNormalGamma(params)
+            params = posterior.params.__class__(
+                means=posterior.means[key],
+                scales=posterior.scales[key],
+                shape=posterior.shape,
+                rate=posterior.rate
+            )
+            new_posterior = JointIsotropicNormalGamma(params)
+            return NormalSetSharedIsotropicCovariance(new_prior, new_posterior)
+
         params = IsotropicNormalGammaStdParams(
             mean=prior.means[key],
             scale=prior.scales[key],
@@ -240,7 +273,6 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
         )
         new_prior = IsotropicNormalGamma(params)
 
-        posterior = self.means_precision.posterior
         params = IsotropicNormalGammaStdParams(
             mean=posterior.means[key],
             scale=posterior.scales[key],
@@ -312,6 +344,24 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
 
     def __getitem__(self, key):
         prior = self.means_precision.prior
+        posterior = self.means_precision.posterior
+        if not isinstance(key, int):
+            params = prior.params.__class__(
+                means=prior.means[key],
+                scales=prior.scales[key],
+                shape=prior.shape,
+                rates=prior.rates
+            )
+            new_prior = JointNormalGamma(params)
+            params = posterior.params.__class__(
+                means=posterior.means[key],
+                scales=posterior.scales[key],
+                shape=posterior.shape,
+                rates=posterior.rates
+            )
+            new_posterior = JointNormalGamma(params)
+            return NormalSetSharedDiagonalCovariance(new_prior, new_posterior)
+
         params = NormalGammaStdParams(
             mean=prior.means[key],
             scale=prior.scales[key],
@@ -319,8 +369,6 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
             rates=prior.rates
         )
         new_prior = NormalGamma(params)
-
-        posterior = self.means_precision.posterior
         params = NormalGammaStdParams(
             mean=posterior.means[key],
             scale=posterior.scales[key],
@@ -395,6 +443,24 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
 
     def __getitem__(self, key):
         prior = self.means_precision.prior
+        posterior = self.means_precision.posterior
+        if not isinstance(key, int):
+            params = prior.params.__class__(
+                means=prior.means[key],
+                scales=prior.scales[key],
+                scale_matrix=prior.scale_matrix,
+                dof=prior.dof
+            )
+            new_prior = JointNormalWishart(params)
+            params = posterior.params.__class__(
+                means=posterior.means[key],
+                scales=posterior.scales[key],
+                scale_matrix=posterior.scale_matrix,
+                dof=posterior.dof
+            )
+            new_posterior = JointNormalWishart(params)
+            return NormalSetSharedFullCovariance(new_prior, new_posterior)
+
         params = NormalWishartStdParams(
             mean=prior.means[key],
             scale=prior.scales[key],
@@ -402,8 +468,6 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
             dof=prior.dof
         )
         new_prior = NormalWishart(params)
-
-        posterior = self.means_precision.posterior
         params = NormalWishartStdParams(
             mean=posterior.means[key],
             scale=posterior.scales[key],
