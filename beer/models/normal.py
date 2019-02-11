@@ -106,11 +106,11 @@ class NormalIsotropicCovariance(Normal):
 
     @classmethod
     def create(cls, mean, cov, prior_strength=1.):
-        variance = cov.diag().max()
+        variance = cov.diag().sum()
         dtype, device = mean.dtype, mean.device
         scale = torch.tensor(prior_strength, dtype=dtype, device=device)
         shape = torch.tensor(prior_strength, dtype=dtype, device=device)
-        rate =  prior_strength * variance
+        rate =  prior_strength / variance
         params = IsotropicNormalGammaStdParams(
             mean.clone().detach(),
             scale.clone().detach(),
