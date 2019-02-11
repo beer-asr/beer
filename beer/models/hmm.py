@@ -1,21 +1,15 @@
 
 import torch
-from .bayesmodel import DiscreteLatentBayesianModel
+from .basemodel import DiscreteLatentModel
 from .modelset import DynamicallyOrderedModelSet
-from .parameters import ConstantParameter
 from ..utils import onehot
 
 
-class HMM(DiscreteLatentBayesianModel):
-    ''' Hidden Markov Model.
+class HMM(DiscreteLatentModel):
+    'Hidden Markov Model with fixed transition probabilities.'
 
-    Attributes:
-        graph (:any:`CompiledGraph`): The (compiled) graph of the
-            dynamics of the HMM.
-        modelset (:any:`BayesianModelSet`): Set of emission densities.
-
-    '''
-
+    # The "create" function does nothing in particular but we add it
+    # anyway to fit other model constructin pattern.
     @classmethod
     def create(cls, graph, modelset):
         '''Create a :any:`HMM` model.
@@ -34,7 +28,7 @@ class HMM(DiscreteLatentBayesianModel):
 
     def __init__(self, graph, modelset):
         super().__init__(DynamicallyOrderedModelSet(modelset))
-        self.graph = ConstantParameter(graph)
+        self.graph = graph
 
     def _pc_llhs(self, stats, inference_graph):
         order = inference_graph.pdf_id_mapping
@@ -50,7 +44,7 @@ class HMM(DiscreteLatentBayesianModel):
             posts = onehot(path, inference_graph.n_states,
                            dtype=pc_llhs.dtype, device=pc_llhs.device)
             if trans_posteriors:
-                n_states = self.graph.value.n_states
+                n_states = self.graph.n_states
                 trans_posts = torch.zeros(len(pc_llhs) - 1, n_states, n_states)
                 for i, transition in enumerate(zip(path[:-1], path[1:])):
                     src, dest = transition
@@ -76,7 +70,7 @@ class HMM(DiscreteLatentBayesianModel):
     def expected_log_likelihood(self, stats, inference_graph=None,
                                 viterbi=True, state_path=None):
         if inference_graph is None:
-            inference_graph = self.graph.value
+            inference_graph = self.graph
         pc_llhs = self._pc_llhs(stats, inference_graph)
         resps, trans_resps = self._inference(pc_llhs, inference_graph,
                                              viterbi=viterbi,
@@ -84,7 +78,6 @@ class HMM(DiscreteLatentBayesianModel):
                                              trans_posteriors=True)
         exp_llh = (pc_llhs * resps).sum(dim=-1)
         self.cache['resps'] = resps
-        self.cache['trans_resps'] = trans_resps
 
         # We ignore the KL divergence term. It biases the
         # lower-bound (it may decrease) a little bit but will not affect
@@ -104,7 +97,7 @@ class HMM(DiscreteLatentBayesianModel):
 
     def decode(self, data, inference_graph=None):
         if inference_graph is None:
-            inference_graph = self.graph.value
+            inference_graph = self.graph
         stats = self.sufficient_statistics(data)
         pc_llhs = self._pc_llhs(stats, inference_graph)
         best_path = inference_graph.best_path(pc_llhs)
@@ -115,7 +108,7 @@ class HMM(DiscreteLatentBayesianModel):
 
     def posteriors(self, data, inference_graph=None):
         if inference_graph is None:
-            inference_graph = self.graph.value
+            inference_graph = self.graph
         stats = self.modelset.sufficient_statistics(data)
         pc_llhs = self._pc_llhs(stats, inference_graph)
         return self._inference(pc_llhs, inference_graph)

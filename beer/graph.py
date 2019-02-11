@@ -6,6 +6,10 @@ from typing import Set, Dict, TypeVar, Generic
 import torch
 from .utils import logsumexp
 
+__all__ = ['Graph']
+
+
+# Create some new type to use with the "dataclass" code generator.
 StateType = TypeVar('StateType')
 ArcType = TypeVar('ArcType')
 
@@ -236,8 +240,8 @@ class Graph:
                              trans_probs.log(), pdf_id_mapping)
 
 
-class CompiledGraph:
-    '''Inference graph for a HMM model.'''
+class CompiledGraph(torch.nn.Module):
+    'Inference graph for a HMM model.'
 
     def __init__(self, init_log_probs, final_log_probs, trans_log_probs,
                  pdf_id_mapping=None):
@@ -247,10 +251,12 @@ class CompiledGraph:
             final_log_probs (``torch.Tensor``): Final log probabilities.
             trans_log_probs (``torch.Tensor``): Transition log probabilities.
             pdf_id_mapping (list): Mapping of the pdf ids (optional)
+
         '''
-        self.init_log_probs = init_log_probs
-        self.final_log_probs = final_log_probs
-        self.trans_log_probs = trans_log_probs
+        super().__init__()
+        self.register_buffer('init_log_probs', init_log_probs)
+        self.register_buffer('final_log_probs', final_log_probs)
+        self.register_buffer('trans_log_probs', trans_log_probs)
         self.pdf_id_mapping = pdf_id_mapping
 
     @property
@@ -328,26 +334,5 @@ class CompiledGraph:
         path = [torch.argmax(omega + self.final_log_probs)]
         for i in reversed(range(1, len(llhs))):
             path.insert(0, backtrack[i, path[0]])
-        return torch.LongTensor(path)
-
-    def float(self):
-            return CompiledGraph(self.init_log_probs.float(),
-                                 self.final_log_probs.float(),
-                                 self.trans_log_probs.float(),
-                                 self.pdf_id_mapping)
-
-    def double(self):
-        return CompiledGraph(self.init_log_probs.double(),
-                                 self.final_log_probs.double(),
-                                 self.trans_log_probs.double(),
-                                 self.pdf_id_mapping)
-
-    def to(self, device):
-        return CompiledGraph(self.init_log_probs.to(device),
-                                 self.final_log_probs.to(device),
-                                 self.trans_log_probs.to(device),
-                                 self.pdf_id_mapping)
-
-
-__all__ = ['Graph']
+        return torch.LongTensor(path, device=llhs.device)
 

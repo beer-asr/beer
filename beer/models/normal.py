@@ -84,7 +84,7 @@ class Normal(Model):
         # Isotropic covariance matrix.
         dim = self.mean_precision.prior.dim[0]
         I = torch.eye(dim, dtype=precision.dtype, device=precision.device)
-        return precision * I
+        return (1. / precision) * I
 
     ####################################################################
 
@@ -106,11 +106,11 @@ class NormalIsotropicCovariance(Normal):
 
     @classmethod
     def create(cls, mean, cov, prior_strength=1.):
-        variance = cov.diag().sum()
+        variance = cov.diag().max()
         dtype, device = mean.dtype, mean.device
         scale = torch.tensor(prior_strength, dtype=dtype, device=device)
         shape = torch.tensor(prior_strength, dtype=dtype, device=device)
-        rate =  prior_strength / variance
+        rate =  prior_strength * variance
         params = IsotropicNormalGammaStdParams(
             mean.clone().detach(),
             scale.clone().detach(),

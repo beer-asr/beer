@@ -53,9 +53,11 @@ def plot_gmm(fig, gmm, n_std_dev=2, npoints=100, alpha=1., colors=None, **kwargs
         plot_normal(fig, comp.mean.numpy(), comp.cov.numpy(),
             n_std_dev, npoints, alpha=alpha * weight.numpy(), **kwargs)
 
-def plot_hmm(fig, hmm, n_std_dev=2, npoints=100, **kwargs):
+def plot_hmm(fig, hmm, n_std_dev=2, npoints=100, colors=None, **kwargs):
     'Plot a Normal density'
-    for comp in hmm.modelset:
-        plot_normal(fig, comp.mean.numpy(), comp.cov.numpy(),
-                    n_std_dev, npoints, **kwargs)
+    if colors is None:
+        colors = [None] * hmm.graph.n_states
+    for comp, color in zip(hmm.modelset, colors):
+        plot_normal(fig, comp.expected_mean.numpy(), comp.expected_cov.numpy(),
+                    n_std_dev, npoints, color=color, **kwargs)
         

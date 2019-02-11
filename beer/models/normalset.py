@@ -218,7 +218,7 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
         variance = cov.diag().max()
         scales = prior_strength * torch.ones(size, dtype=dtype, device=device)
         shape = torch.tensor(prior_strength, dtype=dtype, device=device)
-        rate = prior_strength / variance
+        rate = prior_strength * variance
         p_means = mean + torch.zeros(size, len(mean), dtype=dtype, device=device)
         means = mean +  noise_std * torch.randn(size, len(mean), dtype=dtype,
                                                 device=device)
