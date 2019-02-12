@@ -20,12 +20,13 @@ feaname=mfcc
 
 # AUD training
 # The number of epochs probably needs to be tuned to the final data.
-epochs=10
+epochs=30
 
 #######################################################################
 
 # Load the BEER anaconda environment.
 . path.sh
+
 
 # Create the directory structure.
 mkdir -p $datadir $expdir $feadir
@@ -49,11 +50,14 @@ steps/create_dataset.sh $datadir/$db/$dataset \
     $expdir/$db/datasets/${dataset}.pkl
 
 
-# AUD system training. You need to have Sun Grid Engine like cluster
+# AUD system training. You need to have a Sun Grid Engine like cluster
 # (i.e. qsub command) to run it. If you have a different
 # enviroment please see utils/parallel/sge/* to see how to adapt
 # this recipe to you system.
-steps/aud_parallel.sh conf/hmm.yml \
+steps/aud.sh \
+    --parallel-opts "-l mem_free=1G,ram_free=1G" \
+    --parallel-njobs 30 \
+    conf/hmm.yml \
     data/$db/train/uttids \
     $expdir/$db/datasets/${dataset}.pkl \
     $epochs $expdir/$db/aud
