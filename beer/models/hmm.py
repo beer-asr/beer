@@ -34,7 +34,7 @@ class HMM(DiscreteLatentModel):
         order = inference_graph.pdf_id_mapping
         return self.modelset.expected_log_likelihood(stats, order)
 
-    def _inference(self, pc_llhs, inference_graph, viterbi=True,
+    def _inference(self, pc_llhs, inference_graph, viterbi=False,
                    state_path=None, trans_posteriors=False):
         if viterbi or state_path is not None:
             if state_path is None:
@@ -78,6 +78,7 @@ class HMM(DiscreteLatentModel):
                                              trans_posteriors=True)
         exp_llh = (pc_llhs * resps).sum(dim=-1)
         self.cache['resps'] = resps
+        self.cache['trans_resps'] = trans_resps
 
         # We ignore the KL divergence term. It biases the
         # lower-bound (it may decrease) a little bit but will not affect

@@ -43,8 +43,12 @@ def main(args, logger):
             nutts += nutts_batch
         count += 1
 
+    # This step is necessary once the elbo object has been stored on
+    # disk.
+    logger.debug('synchronizing the ELBO and the optimizer')
+    elbo.sync(optimizer)
+
     logger.debug('computing the gradient')
-    elbo._model_parameters = set(optimizer._parameters)
     elbo.backward()
 
     logger.debug('updating the model')

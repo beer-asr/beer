@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
+import uuid
 import typing
 import torch
-from ..priors import ExpFamilyPrior
 from ..dists import ExponentialFamily
 
 
@@ -16,6 +16,7 @@ class BayesianParameter(torch.nn.Module):
     posterior: ExponentialFamily
     _stats: torch.Tensor = field(repr=False)
     _callbacks: typing.Set = field(repr=False)
+    _uuid: uuid.UUID = field(repr=False)
 
     def __init__(self, prior, posterior):
         super().__init__()
@@ -24,6 +25,7 @@ class BayesianParameter(torch.nn.Module):
         stats = torch.zeros_like(self.prior.natural_parameters())
         self.register_buffer('_stats', stats)
         self._callbacks = set()
+        self._uuid = uuid.uuid4()
 
     # We override the default repr provided by torch's modules to make
     # the BEER model tree clearer.
@@ -31,7 +33,12 @@ class BayesianParameter(torch.nn.Module):
         return '<BayesianParameter>'
 
     def __hash__(self):
-        return hash(id(self))
+        return hash(self._uuid)
+
+    def __eq__(self, other):
+        if other.__class__ is other.__class__:
+            return hash(self) == hash(other)
+        raise NotImplementedError
 
     def _dispatch(self):
         for callback in self._callbacks:

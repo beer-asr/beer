@@ -99,6 +99,15 @@ class EvidenceLowerBoundInstance:
             acc_stats = self._acc_stats[parameter]
             parameter.store_stats(scale * acc_stats)
 
+    def sync(self, vboptimizer):
+        '''If the ELBO was stored on disk and loaded again, it will lose
+        its handle on the parameters being optimized (backward() will be
+        effect less). This method re-connect the ELBO instance and the
+        parameters to optimize.
+
+        '''
+        self._model_parameters = set(vboptimizer._parameters)
+
 
 def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
                          fast_eval=False, **kwargs):

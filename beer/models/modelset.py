@@ -50,9 +50,7 @@ class JointModelSet(ModelSet):
         modelsets: (seq): list of model set.
         '''
         super().__init__()
-        self.modelsets = modelsets
-        for i, modelset in enumerate(self.modelsets):
-            self._register_submodel('smodel' + str(i), modelset)
+        self.modelsets = torch.nn.ModuleList(modelsets)
 
     ####################################################################
     # BayesianModel interface.

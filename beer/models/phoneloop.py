@@ -1,8 +1,8 @@
 
 import torch
 from .hmm import HMM
-from .bayesmodel import BayesianParameter
-from ..priors import DirichletPrior
+from .parameters import BayesianParameter
+from ..dists import Dirichlet, DirichletStdParams
 from ..utils import logsumexp
 
 
@@ -13,9 +13,10 @@ class PhoneLoop(HMM):
     def create(cls, graph, start_pdf, end_pdf, modelset, weights=None,
                prior_strength=1.0):
         'Create a :any:`PhoneLoop` model.'
-        mf_groups = modelset.mean_field_factorization()
-        prior_nparams = mf_groups[0][0].prior.natural_parameters
-        dtype, device = prior_nparams.dtype, prior_nparams.device
+        # We look at one parameter to check the type of the model.
+        bayes_param = modelset.mean_field_factorization()[0][0]
+        tensor = bayes_param.prior.natural_parameters()
+        dtype, device = tensor.dtype, tensor.device
 
         if weights is None:
             weights = torch.ones(len(start_pdf), dtype=dtype, device=device)
@@ -23,8 +24,10 @@ class PhoneLoop(HMM):
         else:
             weights = torch.tensor(weights, dtype=dtype, device=device,
                                    requires_grad=False)
-        prior_weights = DirichletPrior(prior_strength * weights)
-        posterior_weights = DirichletPrior(prior_strength * weights)
+        params = DirichletStdParams(prior_strength * weights)
+        prior_weights = Dirichlet(params)
+        params = DirichletStdParams(prior_strength * weights)
+        posterior_weights = Dirichlet(params)
         return cls(graph, modelset, start_pdf, end_pdf, prior_weights,
                    posterior_weights)
 
@@ -41,7 +44,7 @@ class PhoneLoop(HMM):
         log_weights = self.weights.expected_natural_parameters()
         start_idxs = [value for value in self.start_pdf.values()]
         for end_idx in self.end_pdf.values():
-            self.graph.value.trans_log_probs[end_idx, start_idxs] = log_weights
+            self.graph.trans_log_probs[end_idx, start_idxs] = log_weights
 
     ####################################################################
     # BayesianModel interface.

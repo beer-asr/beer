@@ -10,7 +10,6 @@ from ..utils import logsumexp
 __all__ = ['MixtureSet']
 
 
-MixtureSetElement = namedtuple('MixtureSetElement', ['weights', 'modelset'])
 
 class MixtureSet(ModelSet):
     '''Set of mixture models, each of them having the same number of

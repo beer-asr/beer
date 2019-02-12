@@ -63,10 +63,14 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
     def __init__(self, params):
         super().__init__()
         self.params = params
-        for param_name, param_doc in self._std_params_def.items():
-            _check_params_have_attr(params, param_name)
-            getter = lambda self, name=param_name: getattr(self.params, name)
-            setattr(self.__class__, param_name, property(getter, doc=param_doc))
+
+    def __getattr__(self, attr):
+        if attr in self._std_params_def:
+            return getattr(self.params, attr)
+
+        # Just to raise the error with the proper message.
+        return super().__getattr__(attr)
+        #return self.__getattribute__(attr)
 
     def __eq__(self, other):
         if self.__class__ is other.__class__:
