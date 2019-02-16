@@ -13,21 +13,20 @@ PIVOT_SYM = '#1'
 
 
 def setup(parser):
-    parser.add_argument('-s', '--sil-prefix', action='store_true',
-                        help='prefix for the silence phones')
-    parser.add_argument('phone_list', help='list of phones files or "-" '\
-                        'for stdin')
+    parser.add_argument('-s', '--start-end-group',
+                        help='the phone loop start and end by this "group"')
+    parser.add_argument('units', help='list of units to build and their ' \
+                                      'corresponding group')
     parser.add_argument('out', help='output phone-loop graph')
 
 
 def main(args, logger):
-    logger.debug('loading the phone list...')
-    if args.phone_list == '-':
-        infile = sys.stdin
-    else:
-        with open(args.phone_list, 'r') as f:
-            infile = f.readlines()
-    phones = [line.strip() for line in infile]
+    logger.debug(f'load the acoustic units name and group')
+    with open(args.units, 'r') as f:
+        units = []
+        for line in f:
+            name, group = line.strip().split()
+            units.append((name, group))
 
     logger.debug('create the graph')
     graph = beer.graph.Graph()
@@ -37,45 +36,41 @@ def main(args, logger):
     graph.end_state = graph.add_state()
     pivot_state = graph.add_state()
 
-    logger.debug('create the states and the phone2state/state2phone mapping')
-    phone2state = {
+    logger.debug('create the states and the unit2state/state2unit mapping')
+    unit2state = {
         START_SYM: graph.start_state,
         END_SYM: graph.end_state,
         PIVOT_SYM: pivot_state
     }
-    phone2state.update({phone: graph.add_state() for phone in phones})
-    state2phone = {state:phone for phone, state in phone2state.items()}
+    unit2state.update({name: graph.add_state() for name, _ in units})
+    state2unit = {state: unit for unit, state in unit2state.items()}
 
-
-    if args.sil_prefix:
-        logger.debug(f'using "{args.sil_prefix}*" phones as start/end states')
-        starting_phones = []
-        ending_phones = []
-        for phone in phones:
-            if phone.startswith(args.sil_prefix):
-                starting_phones.append(phone)
-                ending_phones.append(phone)
+    if args.start_end_group:
+        logger.debug(f'using "{args.start_end_group}" group to start/end the phone-loop')
+        start_end_units = []
+        for name, group in units:
+            if group == args.start_end_group:
+                start_end_units.append(name)
     else:
-        starting_phones = [state2phone[pivot_state]]
-        ending_phones = [state2phone[pivot_state]]
+        start_end_units = [state2unit[pivot_state]]
 
     logger.debug('add the arcs to the graph')
-    for phone in starting_phones:
+    for unit in start_end_units:
         src = graph.start_state
-        dest = phone2state[phone]
+        dest = unit2state[unit]
         graph.add_arc(src, dest)
-    for phone in ending_phones:
-        src = phone2state[phone]
+    for unit in start_end_units:
+        src = unit2state[unit]
         dest = graph.end_state
         graph.add_arc(src, dest)
-    for phone in phones:
+    for unit, _ in units:
         src = pivot_state
-        dest = phone2state[phone]
+        dest = unit2state[unit]
         graph.add_arc(src, dest)
-        src = phone2state[phone]
+        src = unit2state[unit]
         dest = pivot_state
         graph.add_arc(src, dest)
-    graph.symbols = state2phone
+    graph.symbols = state2unit
 
 
     logger.debug('normalize the transitions')
@@ -88,7 +83,7 @@ def main(args, logger):
     logger.info('created phone-loop graph. ' \
                 f'# states: {len(list(graph.states()))} ' \
                 f'# arcs: {len(list(graph.arcs()))} ' \
-                f'silence phone prefix: {args.sil_prefix}')
+                f'start/end group: {args.start_end_group}')
 
 
 if __name__ == "__main__":

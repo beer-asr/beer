@@ -11,29 +11,38 @@ import torch
 
 from .parameters import BayesianParameter
 from .parameters import BayesianParameterSet
-from .modelset import BayesianModelSet
+from .modelset import ModelSet
 from .normal import Normal
 from .normal import NormalIsotropicCovariance
 from .normal import NormalDiagonalCovariance
 from .normal import NormalFullCovariance
-from ..priors import IsotropicNormalGammaPrior
-from ..priors import JointIsotropicNormalGammaPrior
-from ..priors import NormalGammaPrior
-from ..priors import JointNormalGammaPrior
-from ..priors import NormalWishartPrior
-from ..priors import JointNormalWishartPrior
+from ..dists import IsotropicNormalGamma
+from ..dists import IsotropicNormalGammaStdParams
+from ..dists import JointIsotropicNormalGamma
+from ..dists import JointIsotropicNormalGammaStdParams
+from ..dists import NormalGamma
+from ..dists import NormalGammaStdParams
+from ..dists import JointNormalGamma
+from ..dists import JointNormalGammaStdParams
+from ..dists import NormalWishart
+from ..dists import NormalWishartStdParams
+from ..dists import JointNormalWishart
+from ..dists import JointNormalWishartStdParams
+
+
+__all__ = ['NormalSet']
 
 
 NormalSetElement = namedtuple('NormalSetElement', ['mean', 'cov'])
 
 
-class NormalSet(BayesianModelSet, metaclass=abc.ABCMeta):
+class NormalSet(ModelSet, metaclass=abc.ABCMeta):
     '''Set of Normal models.'''
 
     @staticmethod
     def create(mean, cov, size, prior_strength=1, noise_std=1.,
                cov_type='full', shared_cov=False):
-        cov = torch.tensor(cov)
+        cov = cov.clone().detach()
         if len(cov.shape) <= 1:
             std_dev = cov.sqrt()
         else:
@@ -49,19 +58,6 @@ class NormalSet(BayesianModelSet, metaclass=abc.ABCMeta):
                                                        noise_std * std_dev,
                                                        cov_type)
 
-    @property
-    @abc.abstractmethod
-    def dim(self):
-        pass
-
-    @abc.abstractmethod
-    def __getitem__(self, key):
-        pass
-
-    @abc.abstractmethod
-    def __len__(self):
-        pass
-
 
 ########################################################################
 # Normal set with no shared covariance matrix.
@@ -70,13 +66,15 @@ class NormalSet(BayesianModelSet, metaclass=abc.ABCMeta):
 class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
 
     @staticmethod
-    def create(mean, cov, size, prior_strength=1, noise_std=1., cov_type='full'):
+    def create(mean, cov, size, prior_strength=1, noise_std=1.,
+               cov_type='full'):
         normal = Normal.create(mean, cov, prior_strength, cov_type)
         prior = normal.mean_precision.prior
         posteriors = []
         dtype, device = mean.dtype, mean.device
         for i in range(size):
-            noise = noise_std * torch.randn(len(mean), dtype=dtype, device=device)
+            noise = noise_std * torch.randn(len(mean), dtype=dtype,
+                                            device=device)
             normal = Normal.create(mean + noise, cov, prior_strength, cov_type)
             posteriors.append(normal.mean_precision.posterior)
 
@@ -97,94 +95,85 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
             for post in posteriors
         ])
 
+    ####################################################################
+    # ModelSet interface.
+    ####################################################################
+
     def __len__(self):
         return len(self.means_precisions)
 
-    @property
-    def dim(self):
-        return len(self.means_precisions[0].expected_value()[0])
+    # __getitem__ should be implemented by subclasses as the type of
+    # the return value will depend on the concrete class.
+
+    ####################################################################
+    # Model interface.
+    ####################################################################
 
     def mean_field_factorization(self):
         return [[*self.means_precisions]]
 
     def expected_log_likelihood(self, stats):
         nparams = self.means_precisions.expected_natural_parameters()
-        return stats @ nparams.t() - .5 * self.dim * math.log(2 * math.pi)
-
-    def marginal_log_likelihood(self, stats):
-        m_llhs = []
-        for model in self.means_precisions:
-            post = mean_precision.posterior
-            m_llhs.append(post.log_norm(post.natural_parameters + stats) \
-                         - post.log_norm())
-        return torch.cat(m_llhs, dim=-1)
+        dim = self.means_precisions[0].prior.dim[0]
+        return stats @ nparams.t() - .5 * dim * math.log(2 * math.pi)
 
     def accumulate(self, stats, weights):
-        return dict(zip(self.means_precisions, torch.tensor(weights.t() @ stats)))
+        w_stats = weights.t() @ stats
+        return dict(zip(self.means_precisions, w_stats))
 
 
 class NormalSetIsotropicCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with isotropic covariance matrix.'''
 
     def __getitem__(self, key):
-        mean, precision = self.means_precisions[key].expected_value()
-        dtype, device = precision.dtype, precision.device
-        cov = torch.eye(self.dim, dtype=dtype, device=device) / precision
-        return NormalSetElement(mean=mean, cov=cov)
+        if not isinstance(key, int):
+            prior = self.means_precisions[0].prior
+            posteriors = [bayes_param.posterior
+                          for bayes_param in self.means_precisions[key]]
+            return NormalSetIsotropicCovariance(prior, posteriors)
+        bayes_param = self.means_precisions[key]
+        prior, posterior = bayes_param.prior, bayes_param.posterior
+        return NormalIsotropicCovariance(prior, posterior)
 
     @staticmethod
     def sufficient_statistics(data):
         return NormalIsotropicCovariance.sufficient_statistics(data)
-
-    def marginal_log_likelihood(self, stats):
-        m_llhs = []
-        for param in self.means_precisions:
-            cls = NormalIsotropicCovariance
-            c_m_llhs = cls._marginal_log_likelihood(param.posterior, stats)
-            m_llhs.append(c_m_llhs.view(-1, 1))
-        return torch.cat(m_llhs, dim=-1)
 
 
 class NormalSetDiagonalCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with diagonal covariance matrix.'''
 
     def __getitem__(self, key):
-        mean, precision = self.means_precisions[key].expected_value()
-        cov =  (1. / precision).diag()
-        return NormalSetElement(mean=mean, cov=cov)
+        if not isinstance(key, int):
+            prior = self.means_precisions[0].prior
+            posteriors = [bayes_param.posterior
+                          for bayes_param in self.means_precisions[key]]
+            return NormalSetDiagonalCovariance(prior, posteriors)
+        bayes_param = self.means_precisions[key]
+        prior, posterior = bayes_param.prior, bayes_param.posterior
+        return NormalDiagonalCovariance(prior, posterior)
 
     @staticmethod
     def sufficient_statistics(data):
         return NormalDiagonalCovariance.sufficient_statistics(data)
-
-    def marginal_log_likelihood(self, stats):
-        m_llhs = []
-        for param in self.means_precisions:
-            cls = NormalDiagonalCovariance
-            c_m_llhs = cls._marginal_log_likelihood(param.posterior, stats)
-            m_llhs.append(c_m_llhs.view(-1, 1))
-        return torch.cat(m_llhs, dim=-1)
 
 
 class NormalSetFullCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with full covariance matrix.'''
 
     def __getitem__(self, key):
-        mean, precision = self.means_precisions[key].expected_value()
-        cov =  precision.inverse()
-        return NormalSetElement(mean=mean, cov=cov)
+        if not isinstance(key, int):
+            prior = self.means_precisions[0].prior
+            posteriors = [bayes_param.posterior
+                          for bayes_param in self.means_precisions[key]]
+            return NormalSetFullCovariance(prior, posteriors)
+        bayes_param = self.means_precisions[key]
+        prior, posterior = bayes_param.prior, bayes_param.posterior
+        return NormalFullCovariance(prior, posterior)
 
     @staticmethod
     def sufficient_statistics(data):
         return NormalFullCovariance.sufficient_statistics(data)
-
-    def marginal_log_likelihood(self, stats):
-        m_llhs = []
-        for param in self.means_precisions:
-            cls = NormalFullCovariance
-            c_m_llhs = cls._marginal_log_likelihood(param.posterior, stats)
-            m_llhs.append(c_m_llhs.view(-1, 1))
-        return torch.cat(m_llhs, dim=-1)
 
 
 ########################################################################
@@ -226,70 +215,80 @@ class NormalSetSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
         self.means_precision = BayesianParameter(prior, posterior)
 
     def __len__(self):
-        means, _ = self.means_precision.expected_value()
-        return means.shape[0]
-
-    @property
-    def dim(self):
-        means, _ = self.means_precision.expected_value()
-        return means.shape[1]
+        return self.means_precision.prior.dim[0][0]
 
     def mean_field_factorization(self):
         return [[self.means_precision]]
-
-    def marginal_log_likelihood(self, stats):
-        joint_nparams = self.means_precision.posterior.natural_parameters
-        np1, np2 = self._split_natural_parameters(joint_nparams)
-        np1 = torch.ones(len(np2), 1, dtype=np1.dtype,
-                         device=np1.device) * np1.view(1, -1)
-        nparams1 = torch.cat([
-            np1[:, :-1],
-            np2,
-            np1[:, -1].view(-1, 1)
-        ], dim=1)[None]
-
-        new_stats = torch.cat([
-            stats[:, :int(self.dim ** 2)],
-            stats[:, int(self.dim ** 2):-1] / len(self),
-            stats[:, -1].view(-1, 1)
-        ], dim=-1)
-        nparams2 = new_stats[:, None, :] + nparams1
-        post = self.means_precision.posterior
-        return post.joint_log_norm(nparams2) - post.joint_log_norm(nparams1)
 
 
 class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
     '''Set of Normal density models with a shared isotropic covariance
     matrix.
+
     '''
 
     @classmethod
     def create(cls, mean, cov, size, prior_strength=1, noise_std=1.):
         dtype, device = mean.dtype, mean.device
         variance = cov.diag().max()
-        scales = torch.ones(size, dtype=dtype, device=device)
-        scales *= prior_strength
+        scales = prior_strength * torch.ones(size, dtype=dtype, device=device)
         shape = torch.tensor(prior_strength, dtype=dtype, device=device)
-        rate = torch.tensor(prior_strength * variance, dtype=dtype,
-                            device=device)
+        rate = prior_strength * variance
         p_means = mean + torch.zeros(size, len(mean), dtype=dtype, device=device)
         means = mean +  noise_std * torch.randn(size, len(mean), dtype=dtype,
                                                 device=device)
-        prior = JointIsotropicNormalGammaPrior(p_means, scales, shape, rate)
-        posterior = JointIsotropicNormalGammaPrior(means, scales, shape, rate)
+        params = JointIsotropicNormalGammaStdParams(
+            p_means, scales, shape, rate)
+        prior = JointIsotropicNormalGamma(params)
+        params = JointIsotropicNormalGammaStdParams(
+            means, scales, shape, rate)
+        posterior = JointIsotropicNormalGamma(params)
         return cls(prior, posterior)
 
     def __getitem__(self, key):
-        means, precision = self.means_precision.expected_value()
-        dtype, device = precision.dtype, precision.device
-        cov = torch.eye(self.dim, dtype=dtype, device=device) / precision
-        return NormalSetElement(mean=means[key], cov=cov)
+        prior = self.means_precision.prior
+        posterior = self.means_precision.posterior
+        if not isinstance(key, int):
+            params = prior.params.__class__(
+                means=prior.means[key],
+                scales=prior.scales[key],
+                shape=prior.shape,
+                rate=prior.rate
+            )
+            new_prior = JointIsotropicNormalGamma(params)
+            params = posterior.params.__class__(
+                means=posterior.means[key],
+                scales=posterior.scales[key],
+                shape=posterior.shape,
+                rate=posterior.rate
+            )
+            new_posterior = JointIsotropicNormalGamma(params)
+            return NormalSetSharedIsotropicCovariance(new_prior, new_posterior)
+
+        params = IsotropicNormalGammaStdParams(
+            mean=prior.means[key],
+            scale=prior.scales[key],
+            shape=prior.shape,
+            rate=prior.rate
+        )
+        new_prior = IsotropicNormalGamma(params)
+
+        params = IsotropicNormalGammaStdParams(
+            mean=posterior.means[key],
+            scale=posterior.scales[key],
+            shape=posterior.shape,
+            rate=posterior.rate
+        )
+        new_posterior = IsotropicNormalGamma(params)
+        return NormalIsotropicCovariance(new_prior, new_posterior)
 
     def _split_natural_parameters(self, nparams):
-        nparams1 = nparams[[0, -1]]
+        dim = self.means_precision.prior.dim[0][1]
+        ncomp = len(self)
+        nparams1 = nparams[[ncomp * dim, -1]]
         nparams2 = torch.cat([
-            nparams[1:self.dim * len(self) + 1].view(len(self), self.dim),
-            nparams[-(len(self) + 1):-1].reshape(-1, 1)
+            nparams[:dim * ncomp].reshape(ncomp, dim),
+            nparams[-(ncomp + 1):-1].reshape(-1, 1)
         ], dim=-1)
         return nparams1, nparams2
 
@@ -298,36 +297,32 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
         return NormalIsotropicCovariance.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats):
-        stats1, stats2 = stats[:, (0, -1)], stats[:, 1:-1]
+        dim = self.means_precision.prior.dim[0][1]
+        stats1 = stats[:, [dim, -1]]
+        stats2 = torch.cat([stats[:, :dim], stats[:, -2:-1]], dim=-1)
         nparams = self.means_precision.expected_natural_parameters()
         nparams1, nparams2 = self._split_natural_parameters(nparams)
         exp_llhs = (stats1 @ nparams1)[:, None] + stats2 @ nparams2.t()
-        exp_llhs -= .5 * self.dim * math.log(2 * math.pi)
+        exp_llhs -= .5 * dim * math.log(2 * math.pi)
         return exp_llhs
 
-    def marginal_log_likelihood(self, stats):
-        m_llhs = []
-        for mean_precision in self.means_precisions:
-            post = mean_precision.posterior
-            m_llhs.append(post.log_norm(post.natural_parameters + stats) \
-                         - post.log_norm())
-        return torch.cat(m_llhs, dim=-1)
-
     def accumulate(self, stats, resps):
+        dim = self.means_precision.prior.dim[0][1]
         dtype, device = stats.dtype, stats.device
         w_stats = resps.t() @ stats
         acc_stats = torch.cat([
-            w_stats[:, 0].sum().view(1),
-            w_stats[:, 1: 1 + self.dim].contiguous().view(-1),
-            w_stats[:, -2].view(-1),
+            w_stats[:, :dim].reshape(-1),
+            w_stats[:, dim].sum().view(1),
+            w_stats[:, -2].reshape(-1),
             w_stats[:, -1].sum().view(1)
         ], dim=0)
-        return {self.means_precision: torch.tensor(acc_stats)}
+        return {self.means_precision: acc_stats}
 
 
 class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
     '''Set of Normal density models with a shared full covariance
     matrix.
+
     '''
 
     @classmethod
@@ -341,26 +336,61 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
         p_means = mean + torch.zeros(size, len(mean), dtype=dtype, device=device)
         means = mean +  noise_std * torch.randn(size, len(mean), dtype=dtype,
                                                 device=device)
-        prior = JointNormalGammaPrior(p_means, scales, shape, rates)
-        posterior = JointNormalGammaPrior(means, scales, shape, rates)
+        params = JointNormalGammaStdParams(p_means, scales, shape, rates)
+        prior = JointNormalGamma(params)
+        params = JointNormalGammaStdParams(means, scales, shape, rates)
+        posterior = JointNormalGamma(params)
         return cls(prior, posterior)
 
     def __getitem__(self, key):
-        means, precision = self.means_precision.expected_value()
-        cov = (1 / precision).diag()
-        return NormalSetElement(mean=means[key], cov=cov)
+        prior = self.means_precision.prior
+        posterior = self.means_precision.posterior
+        if not isinstance(key, int):
+            params = prior.params.__class__(
+                means=prior.means[key],
+                scales=prior.scales[key],
+                shape=prior.shape,
+                rates=prior.rates
+            )
+            new_prior = JointNormalGamma(params)
+            params = posterior.params.__class__(
+                means=posterior.means[key],
+                scales=posterior.scales[key],
+                shape=posterior.shape,
+                rates=posterior.rates
+            )
+            new_posterior = JointNormalGamma(params)
+            return NormalSetSharedDiagonalCovariance(new_prior, new_posterior)
+
+        params = NormalGammaStdParams(
+            mean=prior.means[key],
+            scale=prior.scales[key],
+            shape=prior.shape,
+            rates=prior.rates
+        )
+        new_prior = NormalGamma(params)
+        params = NormalGammaStdParams(
+            mean=posterior.means[key],
+            scale=posterior.scales[key],
+            shape=posterior.shape,
+            rates=posterior.rates
+        )
+        new_posterior = NormalGamma(params)
+        return NormalDiagonalCovariance(new_prior, new_posterior)
 
     def _split_stats(self, stats):
-        stats1 = torch.cat([stats[:,:self.dim], stats[:,-1].view(-1, 1)], dim=-1)
-        stats2 = stats[:, self.dim:-1]
+        dim = self.means_precision.prior.dim[0][1]
+        stats1 = torch.cat([stats[:, dim:2 * dim],
+                            stats[:, -1].reshape(-1, 1)], dim=-1)
+        stats2 = torch.cat([stats[:, :dim], stats[:, -2:-1]], dim=-1)
         return stats1, stats2
 
     def _split_natural_parameters(self, nparams):
-        nparams1 = torch.cat([nparams[:self.dim], nparams[-1].view(1)], dim=-1)
-        nparams2 = torch.cat([
-            nparams[self.dim:self.dim * len(self) + self.dim].view(len(self), self.dim),
-            nparams[-(len(self) + 1):-1].reshape(-1, 1)
-        ], dim=-1)
+        ncomp, dim = self.means_precision.prior.dim[0]
+        nparams1 = torch.cat([nparams[dim * ncomp:dim * (ncomp + 1)],
+                              nparams[-1].view(1)], dim=-1)
+        nparams2 = torch.cat([nparams[:dim * ncomp].reshape(ncomp, dim),
+                              nparams[-(ncomp + 1):-1].reshape(-1, 1)], dim=-1)
         return nparams1, nparams2
 
     @staticmethod
@@ -368,22 +398,24 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
         return NormalDiagonalCovariance.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats):
+        dim = self.means_precision.prior.dim[0][1]
         stats1, stats2 = self._split_stats(stats)
         nparams = self.means_precision.expected_natural_parameters()
         nparams1, nparams2 = self._split_natural_parameters(nparams)
         exp_llhs = (stats1 @ nparams1)[:, None] + stats2 @ nparams2.t()
-        exp_llhs -= .5 * self.dim * math.log(2 * math.pi)
+        exp_llhs -= .5 * dim * math.log(2 * math.pi)
         return exp_llhs
 
     def accumulate(self, stats, resps):
+        dim = self.means_precision.prior.dim[0][1]
         w_stats = resps.t() @ stats
         acc_stats = torch.cat([
-            w_stats[:, :self.dim].sum(dim=0),
-            w_stats[:, self.dim: 2 * self.dim].contiguous().view(-1),
-            w_stats[:, -2].view(-1),
-            w_stats[:, -1].sum().view(1)
+            w_stats[:, :dim].reshape(-1),
+            w_stats[:, dim: 2 * dim].sum(dim=0),
+            w_stats[:, -2].reshape(-1),
+            w_stats[:, -1].sum().reshape(1)
         ], dim=0)
-        return {self.means_precision: torch.tensor(acc_stats)}
+        return {self.means_precision: acc_stats}
 
 
 class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
@@ -402,27 +434,64 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
         p_means = mean + torch.zeros(size, len(mean), dtype=dtype, device=device)
         means = mean +  noise_std * torch.randn(size, len(mean), dtype=dtype,
                                                 device=device)
-        prior = JointNormalWishartPrior(p_means, scales, scale_matrix, dof)
-        posterior = JointNormalWishartPrior(means, scales, scale_matrix, dof)
+        params = JointNormalWishartStdParams(p_means, scales, scale_matrix,
+                                             dof)
+        prior = JointNormalWishart(params)
+        params = JointNormalWishartStdParams(means, scales, scale_matrix, dof)
+        posterior = JointNormalWishart(params)
         return cls(prior, posterior)
 
     def __getitem__(self, key):
-        means, precision = self.means_precision.expected_value()
-        cov = precision.inverse()
-        return NormalSetElement(mean=means[key], cov=cov)
+        prior = self.means_precision.prior
+        posterior = self.means_precision.posterior
+        if not isinstance(key, int):
+            params = prior.params.__class__(
+                means=prior.means[key],
+                scales=prior.scales[key],
+                scale_matrix=prior.scale_matrix,
+                dof=prior.dof
+            )
+            new_prior = JointNormalWishart(params)
+            params = posterior.params.__class__(
+                means=posterior.means[key],
+                scales=posterior.scales[key],
+                scale_matrix=posterior.scale_matrix,
+                dof=posterior.dof
+            )
+            new_posterior = JointNormalWishart(params)
+            return NormalSetSharedFullCovariance(new_prior, new_posterior)
+
+        params = NormalWishartStdParams(
+            mean=prior.means[key],
+            scale=prior.scales[key],
+            scale_matrix=prior.scale_matrix,
+            dof=prior.dof
+        )
+        new_prior = NormalWishart(params)
+        params = NormalWishartStdParams(
+            mean=posterior.means[key],
+            scale=posterior.scales[key],
+            scale_matrix=posterior.scale_matrix,
+            dof=posterior.dof
+        )
+        new_posterior = NormalWishart(params)
+        return NormalFullCovariance(new_prior, new_posterior)
 
     def _split_stats(self, stats):
-        stats1 = torch.cat([stats[:,:self.dim ** 2], stats[:,-1].view(-1, 1)], dim=-1)
-        stats2 = stats[:, self.dim**2:-1]
+        dim = self.means_precision.prior.dim[0][1]
+        stats1 = torch.cat([stats[:, dim:dim + dim**2],
+                            stats[:,-1].reshape(-1, 1)], dim=-1)
+        stats2 = torch.cat([stats[:, :dim], stats[:, -2:-1]], dim=-1)
         return stats1, stats2
 
     def _split_natural_parameters(self, nparams):
-        nparams1 = torch.cat([nparams[:self.dim**2], nparams[-1].view(1)], dim=-1)
-        start = self.dim**2
-        end = start + len(self) * self.dim
+        ncomp, dim = self.means_precision.prior.dim[0]
+        nparams1 = torch.cat([
+            nparams[ncomp * dim:ncomp * dim + dim**2],
+            nparams[-1].view(1)], dim=-1)
         nparams2 = torch.cat([
-            nparams[start:end].view(len(self), self.dim),
-            nparams[-(len(self) + 1):-1].reshape(-1, 1)
+            nparams[:ncomp * dim].reshape(ncomp, dim),
+            nparams[-(ncomp + 1):-1].reshape(-1, 1)
         ], dim=-1)
         return nparams1, nparams2
 
@@ -431,22 +500,22 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
         return NormalFullCovariance.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats):
+        dim = self.means_precision.prior.dim[0][1]
         stats1, stats2 = self._split_stats(stats)
         nparams = self.means_precision.expected_natural_parameters()
         nparams1, nparams2 = self._split_natural_parameters(nparams)
         exp_llhs = (stats1 @ nparams1)[:, None] + stats2 @ nparams2.t()
-        exp_llhs -= .5 * self.dim * math.log(2 * math.pi)
+        exp_llhs -= .5 * dim * math.log(2 * math.pi)
         return exp_llhs
 
     def accumulate(self, stats, resps):
+        dim = self.means_precision.prior.dim[0][1]
         w_stats = resps.t() @ stats
         acc_stats = torch.cat([
-            w_stats[:, :self.dim**2].sum(dim=0),
-            w_stats[:, self.dim**2: self.dim + (self.dim**2)].contiguous().view(-1),
-            w_stats[:, -2].view(-1),
+            w_stats[:, :dim ].reshape(-1),
+            w_stats[:, dim:dim + dim**2].sum(dim=0),
+            w_stats[:, -2].reshape(-1),
             w_stats[:, -1].sum().view(1)
         ], dim=0)
-        return {self.means_precision: torch.tensor(acc_stats)}
+        return {self.means_precision: acc_stats}
 
-
-__all__ = ['NormalSet']

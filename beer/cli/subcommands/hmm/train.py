@@ -1,5 +1,5 @@
 
-'train a HMM based model'
+'train a HMM based model on a single machine (alternative to "accumulate" and "update" commands)'
 
 import argparse
 import pickle

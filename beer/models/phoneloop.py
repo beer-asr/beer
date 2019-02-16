@@ -1,8 +1,8 @@
 
 import torch
 from .hmm import HMM
-from .bayesmodel import BayesianParameter
-from ..priors import DirichletPrior
+from .parameters import BayesianParameter
+from ..dists import Dirichlet, DirichletStdParams
 from ..utils import logsumexp
 
 
@@ -13,9 +13,10 @@ class PhoneLoop(HMM):
     def create(cls, graph, start_pdf, end_pdf, modelset, weights=None,
                prior_strength=1.0):
         'Create a :any:`PhoneLoop` model.'
-        mf_groups = modelset.mean_field_factorization()
-        prior_nparams = mf_groups[0][0].prior.natural_parameters
-        dtype, device = prior_nparams.dtype, prior_nparams.device
+        # We look at one parameter to check the type of the model.
+        bayes_param = modelset.mean_field_factorization()[0][0]
+        tensor = bayes_param.prior.natural_parameters()
+        dtype, device = tensor.dtype, tensor.device
 
         if weights is None:
             weights = torch.ones(len(start_pdf), dtype=dtype, device=device)
@@ -23,8 +24,10 @@ class PhoneLoop(HMM):
         else:
             weights = torch.tensor(weights, dtype=dtype, device=device,
                                    requires_grad=False)
-        prior_weights = DirichletPrior(prior_strength * weights)
-        posterior_weights = DirichletPrior(prior_strength * weights)
+        params = DirichletStdParams(prior_strength * weights)
+        prior_weights = Dirichlet(params)
+        params = DirichletStdParams(prior_strength * weights)
+        posterior_weights = Dirichlet(params)
         return cls(graph, modelset, start_pdf, end_pdf, prior_weights,
                    posterior_weights)
 
@@ -41,7 +44,7 @@ class PhoneLoop(HMM):
         log_weights = self.weights.expected_natural_parameters()
         start_idxs = [value for value in self.start_pdf.values()]
         for end_idx in self.end_pdf.values():
-            self.graph.value.trans_log_probs[end_idx, start_idxs] = log_weights
+            self.graph.trans_log_probs[end_idx, start_idxs] = log_weights
 
     ####################################################################
     # BayesianModel interface.
@@ -54,13 +57,21 @@ class PhoneLoop(HMM):
 
     def accumulate(self, stats, parent_msg=None):
         retval = super().accumulate(stats, parent_msg)
-        trans_resps = self.cache['trans_resps'].sum(dim=0)
-        start_idxs = [value for value in self.start_pdf.values()]
-        end_idxs = [value for value in self.end_pdf.values()]
-        phone_resps = trans_resps[:, start_idxs]
-        phone_resps = phone_resps[end_idxs, :].sum(dim=0)
-        phone_resps += self.cache['resps'][0][start_idxs]
-        retval.update({self.weights: phone_resps})
+
+        # If the phone loop is trained with forced alignments, we don't
+        # train the transitions.
+        if 'trans_resps' in self.cache:
+            trans_resps = self.cache['trans_resps'].sum(dim=0)
+            start_idxs = [value for value in self.start_pdf.values()]
+            end_idxs = [value for value in self.end_pdf.values()]
+            phone_resps = trans_resps[:, start_idxs]
+            phone_resps = phone_resps[end_idxs, :].sum(dim=0)
+            phone_resps += self.cache['resps'][0][start_idxs]
+            retval.update({self.weights: phone_resps})
+        else:
+            nparams = self.weights.posterior.natural_parameters()
+            fake_stats = torch.zeros_like(nparams, requires_grad=False)
+            retval.update({self.weights: fake_stats})
         return retval
 
 

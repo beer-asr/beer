@@ -11,10 +11,12 @@ import beer
 
 
 def setup(parser):
-    parser.add_argument('-u', '--utts',
-                        help='decode the given utterances ("-") for stdin')
     parser.add_argument('--per-frame', action='store_true',
                         help='output the per-frame transcription')
+    parser.add_argument('-s', '--acoustic-scale', default=1., type=float,
+                        help='scaling factor of the acoustic model')
+    parser.add_argument('-u', '--utts',
+                        help='decode the given utterances ("-") for stdin')
     parser.add_argument('model', help='hmm based model')
     parser.add_argument('dataset', help='training data set')
 
@@ -56,7 +58,10 @@ def main(args, logger):
     for uttname in utts:
         utt = dataset[uttname]
         logger.debug(f'processing utterance: {utt.id}')
-        path_ids = [int(unit) for unit in model.decode(utt.features)]
+        path_ids = [
+            int(unit)
+            for unit in model.decode(utt.features, scale=args.acoustic_scale)
+        ]
         phones = state2phone(path_ids, model.start_pdf, args.per_frame)
         print(utt.id, ' '.join(phones))
         count += 1

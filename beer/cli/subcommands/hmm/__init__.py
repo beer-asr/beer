@@ -2,6 +2,7 @@
 
 from . import accumulate
 from . import decode
+from . import mkaligraph
 from . import mkdecodegraph
 from . import mkphoneloop
 from . import mkphoneloopgraph
@@ -11,8 +12,8 @@ from . import phonelist
 from . import train
 from . import update
 
-cmds = [accumulate, decode, mkdecodegraph, mkphoneloop, mkphoneloopgraph,
-        mkphones, optimizer, phonelist, train, update]
+cmds = [accumulate, decode, mkaligraph, mkdecodegraph, mkphoneloop,
+        mkphoneloopgraph, mkphones, optimizer, phonelist, train, update]
 
 def setup(parser):
     subparsers = parser.add_subparsers(title='possible commands', metavar='<cmd>')

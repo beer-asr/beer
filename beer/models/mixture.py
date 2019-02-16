@@ -2,14 +2,17 @@
 'Bayesian Mixture model.'
 
 import torch
-from .bayesmodel import DiscreteLatentBayesianModel
-from .bayesmodel import BayesianParameter
-from ..priors import DirichletPrior
+from .basemodel import DiscreteLatentModel
+from .parameters import BayesianParameter
+from ..dists import Dirichlet, DirichletStdParams
 from ..utils import onehot
 from ..utils import logsumexp
 
 
-class Mixture(DiscreteLatentBayesianModel):
+__all__ = ['Mixture']
+
+
+class Mixture(DiscreteLatentModel):
     '''Bayesian Mixture Model.'''
 
     @classmethod
@@ -27,7 +30,7 @@ class Mixture(DiscreteLatentBayesianModel):
 
         '''
         mf_groups = modelset.mean_field_factorization()
-        prior_nparams = mf_groups[0][0].prior.natural_parameters
+        prior_nparams = mf_groups[0][0].prior.natural_parameters()
         dtype, device = prior_nparams.dtype, prior_nparams.device
 
         if weights is None:
@@ -36,8 +39,10 @@ class Mixture(DiscreteLatentBayesianModel):
         else:
             weights = torch.tensor(weights, dtype=dtype, device=device,
                                    requires_grad=False)
-        prior_weights = DirichletPrior(prior_strength * weights)
-        posterior_weights = DirichletPrior(prior_strength * weights)
+        params = DirichletStdParams(prior_strength * weights)
+        prior_weights = Dirichlet(params)
+        params = DirichletStdParams(prior_strength * weights)
+        posterior_weights = Dirichlet(params)
         return cls(prior_weights, posterior_weights, modelset)
 
     def __init__(self, prior_weights, posterior_weights, modelset):
@@ -83,44 +88,21 @@ class Mixture(DiscreteLatentBayesianModel):
             log_resps = w_per_component_exp_llh.detach() - w_exp_llh.view(-1, 1)
             local_kl_div = self._local_kl_divergence(log_resps, log_weights)
             resps = log_resps.exp()
+            exp_llh = w_exp_llh
         else:
-            local_kl_div = 0
             resps = onehot(labels, len(self.modelset),
                             dtype=log_weights.dtype, device=log_weights.device)
-        exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
+            exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
 
         # Store the responsibilites to accumulate the statistics.
         self.cache['resps'] = resps
 
-        return exp_llh - local_kl_div
-
-    def marginal_log_likelihood(self, stats, labels=None, **kwargs):
-        # Per-components weighted log-likelihood.
-        log_weights = self.weights.expected_value().view(1, -1).log()
-        pc_llh = self.modelset.marginal_log_likelihood(stats, **kwargs)
-
-        # Responsibilities and expected llh.
-        if labels is None:
-            w_per_component_exp_llh = (pc_llh + log_weights).detach()
-            w_exp_llh = logsumexp(w_per_component_exp_llh, dim=1).view(-1)
-            log_resps = w_per_component_exp_llh.detach() - w_exp_llh.view(-1, 1)
-            local_kl_div = self._local_kl_divergence(log_resps, log_weights)
-            resps = log_resps.exp()
-        else:
-            local_kl_div = 0
-            resps = onehot(labels, len(self.modelset), dtype=log_weights.dtype,
-                           device=log_weights.device)
-        m_llh = (pc_llh * resps).sum(dim=-1)
-
-        # Store the responsibilites to accumulate the statistics.
-        self.cache['resps'] = resps
-
-        return m_llh - local_kl_div
+        return exp_llh
 
     def accumulate(self, stats):
         resps = self.cache['resps']
         retval = {
-            self.weights: torch.tensor(resps.sum(dim=0)),
+            self.weights: resps.sum(dim=0),
             **self.modelset.accumulate(stats, resps)
         }
         return retval
@@ -139,12 +121,3 @@ class Mixture(DiscreteLatentBayesianModel):
         lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
         return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
 
-    def marginal_posteriors(self, data):
-        stats = self.modelset.sufficient_statistics(data)
-        per_component_exp_llh = self.modelset.marginal_log_likelihood(stats)
-        per_component_exp_llh += self.weights.expected_value().view(1, -1).log()
-        lognorm = logsumexp(per_component_exp_llh, dim=1).view(-1)
-        return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
-
-
-__all__ = ['Mixture']

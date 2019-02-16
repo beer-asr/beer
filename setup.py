@@ -15,7 +15,7 @@ setup(
     version=1.0,
     packages=[
         'beer',
-        'beer.priors',
+        'beer.dists',
         'beer.models',
         'beer.nnet',
         'beer.inference',

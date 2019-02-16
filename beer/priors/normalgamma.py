@@ -204,3 +204,4 @@ class JointNormalGammaPrior(ExpFamilyPrior):
 
 
 __all__ = ['NormalGammaPrior', 'JointNormalGammaPrior']
+

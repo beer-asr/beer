@@ -1,7 +1,7 @@
-
 'create a set of left-to-right HMM representing "phones"'
 
 import argparse
+from collections import defaultdict
 import pickle
 
 import torch
@@ -67,6 +67,7 @@ def setup(parser):
     group.add_argument('-D', '--dimension', type=int,
                         help='dimension of features for the pdf')
     parser.add_argument('conf', help='configuration file')
+    parser.add_argument('units', help='list of units to build and their corresponding group')
     parser.add_argument('out', help='output phone HMMs')
 
 
@@ -74,12 +75,20 @@ def main(args, logger):
     logger.debug(f'reading configuration file: {args.conf}')
     with open(args.conf, 'r') as f:
         conf = yaml.load(f)
+    groups_conf = {group_conf['group_name']: group_conf for group_conf in conf}
+
+    logger.debug(f'load the acoustic units name and group')
+    with open(args.units, 'r') as f:
+        grouped_unitnames = defaultdict(list)
+        for line in f:
+            name, group = line.strip().split()
+            grouped_unitnames[group].append(name)
 
     if not args.dataset:
         logger.debug('no dataset provided assuming zero mean and ' \
                      'identity covariance matrix')
-        mean, var = torch.zeros(args.dim).float(), \
-                    torch.ones(args.dim).float()
+        mean, var = torch.zeros(args.dimension).float(), \
+                    torch.ones(args.dimension).float()
     else:
         logger.debug(f'using "{args.dataset}" dataset for ' \
                      'initialization')
@@ -90,19 +99,17 @@ def main(args, logger):
     start_pdf_id = 0
     pdfs = []
     units = {}
-    for unit_group in conf:
-        prefix = unit_group['group_name']
-
-        logger.debug(f'creating HMM for group "{prefix}"')
-
+    for group in grouped_unitnames:
+        logger.debug(f'creating HMM for group "{group}"')
         tot_emitting_states = 0
-        for i in range(1, unit_group['n_units'] + 1):
-            unit_name = prefix + str(i)
-            graph, start_pdf_id = create_unit_graph(unit_group['topology'],
+        for name in grouped_unitnames[group]:
+            logger.debug(f'creating HMM for unit "{name}"')
+            group_conf = groups_conf[group]
+            graph, start_pdf_id = create_unit_graph(group_conf['topology'],
                                                     start_pdf_id)
-            units[unit_name] = graph
+            units[name] = graph
             tot_emitting_states += count_emitting_state(graph)
-        pdfs.append(create_pdfs(mean, var, tot_emitting_states, unit_group))
+        pdfs.append(create_pdfs(mean, var, tot_emitting_states, group_conf))
     emissions = beer.JointModelSet(pdfs)
 
     logger.debug('saving the HMMs on disk...')

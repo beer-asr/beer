@@ -1,5 +1,5 @@
 
-'create the decoding graph'
+'combine a set of HMMs with a phone-loop graph'
 
 import argparse
 import pickle
