@@ -25,3 +25,11 @@ utils/parallel/split.sh $list $njobs $outdir/split
 utils/parallel/$parallel_env/parallel.sh $name "$opts" $outdir/split "$cmd" \
     $outdir/log 2>&1 > $outdir/log/parallel.log
 
+# Check if something went wrong.
+nerrors=$(cat $outdir/log/* | grep ERROR | wc -l)
+nwarnings=$(cat $outdir/log/* | grep WARNING | wc -l)
+if [ ! "$nwarnings" = "0" ] || [ ! "$nerrors" = "0" ]; then
+    echo "<!> parallel jobs finished with $nwarnings warnings and $nerrors" \
+         "errors (see $outdir/log/*) <!>"
+fi
+

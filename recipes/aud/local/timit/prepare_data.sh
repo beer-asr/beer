@@ -8,6 +8,8 @@
 # This is a slightly adapted version of the original Kaldi script.
 #
 
+set -e
+
 # JHU
 #rootdir=/export/corpora5/LDC/LDC93S1/timit/TIMIT
 
@@ -97,6 +99,11 @@ for x in train dev test; do
      paste $tmpdir/${x}_phn.uttids $tmpdir/${x}_phn.trans \
          | sort -k1,1 > $dir/${x}.trans
 
+    # Do normalization steps.
+    cat $dir/${x}.trans | python $conf/timit-norm-trans.py \
+        --map-60-48  $conf/phones.60-48-39.map \
+        | sort > $dir/${x}.text || exit 1;
+
     # Create wav.scp
     awk '{printf("%s sph2pipe -f wav %s |\n", $1, $2);}' < $dir/${x}_sph.scp \
         > $dir/${x}_wav.scp
@@ -107,7 +114,13 @@ for x in train dev test; do
     mkdir -p $outdir/${x}
     cp $dir/$x.uttids $outdir/$x/uttids
     cp $dir/${x}_wav.scp $outdir/$x/wavs.scp
+    cp $dir/${x}.text $outdir/$x/trans
 done
+
+
+mkdir -p $outdir/lang
+python $conf/timit_lang_prep.py $outdir/lang "$conf/phones.60-48-39.map"
+
 
 date > $outdir/.done
 echo "Data preparation succeeded"

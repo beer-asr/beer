@@ -16,11 +16,11 @@ db=timit
 dataset=train
 
 # Features
-feaname=mfcc
+feaname=mbn_babel
 
-# AUD training
-# The number of epochs probably needs to be tuned to the final data.
-epochs=30
+# AUD
+nunits=100      # maximum number of discovered units
+epochs=30       # number of training epochs
 
 #######################################################################
 
@@ -35,6 +35,18 @@ mkdir -p $datadir $expdir $feadir
 echo "--> Preparing data for the $db database"
 local/$db/prepare_data.sh $datadir/$db
 
+echo "--> Preparing pseudo-phones \"language\" information"
+mkdir -p data/$db/lang_aud
+
+# The option "non-speech-unit" will force the decoder to start and end
+# each utterance by a specific acoustic unit named "sil". The
+# unit can also be freely decoded within the utterance. If your data
+# is not well segmented and you are not sure that most of your data
+# start and end with non-speech sound you better remove this option.
+python utils/prepare_lang_aud.py \
+    --non-speech-unit \
+    $nunits > data/$db/lang_aud/units
+
 
 echo "--> Extracting features for the $db database"
 steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$dataset \
@@ -47,7 +59,7 @@ steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$dataset \
 echo "--> Creating dataset(s) for $db database"
 steps/create_dataset.sh $datadir/$db/$dataset \
     $feadir/$db/$dataset/${feaname}.npz \
-    $expdir/$db/datasets/${dataset}.pkl
+    $expdir/$db/datasets/$feaname/${dataset}.pkl
 
 
 # AUD system training. You need to have a Sun Grid Engine like cluster
@@ -58,7 +70,8 @@ steps/aud.sh \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
     conf/hmm.yml \
-    data/$db/train/uttids \
-    $expdir/$db/datasets/${dataset}.pkl \
+    data/$db/lang_aud \
+    data/$db/$dataset/uttids \
+    $expdir/$db/datasets/$feaname/${dataset}.pkl \
     $epochs $expdir/$db/aud
 

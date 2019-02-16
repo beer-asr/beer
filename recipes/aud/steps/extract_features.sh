@@ -28,7 +28,7 @@ if [ ! -f $feadir/${feaname}.npz ]; then
 
     # We don't need the original features anymore as they are stored in
     # the archive.
-    rm -fr $feadir/${feanaame}_tmp
+    rm -fr $feadir/${feaname}_tmp
 else
     echo "Features already extracted ($feadir/${feaname}.npz). Skipping."
 fi

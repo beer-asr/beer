@@ -57,13 +57,21 @@ class PhoneLoop(HMM):
 
     def accumulate(self, stats, parent_msg=None):
         retval = super().accumulate(stats, parent_msg)
-        trans_resps = self.cache['trans_resps'].sum(dim=0)
-        start_idxs = [value for value in self.start_pdf.values()]
-        end_idxs = [value for value in self.end_pdf.values()]
-        phone_resps = trans_resps[:, start_idxs]
-        phone_resps = phone_resps[end_idxs, :].sum(dim=0)
-        phone_resps += self.cache['resps'][0][start_idxs]
-        retval.update({self.weights: phone_resps})
+
+        # If the phone loop is trained with forced alignments, we don't
+        # train the transitions.
+        if 'trans_resps' in self.cache:
+            trans_resps = self.cache['trans_resps'].sum(dim=0)
+            start_idxs = [value for value in self.start_pdf.values()]
+            end_idxs = [value for value in self.end_pdf.values()]
+            phone_resps = trans_resps[:, start_idxs]
+            phone_resps = phone_resps[end_idxs, :].sum(dim=0)
+            phone_resps += self.cache['resps'][0][start_idxs]
+            retval.update({self.weights: phone_resps})
+        else:
+            nparams = self.weights.posterior.natural_parameters()
+            fake_stats = torch.zeros_like(nparams, requires_grad=False)
+            retval.update({self.weights: fake_stats})
         return retval
 
 
