@@ -1,8 +1,9 @@
 import abc
+from functools import reduce
 import torch
 from ..dists import kl_div
 
-__all__ = ['Model', 'DiscreteLatentModel']
+__all__ = ['Model', 'DiscreteLatentModel', 'svectors_from_rvectors']
 
 
 class Model(torch.nn.Module, metaclass=abc.ABCMeta):
@@ -39,6 +40,23 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
         '''
         return sum([kl_div(param.posterior, param.prior)
                     for param in self.bayesian_parameters()])
+
+    def svector_dim(self):
+        'Dimension of the model\'s super-vector of parameters.'
+        dim = 1
+        return sum([
+            param.posterior.conjugate_sufficient_statistics_dim
+            for param in self.bayesian_parameters()
+        ])
+                
+    def accumulated_statistics(self):
+        'Accumulated statistics as a vector for all Bayesian parameters.'
+        acc_stats = []
+        for param in self.bayesian_parameters():
+            post_nparams = param.posterior.natural_parameters()
+            prior_nparams = param.prior.natural_parameters()
+            acc_stats.append(post_nparams - prior_nparams)
+        return torch.cat(acc_stats)
 
     ####################################################################
     # Abstract methods to be implemented by subclasses.
@@ -112,6 +130,7 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
 
         '''
         pass
+    
 
 
 class DiscreteLatentModel(Model, metaclass=abc.ABCMeta):
@@ -142,3 +161,15 @@ class DiscreteLatentModel(Model, metaclass=abc.ABCMeta):
         '''
         pass
 
+
+def svectors_from_rvectors(model, rvecs):
+    'Map a set of real value vectors to the super-vector space.'
+    retval = []
+    idx = 0
+    for param in model.bayesian_parameters():
+        pdf = param.posterior
+        dim = pdf.conjugate_sufficient_statistics_dim
+        stats = pdf.sufficient_statistics_from_rvectors(rvecs[:, idx:idx + dim])
+        retval.append(stats)
+        idx += dim
+    return torch.cat(retval, dim=-1)

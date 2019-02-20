@@ -63,7 +63,11 @@ class NormalGamma(ExponentialFamily):
         dimension of the joint Gamma densities.
 
         '''
-        return (len(self.mean), len(self.mean))
+        return (len(self.params.mean), len(self.params.mean))
+
+    @property
+    def conjugate_sufficient_statistics_dim(self):
+        return 2 * len(self.params.mean)
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -94,25 +98,26 @@ class NormalGamma(ExponentialFamily):
             and "psi" is the "digamma" function.
 
         '''
-        diag_precision = self.shape / self.rates
-        logdet = torch.sum(torch.digamma(self.shape) - torch.log(self.rates))
+        diag_precision = self.params.shape / self.params.rates
+        logdet = torch.sum(torch.digamma(self.params.shape) \
+                - torch.log(self.params.rates))
         return torch.cat([
-            diag_precision * self.mean,
+            diag_precision * self.params.mean,
             diag_precision,
-            ((self.dim[0] / self.scale) + \
-                (diag_precision * self.mean**2).sum()).reshape(1),
+            ((self.dim[0] / self.params.scale) + \
+                (diag_precision * self.params.mean**2).sum()).reshape(1),
             logdet.reshape(1)
         ])
 
     def expected_value(self):
         'Expected mean and expected (diagonal) precision matrix.'
-        return self.mean, self.shape / self.rates
+        return self.params.mean, self.params.shape / self.params.rates
 
     def log_norm(self):
         dim = self.dim[0]
-        return dim * torch.lgamma(self.shape) \
-            - self.shape * self.rates.log().sum(dim=-1) \
-            - .5 * dim * self.scale.log()
+        return dim * torch.lgamma(self.params.shape) \
+            - self.params.shape * self.params.rates.log().sum(dim=-1) \
+            - .5 * dim * self.params.scale.log()
 
     # TODO
     def sample(self, nsamples):
@@ -139,14 +144,32 @@ class NormalGamma(ExponentialFamily):
 
         '''
         return torch.cat([
-            self.scale * self.mean,
-            -.5 * self.scale * self.mean**2 - self.rates,
-            -.5 * self.scale.reshape(1),
-            self.shape.reshape(1) - .5,
+            self.params.scale * self.params.mean,
+            -.5 * self.params.scale * self.params.mean**2 - self.params.rates,
+            -.5 * self.params.scale.reshape(1),
+            self.params.shape.reshape(1) - .5,
         ])
 
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
+
+    def sufficient_statistics_from_rvectors(self, rvecs):
+        '''
+        Real vector z = (x, y)
+        \mu = x
+        \sigma^2 = \exp(y)
+
+        '''
+        dim = self.dim[0]
+        mean = rvecs[:, :dim]
+        log_precision = rvecs[:, dim:]
+        precision = torch.exp(log_precision)
+        return torch.cat([
+            precision * mean,
+            precision,
+            torch.sum(precision * (mean ** 2), dim=-1)[:, None],
+            torch.sum(log_precision, dim=-1)[:, None]
+        ], dim=-1)
 
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
@@ -196,7 +219,12 @@ class JointNormalGamma(ExponentialFamily):
         and D is the dimension of their support.
 
         '''
-        return (tuple(self.means.shape), self.means.shape[-1])
+        return (tuple(self.params.means.shape), self.params.means.shape[-1])
+
+    @property
+    def conjugate_sufficient_statistics_dim(self):
+        dim = self.dim
+        return dim[0][0] * dim[0][1] + dim[1]
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -230,25 +258,27 @@ class JointNormalGamma(ExponentialFamily):
 
 .       '''
         dim = self.dim[1]
-        diag_precision = self.shape / self.rates
-        logdet = torch.sum(torch.digamma(self.shape) - torch.log(self.rates))
+        diag_precision = self.params.shape / self.params.rates
+        logdet = torch.sum(torch.digamma(self.params.shape) \
+                - torch.log(self.params.rates))
         return torch.cat([
-            (diag_precision[None] * self.means).reshape(-1),
+            (diag_precision[None] * self.params.means).reshape(-1),
             diag_precision,
-            ((dim / self.scales) + torch.sum(diag_precision[None] * self.means**2,
-                                             dim=-1)).reshape(-1),
+            ((dim / self.params.scales) \
+                    + torch.sum(diag_precision[None] * self.params.means**2,
+                                dim=-1)).reshape(-1),
             logdet.view(1)
         ])
 
     def expected_value(self):
         'Expected means and expected diagonal of the precision matrix.'
-        return self.means, self.shape / self.rates
+        return self.params.means, self.params.shape / self.params.rates
 
     def log_norm(self):
         dim = self.dim[1]
-        return dim * torch.lgamma(self.shape) \
-            - self.shape * self.rates.log().sum() \
-            - .5 * dim * self.scales.log().sum()
+        return dim * torch.lgamma(self.params.shape) \
+            - self.params.shape * self.params.rates.log().sum() \
+            - .5 * dim * self.params.scales.log().sum()
 
     # TODO
     def sample(self, nsamples):
@@ -257,14 +287,31 @@ class JointNormalGamma(ExponentialFamily):
     def natural_parameters(self):
         ncomp = self.dim[0][0]
         return torch.cat([
-            (self.scales[:, None] * self.means).view(-1),
-            -.5 * (self.scales[:, None] * self.means**2).sum(dim=0) \
-                - self.rates,
-            -.5 * self.scales.view(-1),
-            self.shape.view(1) - 1. + .5 * ncomp
+            (self.params.scales[:, None] * self.params.means).view(-1),
+            -.5 * (self.params.scales[:, None] * self.params.means**2).sum(dim=0) \
+                - self.params.rates,
+            -.5 * self.params.scales.view(-1),
+            self.params.shape.view(1) - 1. + .5 * ncomp
         ])
 
     def update_from_natural_parameters(self, natural_params):
         ncomp = self.dim[0][0]
         self.params = self.params.from_natural_parameters(natural_params, ncomp)
 
+    def sufficient_statistics_from_rvectors(self, rvecs):
+        '''
+        Real vector z = (x, y)
+        \mu = x
+        \sigma^2 = \exp(y)
+
+        '''
+        k, dim = self.dim[0]
+        means = rvecs[:, :k * dim].reshape(-1, k, dim)
+        log_precision = rvecs[:, k * dim:]
+        precision = torch.exp(log_precision)
+        return torch.cat([
+            (means * precision[:, None, :]).reshape(-1, k * dim),
+            precision,
+            torch.sum((means ** 2) * precision[:, None, :], dim=-1),
+            torch.sum(log_precision, dim=-1)[:, None]
+        ], dim=-1)

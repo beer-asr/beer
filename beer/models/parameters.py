@@ -30,7 +30,9 @@ class BayesianParameter(torch.nn.Module):
     # We override the default repr provided by torch's modules to make
     # the BEER model tree clearer.
     def __repr__(self):
-        return '<BayesianParameter>'
+        prior_name = self.prior.__class__.__qualname__
+        post_name = self.posterior.__class__.__qualname__
+        return f'<BayesianParameter(prior={prior_name}, posterior={post_name})>'
 
     def __hash__(self):
         return hash(self._uuid)
@@ -99,28 +101,11 @@ class BayesianParameter(torch.nn.Module):
 
 
 @dataclass(init=False)
-class BayesianParameterSet(torch.nn.Module):
+class BayesianParameterSet(torch.nn.ModuleList):
     '''Set of Bayesian parameters.'''
-
-    def __init__(self, parameters):
-        super().__init__()
-        self.__parameters = torch.nn.ModuleList(parameters)
-
-    # We override the default repr provided by torch's modules to make
-    # the BEER model tree clearer.
-    def __repr__(self):
-        return '<BayesianParameterSet>'
 
     def __hash__(self):
         return hash(id(self))
-
-    def __len__(self):
-        return len(self.__parameters)
-
-    def __getitem__(self, key):
-        if not isinstance(key, int):
-            return self.__class__(self.__parameters[key])
-        return self.__parameters[key]
 
     def expected_natural_parameters(self):
         '''Expected value of the natural form of the parameters w.r.t.
@@ -130,6 +115,8 @@ class BayesianParameterSet(torch.nn.Module):
             ``torch.Tensor[k,dim`` where k is the number of elements of
                 the set.
         '''
-        return torch.cat([param.expected_natural_parameters().view(1, -1)
-                          for param in self.__parameters], dim=0)
+        return torch.cat([
+            param.posterior.expected_sufficient_statistics().view(1, -1)
+            for param in self], 
+        dim=0)
 

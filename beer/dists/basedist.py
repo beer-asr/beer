@@ -64,14 +64,6 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
         super().__init__()
         self.params = params
 
-    def __getattr__(self, attr):
-        if attr in self._std_params_def:
-            return getattr(self.params, attr)
-
-        # Just to raise the error with the proper message.
-        return super().__getattr__(attr)
-        #return self.__getattribute__(attr)
-
     def __eq__(self, other):
         if self.__class__ is other.__class__:
             for param_name in self._std_params_def:
@@ -112,6 +104,12 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
         'Dimension of the support.'
         pass
 
+    @property
+    @abc.abstractmethod
+    def conjugate_sufficient_statistics_dim(self):
+        'Dimension of the sufficient statistics of the conjugate pdf.'
+        pass
+
     @abc.abstractmethod
     def expected_sufficient_statistics(self):
         'Expectation of the sufficient statistics.'
@@ -142,6 +140,22 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
         'Uptate the parameters given the new natural parameters.'
         pass
 
+    @abc.abstractmethod
+    def sufficient_statistics_from_rvectors(self, rvecs):
+        '''Transform real value vectors into "equivalent" sufficient
+        statistics using a default mapping (distribution dependent).
+
+        Args:
+            rvecs (``torch.Tensor[N,D]``): Real value vectors of 
+                dimenion D = self.conjugate_stats_dim
+        
+        Returns:
+            stats (``torch.Tensor[N,Q]``): Equivalent sufficient 
+                statistics.
+
+        '''
+        pass    
+
 
 def kl_div(pdf1, pdf2):
     '''KL-divergence between two exponential family members of the same
@@ -164,4 +178,3 @@ def kl_div(pdf1, pdf2):
     lnorm1 = pdf1.log_norm()
     lnorm2 = pdf2.log_norm()
     return lnorm2 - lnorm1 - exp_stats @ (nparams2 - nparams1)
-

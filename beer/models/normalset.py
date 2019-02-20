@@ -33,9 +33,6 @@ from ..dists import JointNormalWishartStdParams
 __all__ = ['NormalSet']
 
 
-NormalSetElement = namedtuple('NormalSetElement', ['mean', 'cov'])
-
-
 class NormalSet(ModelSet, metaclass=abc.ABCMeta):
     '''Set of Normal models.'''
 
@@ -157,6 +154,38 @@ class NormalSetDiagonalCovariance(NormalSetNonSharedCovariance):
     def sufficient_statistics(data):
         return NormalDiagonalCovariance.sufficient_statistics(data)
 
+    ####################################################################
+    # Super-Vector representation interface.
+    ####################################################################
+
+    def svector_dim(self):
+        return (len(self), self.means_precisions[0].prior.dim[0] * 2)
+
+    def svector_acc_stats(self):
+        acc_stats = []
+        for param in self.means_precisions:
+            acc_stats.append((param.posterior.natural_parameters() 
+                             - param.prior.natural_parameters())[None])
+        return torch.cat(acc_stats, dim=0)
+    
+    def svectors_from_rvectors(self, rvectors):
+        dim = self.means_precisions[0].prior.dim[0]
+        reshaped_rvectors = rvectors.reshape(len(rvectors), len(self), -1)
+        mean = reshaped_rvectors[:, :, :dim]
+        log_precision = reshaped_rvectors[:, :, dim:]
+        precision = torch.exp(reshaped_rvectors[:, :, dim:])
+        return torch.cat([
+            precision * mean,
+            precision,
+            torch.sum(precision * (mean ** 2), dim=-1)[:, :, None],
+            torch.sum(log_precision, dim=-1)[:, :, None]
+        ], dim=-1)
+
+    def svector_log_likelihood(self, svectors, acc_stats):
+        dim = self.means_precisions[0].prior.dim[0]
+        log_base_measure = - .5 * dim * math.log(2 * math.pi)
+        return torch.sum(svectors * acc_stats, dim=-1) + log_base_measure
+
 
 class NormalSetFullCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with full covariance matrix.'''
@@ -250,34 +279,34 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
         posterior = self.means_precision.posterior
         if not isinstance(key, int):
             params = prior.params.__class__(
-                means=prior.means[key],
-                scales=prior.scales[key],
-                shape=prior.shape,
-                rate=prior.rate
+                means=prior.params.means[key],
+                scales=prior.params.scales[key],
+                shape=prior.params.shape,
+                rate=prior.params.rate
             )
             new_prior = JointIsotropicNormalGamma(params)
             params = posterior.params.__class__(
-                means=posterior.means[key],
-                scales=posterior.scales[key],
-                shape=posterior.shape,
-                rate=posterior.rate
+                means=posterior.params.means[key],
+                scales=posterior.params.scales[key],
+                shape=posterior.params.shape,
+                rate=posterior.params.rate
             )
             new_posterior = JointIsotropicNormalGamma(params)
             return NormalSetSharedIsotropicCovariance(new_prior, new_posterior)
 
         params = IsotropicNormalGammaStdParams(
-            mean=prior.means[key],
-            scale=prior.scales[key],
-            shape=prior.shape,
-            rate=prior.rate
+            mean=prior.params.means[key],
+            scale=prior.params.scales[key],
+            shape=prior.params.shape,
+            rate=prior.params.rate
         )
         new_prior = IsotropicNormalGamma(params)
 
         params = IsotropicNormalGammaStdParams(
-            mean=posterior.means[key],
-            scale=posterior.scales[key],
-            shape=posterior.shape,
-            rate=posterior.rate
+            mean=posterior.params.means[key],
+            scale=posterior.params.scales[key],
+            shape=posterior.params.shape,
+            rate=posterior.params.rate
         )
         new_posterior = IsotropicNormalGamma(params)
         return NormalIsotropicCovariance(new_prior, new_posterior)
@@ -347,33 +376,33 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
         posterior = self.means_precision.posterior
         if not isinstance(key, int):
             params = prior.params.__class__(
-                means=prior.means[key],
-                scales=prior.scales[key],
-                shape=prior.shape,
-                rates=prior.rates
+                means=prior.params.means[key],
+                scales=prior.params.scales[key],
+                shape=prior.params.shape,
+                rates=prior.params.rates
             )
             new_prior = JointNormalGamma(params)
             params = posterior.params.__class__(
-                means=posterior.means[key],
-                scales=posterior.scales[key],
-                shape=posterior.shape,
-                rates=posterior.rates
+                means=posterior.params.means[key],
+                scales=posterior.params.scales[key],
+                shape=posterior.params.shape,
+                rates=posterior.params.rates
             )
             new_posterior = JointNormalGamma(params)
             return NormalSetSharedDiagonalCovariance(new_prior, new_posterior)
 
         params = NormalGammaStdParams(
-            mean=prior.means[key],
-            scale=prior.scales[key],
-            shape=prior.shape,
-            rates=prior.rates
+            mean=prior.params.means[key],
+            scale=prior.params.scales[key],
+            shape=prior.params.shape,
+            rates=prior.params.rates
         )
         new_prior = NormalGamma(params)
         params = NormalGammaStdParams(
-            mean=posterior.means[key],
-            scale=posterior.scales[key],
-            shape=posterior.shape,
-            rates=posterior.rates
+            mean=posterior.params.means[key],
+            scale=posterior.params.scales[key],
+            shape=posterior.params.shape,
+            rates=posterior.params.rates
         )
         new_posterior = NormalGamma(params)
         return NormalDiagonalCovariance(new_prior, new_posterior)
@@ -446,33 +475,33 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
         posterior = self.means_precision.posterior
         if not isinstance(key, int):
             params = prior.params.__class__(
-                means=prior.means[key],
-                scales=prior.scales[key],
-                scale_matrix=prior.scale_matrix,
-                dof=prior.dof
+                means=prior.params.means[key],
+                scales=prior.params.scales[key],
+                scale_matrix=prior.params.scale_matrix,
+                dof=prior.params.dof
             )
             new_prior = JointNormalWishart(params)
             params = posterior.params.__class__(
-                means=posterior.means[key],
-                scales=posterior.scales[key],
-                scale_matrix=posterior.scale_matrix,
-                dof=posterior.dof
+                means=posterior.params.means[key],
+                scales=posterior.params.scales[key],
+                scale_matrix=posterior.params.scale_matrix,
+                dof=posterior.params.dof
             )
             new_posterior = JointNormalWishart(params)
             return NormalSetSharedFullCovariance(new_prior, new_posterior)
 
         params = NormalWishartStdParams(
-            mean=prior.means[key],
-            scale=prior.scales[key],
-            scale_matrix=prior.scale_matrix,
-            dof=prior.dof
+            mean=prior.params.means[key],
+            scale=prior.params.scales[key],
+            scale_matrix=prior.params.scale_matrix,
+            dof=prior.params.dof
         )
         new_prior = NormalWishart(params)
         params = NormalWishartStdParams(
-            mean=posterior.means[key],
-            scale=posterior.scales[key],
-            scale_matrix=posterior.scale_matrix,
-            dof=posterior.dof
+            mean=posterior.params.means[key],
+            scale=posterior.params.scales[key],
+            scale_matrix=posterior.params.scale_matrix,
+            dof=posterior.params.dof
         )
         new_posterior = NormalWishart(params)
         return NormalFullCovariance(new_prior, new_posterior)
@@ -518,4 +547,3 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
             w_stats[:, -1].sum().view(1)
         ], dim=0)
         return {self.means_precision: acc_stats}
-

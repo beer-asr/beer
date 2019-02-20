@@ -67,7 +67,12 @@ class NormalWishart(ExponentialFamily):
         dimension of the Wishart: example (2, (2x2))
 
         '''
-        return len(self.mean), tuple(self.scale_matrix.shape)
+        return len(self.params.mean), tuple(self.params.scale_matrix.shape)
+
+    @property
+    def conjugate_sufficient_statistics_dim(self):
+        d = self.dim[0]
+        return 2 * d + d * (d - 1) // 2
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -98,8 +103,8 @@ class NormalWishart(ExponentialFamily):
             and "psi" is the "digamma" function.
 
         '''
-        mean, scale, = self.mean, self.scale
-        scale_matrix, dof = self.scale_matrix, self.dof
+        mean, scale, = self.params.mean, self.params.scale
+        scale_matrix, dof = self.params.scale_matrix, self.params.dof
         dim = self.dim[0]
         idxs = torch.arange(1, dim + 1, dtype=mean.dtype, device=mean.device)
         L = torch.cholesky(scale_matrix, upper=False)
@@ -117,16 +122,16 @@ class NormalWishart(ExponentialFamily):
 
     def expected_value(self):
         'The expected mean and the expected precision matrix.'
-        return self.mean, self.dof * self.scale_matrix
+        return self.params.mean, self.params.dof * self.params.scale_matrix
 
     def log_norm(self):
-        idxs = torch.arange(1, self.dim[0] + 1, dtype=self.mean.dtype,
-                            device=self.mean.device)
-        L = torch.cholesky(self.scale_matrix, upper=False)
+        idxs = torch.arange(1, self.dim[0] + 1, dtype=self.params.mean.dtype,
+                            device=self.params.mean.device)
+        L = torch.cholesky(self.params.scale_matrix, upper=False)
         logdet = 2 * torch.log(L.diag()).sum()
         dim = self.dim[0]
-        dof = self.dof
-        scale = self.scale
+        dof = self.params.dof
+        scale = self.params.scale
         return .5 * dof * logdet + .5 * dof * dim * math.log(2) \
                + .25 * dim * (dim - 1) * math.log(math.pi) \
                + torch.lgamma(.5 * (dof + 1 - idxs)).sum() \
@@ -155,8 +160,8 @@ class NormalWishart(ExponentialFamily):
             ``torch.Tensor[D + D^2 + 2]``
 
         '''
-        mean, scale, = self.mean, self.scale
-        scale_matrix, dof = self.scale_matrix, self.dof
+        mean, scale, = self.params.mean, self.params.scale
+        scale_matrix, dof = self.params.scale_matrix, self.params.dof
         dim = self.dim[0]
         return torch.cat([
             scale * mean,
@@ -169,6 +174,43 @@ class NormalWishart(ExponentialFamily):
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
 
+    def sufficient_statistics_from_rvectors(self, rvecs):
+        '''
+        Real vector z = (u, v, w)
+        \mu = u
+        \Lambda = L L^T
+        diag(L) = \exp(\frac{1}{2} v)
+        tril(L) = w
+
+        '''
+        dim = self.dim[0]
+        mean = rvecs[:, :dim]
+        log_prec_L_diag = rvecs[:, dim:2*dim]
+        prec_L_diag = (.5 * log_prec_L_diag).exp()   
+        prec_L_offdiag = rvecs[:, 2*dim:] 
+
+        # Build the precision matrices using the 
+        arg = torch.arange(1, dim**2 + 1).view(dim, dim)
+        tril_idxs = arg.tril(diagonal=-1).nonzero().t()
+        diag_idxs = torch.arange(dim)
+        L = torch.zeros(len(rvecs), dim, dim, dtype=rvecs.dtype, 
+                        device=rvecs.device)
+        L[:, tril_idxs[0], tril_idxs[1]] = prec_L_offdiag
+        L[:, diag_idxs, diag_idxs] = prec_L_diag
+        prec_matrices = torch.matmul(L, L.permute(0, 2, 1))
+
+        # Compute the product L^T mu mu^T L
+        Lm = torch.matmul(L.permute(0, 2, 1), mean[:, :, None]).reshape(-1, dim)
+        mPm = torch.matmul(Lm[:, None, :], Lm[:, :, None])
+
+        return torch.cat([
+            torch.matmul(prec_matrices, mean[:, :, None]).reshape(-1, dim),
+            prec_matrices.reshape(-1, dim ** 2),
+            mPm.reshape(-1, 1),
+            log_prec_L_diag.sum(dim=-1).view(-1, 1),
+            
+        ], dim=-1)
+        
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
 class JointNormalWishartStdParams(torch.nn.Module):
@@ -233,7 +275,12 @@ class JointNormalWishart(ExponentialFamily):
         and D is the dimension of their support.
 
         '''
-        return (tuple(self.means.shape), self.means.shape[-1]**2)
+        return (tuple(self.params.means.shape), self.params.means.shape[-1]**2)
+
+    @property
+    def conjugate_sufficient_statistics_dim(self):
+        k, d = self.dim[0]
+        return (k + 1) * d + d * (d - 1) // 2
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -266,37 +313,37 @@ class JointNormalWishart(ExponentialFamily):
 
 .       '''
         ncomp, dim = self.dim[0]
-        dtype, device = self.means.dtype, self.means.device
-        precision = self.dof * self.scale_matrix
-        L = torch.cholesky(self.scale_matrix, upper=False)
+        dtype, device = self.params.means.dtype, self.params.means.device
+        precision = self.params.dof * self.params.scale_matrix
+        L = torch.cholesky(self.params.scale_matrix, upper=False)
         logdet = 2 * torch.log(L.diag()).sum()
         seq = torch.arange(1, dim + 1, 1, dtype=dtype, device=device)
-        sum_digamma = torch.digamma(.5 * (self.dof + 1 - seq)).sum()
-        quad_means = (self.means[:, :, None] @ self.means[:, None, :])
+        sum_digamma = torch.digamma(.5 * (self.params.dof + 1 - seq)).sum()
+        quad_means = (self.params.means[:, :, None] @ self.params.means[:, None, :])
         quad_means = quad_means.reshape(ncomp, -1)
         vec_precision = precision.reshape(-1)
         return torch.cat([
-            (self.means @ precision).view(-1),
+            (self.params.means @ precision).view(-1),
             precision.reshape(-1),
-            (dim / self.scales) + quad_means @ vec_precision,
+            (dim / self.params.scales) + quad_means @ vec_precision,
             (sum_digamma + dim * math.log(2) + logdet).view(1)
         ])
 
     def expected_value(self):
         'Expected means and expected precision matrix.'
-        return self.means, self.dof * self.scale_matrix
+        return self.params.means, self.params.dof * self.params.scale_matrix
 
     def log_norm(self):
-        dtype, device = self.means.dtype, self.means.device
+        dtype, device = self.params.means.dtype, self.params.means.device
         dim = self.dim[0][1]
-        L = torch.cholesky(self.scale_matrix, upper=False)
+        L = torch.cholesky(self.params.scale_matrix, upper=False)
         logdet = 2 * torch.log(L.diag()).sum()
-        lognorm_prec = .5 * self.dof * logdet
-        lognorm_prec += .5 * self.dof * dim * math.log(2)
+        lognorm_prec = .5 * self.params.dof * logdet
+        lognorm_prec += .5 * self.params.dof * dim * math.log(2)
         lognorm_prec += .25 * dim * (dim - 1) * math.log(math.pi)
         seq = torch.arange(1, dim + 1, 1, dtype=dtype, device=device)
-        lognorm_prec += torch.lgamma(.5 * (self.dof + 1 - seq)).sum()
-        lognorm = -.5 * dim  * torch.log(self.scales).sum()
+        lognorm_prec += torch.lgamma(.5 * (self.params.dof + 1 - seq)).sum()
+        lognorm = -.5 * dim  * torch.log(self.params.scales).sum()
         return lognorm + lognorm_prec
 
     # TODO
@@ -305,16 +352,53 @@ class JointNormalWishart(ExponentialFamily):
 
     def natural_parameters(self):
         ncomp, dim = self.dim[0]
-        inv_mean_prec = self.scale_matrix.inverse()
-        quad_means = (self.scales[:, None] * self.means).t() @ self.means
+        inv_mean_prec = self.params.scale_matrix.inverse()
+        means = self.params.means
+        quad_means = (self.params.scales[:, None] * means).t() @ means
         return torch.cat([
-            (self.scales[:, None] * self.means).reshape(-1),
+            (self.params.scales[:, None] * means).reshape(-1),
             -.5 * (quad_means + inv_mean_prec).reshape(-1),
-            -.5 * self.scales,
-            .5 * (self.dof - dim - 1 + ncomp).view(1),
+            -.5 * self.params.scales,
+            .5 * (self.params.dof - dim - 1 + ncomp).view(1),
         ])
 
     def update_from_natural_parameters(self, natural_params):
         ncomp = self.dim[0][0]
         self.params = self.params.from_natural_parameters(natural_params, ncomp)
 
+    def sufficient_statistics_from_rvectors(self, rvecs):
+        '''
+        Real vector z = (u, v, w)
+        \mu = u
+        \Lambda = L L^T
+        diag(L) = \exp(\frac{1}{2} v)
+        tril(L) = w
+
+        '''
+        k, dim = self.dim[0]
+        means = rvecs[:, :k * dim].reshape(-1, k, dim)
+        log_diag_prec = rvecs[:, k * dim:(k + 1) * dim]
+        prec_L_diag = log_diag_prec.exp() 
+        prec_L_offdiag = rvecs[:, (k + 1) * dim:] 
+
+        # Build the precision matrices.
+        arg = torch.arange(1, dim**2 + 1).view(dim, dim)
+        tril_idxs = arg.tril(diagonal=-1).nonzero().t()
+        diag_idxs = torch.arange(dim)
+        L = torch.zeros(len(rvecs), dim, dim, dtype=rvecs.dtype, 
+                        device=rvecs.device)
+        L[:, tril_idxs[0], tril_idxs[1]] = prec_L_offdiag
+        L[:, diag_idxs, diag_idxs] = (prec_L_diag).exp()
+        prec_matrices = torch.matmul(L, L.permute(0, 2, 1))
+
+        # Compute the product L^T mu mu^T L
+        Lm = torch.matmul(means, L.permute(0, 2, 1))
+        mPm = torch.sum(Lm * Lm, dim=-1)
+
+        return torch.cat([
+            torch.matmul(means, prec_matrices).reshape(-1, k * dim),
+            prec_matrices.reshape(-1, dim ** 2),
+            mPm,
+            2 * log_diag_prec.sum(dim=-1).view(-1, 1),
+            
+        ], dim=-1)
