@@ -63,16 +63,16 @@ class EvidenceLowerBoundInstance:
     _minibatchsize: int = field(repr=False)
     _datasize: int = field(repr=False)
 
-    def __init__(self, elbo_value, acc_stats, model_parameters, minibatchsize,
+    def __init__(self, value, acc_stats, model_parameters, minibatchsize,
                  datasize):
-        self._elbo_value = elbo_value
+        self.value = value
         self._acc_stats = acc_stats
         self._model_parameters = set(model_parameters)
         self._minibatchsize = minibatchsize
         self._datasize = datasize
 
     def __float__(self):
-        return float(self._elbo_value)
+        return float(self.value)
 
     def __add__(self, other):
         if not isinstance(other, EvidenceLowerBoundInstance):
@@ -81,7 +81,7 @@ class EvidenceLowerBoundInstance:
             raise ValueError('Cannot add ELBOs evaluated on different data set')
 
         return EvidenceLowerBoundInstance(
-            self._elbo_value + other._elbo_value,
+            self.value + other.value,
             add_acc_stats(self._acc_stats, other._acc_stats),
             self._model_parameters.union(other._model_parameters),
             self._minibatchsize + other._minibatchsize,
@@ -91,8 +91,8 @@ class EvidenceLowerBoundInstance:
     def backward(self):
         # Pytorch minimizes the loss ! We change the sign of the ELBO
         # just before to compute the gradient.
-        if self._elbo_value.requires_grad:
-            (-self._elbo_value).backward()
+        if self.value.requires_grad:
+            (-self.value).backward()
 
         scale = self._datasize / self._minibatchsize
         for parameter in self._model_parameters:

@@ -4,10 +4,72 @@ from functools import lru_cache
 import math
 import torch
 from .basedist import ExponentialFamily
+from .basedist import ConjugateLikelihood
 
 
 __all__ = ['NormalWishart', 'NormalWishartStdParams', 'JointNormalWishart',
-           'JointNormalWishartStdParams']
+           'JointNormalWishartStdParams', 'NormalLikelihood',
+           'JointNormalLikelihood']
+
+
+class NormalLikelihood(ConjugateLikelihood):
+
+    __slots__ = 'dim'
+
+    def __init__(self, dim):
+        self.dim = dim
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(dim={self.dim})'
+
+    @property
+    def sufficient_statistics_dim(self):
+        d = self.dim
+        return 2 * d + d * (d - 1) // 2
+
+    def parameters_from_pdfvector(self, pdfvec):
+        dim = self.dim
+        precision = pdfvec[dim:dim + dim ** 2].reshape(dim, dim)
+        cov = precision.inverse()
+        mean = cov @ pdfvec[:dim]
+        return mean, precision
+
+    def pdfvectors_from_rvectors(self, rvecs):
+        '''
+        Real vector z = (u, v, w)
+        \mu = u
+        \Lambda = L L^T
+        diag(L) = \exp(\frac{1}{2} v)
+        tril(L) = w
+
+        '''
+        dim = self.dim
+        mean = rvecs[:, :dim]
+        log_prec_L_diag = rvecs[:, dim:2*dim]
+        prec_L_diag = (.5 * log_prec_L_diag).exp()   
+        prec_L_offdiag = rvecs[:, 2*dim:] 
+
+        # Build the precision matrices using the 
+        arg = torch.arange(1, dim**2 + 1).view(dim, dim)
+        tril_idxs = arg.tril(diagonal=-1).nonzero().t()
+        diag_idxs = torch.arange(dim)
+        L = torch.zeros(len(rvecs), dim, dim, dtype=rvecs.dtype, 
+                        device=rvecs.device)
+        L[:, tril_idxs[0], tril_idxs[1]] = prec_L_offdiag
+        L[:, diag_idxs, diag_idxs] = prec_L_diag
+        prec_matrices = torch.matmul(L, L.permute(0, 2, 1))
+
+        # Compute the product L^T mu mu^T L
+        Lm = torch.matmul(L.permute(0, 2, 1), mean[:, :, None]).reshape(-1, dim)
+        mPm = torch.matmul(Lm[:, None, :], Lm[:, :, None])
+
+        return torch.cat([
+            torch.matmul(prec_matrices, mean[:, :, None]).reshape(-1, dim),
+            prec_matrices.reshape(-1, dim ** 2),
+            mPm.reshape(-1, 1),
+            log_prec_L_diag.sum(dim=-1).view(-1, 1),
+            
+        ], dim=-1)
 
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
@@ -69,10 +131,8 @@ class NormalWishart(ExponentialFamily):
         '''
         return len(self.params.mean), tuple(self.params.scale_matrix.shape)
 
-    @property
-    def conjugate_sufficient_statistics_dim(self):
-        d = self.dim[0]
-        return 2 * d + d * (d - 1) // 2
+    def conjugate(self):
+        return NormalLikelihood(self.dim[0])
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -174,7 +234,32 @@ class NormalWishart(ExponentialFamily):
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
 
-    def sufficient_statistics_from_rvectors(self, rvecs):
+
+class JointNormalLikelihood(ConjugateLikelihood):
+
+    __slots__ = 'ncomp', 'dim'
+
+    def __init__(self, ncomp, dim):
+        self.ncomp = ncomp
+        self.dim = dim
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(ncomp={self.ncomp}, dim={self.dim})'
+
+    @property
+    def sufficient_statistics_dim(self):
+        k, d = self.ncomp, self.dim
+        return (k + 1) * d + d * (d - 1) // 2
+
+    def parameters_from_pdfvector(self, pdfvec):
+        ndim = self.ncomp * self.dim
+        dim = self.dim
+        precision = pdfvec[ndim: ndim + dim ** 2].reshape(dim, dim)
+        cov = precision.inverse()
+        means = pdfvec[:ndim].reshape(self.ncomp, dim) @ cov
+        return means, precision
+    
+    def pdfvectors_from_rvectors(self, rvecs):
         '''
         Real vector z = (u, v, w)
         \mu = u
@@ -183,34 +268,34 @@ class NormalWishart(ExponentialFamily):
         tril(L) = w
 
         '''
-        dim = self.dim[0]
-        mean = rvecs[:, :dim]
-        log_prec_L_diag = rvecs[:, dim:2*dim]
-        prec_L_diag = (.5 * log_prec_L_diag).exp()   
-        prec_L_offdiag = rvecs[:, 2*dim:] 
+        k, dim = self.ncomp, self.dim
+        means = rvecs[:, :k * dim].reshape(-1, k, dim)
+        log_diag_prec = rvecs[:, k * dim:(k + 1) * dim]
+        prec_L_diag = log_diag_prec.exp() 
+        prec_L_offdiag = rvecs[:, (k + 1) * dim:] 
 
-        # Build the precision matrices using the 
+        # Build the precision matrices.
         arg = torch.arange(1, dim**2 + 1).view(dim, dim)
         tril_idxs = arg.tril(diagonal=-1).nonzero().t()
         diag_idxs = torch.arange(dim)
         L = torch.zeros(len(rvecs), dim, dim, dtype=rvecs.dtype, 
                         device=rvecs.device)
         L[:, tril_idxs[0], tril_idxs[1]] = prec_L_offdiag
-        L[:, diag_idxs, diag_idxs] = prec_L_diag
+        L[:, diag_idxs, diag_idxs] = prec_L_diag.exp()
         prec_matrices = torch.matmul(L, L.permute(0, 2, 1))
 
         # Compute the product L^T mu mu^T L
-        Lm = torch.matmul(L.permute(0, 2, 1), mean[:, :, None]).reshape(-1, dim)
-        mPm = torch.matmul(Lm[:, None, :], Lm[:, :, None])
+        Lm = torch.matmul(means, L.permute(0, 2, 1))
+        mPm = torch.sum(Lm * Lm, dim=-1)
 
         return torch.cat([
-            torch.matmul(prec_matrices, mean[:, :, None]).reshape(-1, dim),
+            torch.matmul(means, prec_matrices).reshape(-1, k * dim),
             prec_matrices.reshape(-1, dim ** 2),
-            mPm.reshape(-1, 1),
-            log_prec_L_diag.sum(dim=-1).view(-1, 1),
+            mPm,
+            2 * log_diag_prec.sum(dim=-1).view(-1, 1),
             
         ], dim=-1)
-        
+
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
 class JointNormalWishartStdParams(torch.nn.Module):
@@ -276,11 +361,9 @@ class JointNormalWishart(ExponentialFamily):
 
         '''
         return (tuple(self.params.means.shape), self.params.means.shape[-1]**2)
-
-    @property
-    def conjugate_sufficient_statistics_dim(self):
-        k, d = self.dim[0]
-        return (k + 1) * d + d * (d - 1) // 2
+    
+    def conjugate(self):
+        return JointNormalLikelihood(*self.dim[0])
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -365,40 +448,3 @@ class JointNormalWishart(ExponentialFamily):
     def update_from_natural_parameters(self, natural_params):
         ncomp = self.dim[0][0]
         self.params = self.params.from_natural_parameters(natural_params, ncomp)
-
-    def sufficient_statistics_from_rvectors(self, rvecs):
-        '''
-        Real vector z = (u, v, w)
-        \mu = u
-        \Lambda = L L^T
-        diag(L) = \exp(\frac{1}{2} v)
-        tril(L) = w
-
-        '''
-        k, dim = self.dim[0]
-        means = rvecs[:, :k * dim].reshape(-1, k, dim)
-        log_diag_prec = rvecs[:, k * dim:(k + 1) * dim]
-        prec_L_diag = log_diag_prec.exp() 
-        prec_L_offdiag = rvecs[:, (k + 1) * dim:] 
-
-        # Build the precision matrices.
-        arg = torch.arange(1, dim**2 + 1).view(dim, dim)
-        tril_idxs = arg.tril(diagonal=-1).nonzero().t()
-        diag_idxs = torch.arange(dim)
-        L = torch.zeros(len(rvecs), dim, dim, dtype=rvecs.dtype, 
-                        device=rvecs.device)
-        L[:, tril_idxs[0], tril_idxs[1]] = prec_L_offdiag
-        L[:, diag_idxs, diag_idxs] = (prec_L_diag).exp()
-        prec_matrices = torch.matmul(L, L.permute(0, 2, 1))
-
-        # Compute the product L^T mu mu^T L
-        Lm = torch.matmul(means, L.permute(0, 2, 1))
-        mPm = torch.sum(Lm * Lm, dim=-1)
-
-        return torch.cat([
-            torch.matmul(means, prec_matrices).reshape(-1, k * dim),
-            prec_matrices.reshape(-1, dim ** 2),
-            mPm,
-            2 * log_diag_prec.sum(dim=-1).view(-1, 1),
-            
-        ], dim=-1)

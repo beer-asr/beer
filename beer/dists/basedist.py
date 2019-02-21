@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import torch
 
 
-__all__ = ['ExponentialFamily', 'kl_div']
+__all__ = ['ConjugateLikelihood', 'ExponentialFamily', 'kl_div']
 
 
 # Error raised when the user is providing parameters object with a
@@ -98,16 +98,15 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
     #def forward(self, X):
     #    pass
 
-    @property
     @abc.abstractmethod
-    def dim(self):
-        'Dimension of the support.'
+    def conjugate(self):
+        'Returns a conjugate llh function object to the given pdf.'
         pass
 
     @property
     @abc.abstractmethod
-    def conjugate_sufficient_statistics_dim(self):
-        'Dimension of the sufficient statistics of the conjugate pdf.'
+    def dim(self):
+        'Dimension of the support.'
         pass
 
     @abc.abstractmethod
@@ -138,23 +137,48 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def update_from_natural_parameters(self):
         'Uptate the parameters given the new natural parameters.'
+        pass  
+
+
+class ConjugateLikelihood(metaclass=abc.ABCMeta):
+    '''Base class for conjugate likelihood functions associated with a 
+    member of the exponential family.
+
+    '''
+
+    @property
+    @abc.abstractmethod
+    def sufficient_statistics_dim(self):
+        'Dimension of the sufficient statistics of lihekihood function.'
         pass
 
     @abc.abstractmethod
-    def sufficient_statistics_from_rvectors(self, rvecs):
-        '''Transform real value vectors into "equivalent" sufficient
-        statistics using a default mapping (distribution dependent).
+    def parameters_from_pdfvector(self, pdfvec):
+        '''Standard parameters of the likelihood function extracted from
+        a pdf vector.
+
+        '''
+        pass
+
+    @abc.abstractmethod
+    def pdfvectors_from_rvectors(self, rvecs):
+        '''Transform real value vectors into equivalent pdf vectors
+        using a default mapping (distribution dependent). For a pdf 
+        with natural parameters u and log-normalization function A the
+        pdf vector is defined as:
+                     
+            pvec = (u, -A(u))^T
 
         Args:
             rvecs (``torch.Tensor[N,D]``): Real value vectors of 
                 dimenion D = self.conjugate_stats_dim
         
         Returns:
-            stats (``torch.Tensor[N,Q]``): Equivalent sufficient 
-                statistics.
+            pdfs (``torch.Tensor[N,Q]``): Equivalent pdf vectors.
 
         '''
-        pass    
+        pass  
+
 
 
 def kl_div(pdf1, pdf2):

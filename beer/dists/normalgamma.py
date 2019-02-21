@@ -3,10 +3,45 @@ from dataclasses import dataclass
 import math
 import torch
 from .basedist import ExponentialFamily
+from .basedist import ConjugateLikelihood
 
 
 __all__ = ['NormalGamma', 'NormalGammaStdParams',
-           'JointNormalGammaStdParams', 'JointNormalGamma']
+           'JointNormalGammaStdParams', 'JointNormalGamma',
+           'NormalDiagonalLikelihood', 'JointNormalDiagonalLikelihood']
+
+
+class NormalDiagonalLikelihood(ConjugateLikelihood):
+
+    __slots__ = 'dim'
+
+    def __init__(self, dim):
+        self.dim = dim
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(dim={self.dim})'
+
+    @property
+    def sufficient_statistics_dim(self):
+        return 2 * self.dim 
+
+    def parameters_from_pdfvector(self, pdfvec):
+        dim = self.dim
+        precision = pdfvec[dim: 2 * dim]
+        mean = pdfvec[:dim] / precision
+        return mean, precision
+
+    def pdfvectors_from_rvectors(self, rvecs):
+        dim = rvecs.shape[-1] - 1
+        mean = rvecs[:, :dim]
+        log_precision = rvecs[:, -2:-1]
+        precision = torch.exp(log_precision)
+        return torch.cat([
+            precision * mean,
+            precision,
+            torch.sum(precision * (mean ** 2), dim=-1)[:, None],
+            torch.sum(log_precision, dim=-1)[:, None]
+        ], dim=-1)   
 
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
@@ -65,9 +100,8 @@ class NormalGamma(ExponentialFamily):
         '''
         return (len(self.params.mean), len(self.params.mean))
 
-    @property
-    def conjugate_sufficient_statistics_dim(self):
-        return 2 * len(self.params.mean)
+    def conjugate(self):
+        return NormalDiagonalLikelihood(self.dim[0])
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -172,6 +206,40 @@ class NormalGamma(ExponentialFamily):
         ], dim=-1)
 
 
+class JointNormalDiagonalLikelihood(ConjugateLikelihood):
+
+    __slots__ = 'ncomp', 'dim'
+
+    def __init__(self, ncomp, dim):
+        self.ncomp = ncomp
+        self.dim = dim
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(ncomp={self.ncomp}, dim={self.dim})'
+
+    @property
+    def sufficient_statistics_dim(self):
+        return self.ncomp * self.dim + self.dim
+
+    def parameters_from_pdfvector(self, pdfvec):
+        ndim = self.ncomp * self.dim
+        precision = pdfvec[ndim: ndim + self.dim]
+        means = pdfvec[:ndim].reshape(self.ncomp, self.dim) / precision
+        return means, precision
+    
+    def pdfvectors_from_rvectors(self, rvecs):
+        k, dim = self.ncomp, self.dim
+        means = rvecs[:, :k * dim].reshape(-1, k, dim)
+        log_precision = rvecs[:, k * dim:]
+        precision = torch.exp(log_precision)
+        return torch.cat([
+            (means * precision[:, None, :]).reshape(-1, k * dim),
+            precision,
+            torch.sum((means ** 2) * precision[:, None, :], dim=-1),
+            torch.sum(log_precision, dim=-1)[:, None]
+        ], dim=-1)
+
+
 @dataclass(init=False, eq=False, unsafe_hash=True)
 class JointNormalGammaStdParams(torch.nn.Module):
     means: torch.Tensor
@@ -221,10 +289,8 @@ class JointNormalGamma(ExponentialFamily):
         '''
         return (tuple(self.params.means.shape), self.params.means.shape[-1])
 
-    @property
-    def conjugate_sufficient_statistics_dim(self):
-        dim = self.dim
-        return dim[0][0] * dim[0][1] + dim[1]
+    def conjugate(self):
+        return JointNormalDiagonalLikelihood(*self.dim[0])
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -297,21 +363,3 @@ class JointNormalGamma(ExponentialFamily):
     def update_from_natural_parameters(self, natural_params):
         ncomp = self.dim[0][0]
         self.params = self.params.from_natural_parameters(natural_params, ncomp)
-
-    def sufficient_statistics_from_rvectors(self, rvecs):
-        '''
-        Real vector z = (x, y)
-        \mu = x
-        \sigma^2 = \exp(y)
-
-        '''
-        k, dim = self.dim[0]
-        means = rvecs[:, :k * dim].reshape(-1, k, dim)
-        log_precision = rvecs[:, k * dim:]
-        precision = torch.exp(log_precision)
-        return torch.cat([
-            (means * precision[:, None, :]).reshape(-1, k * dim),
-            precision,
-            torch.sum((means ** 2) * precision[:, None, :], dim=-1),
-            torch.sum(log_precision, dim=-1)[:, None]
-        ], dim=-1)

@@ -3,10 +3,46 @@ from dataclasses import dataclass
 import math
 import torch
 from .basedist import ExponentialFamily
+from .basedist import ConjugateLikelihood
 
 
 __all__ = ['IsotropicNormalGamma', 'IsotropicNormalGammaStdParams',
-           'JointIsotropicNormalGamma', 'JointIsotropicNormalGammaStdParams']
+           'JointIsotropicNormalGamma', 'JointIsotropicNormalGammaStdParams',
+           'JointNormalIsotropicLikelihood', 'NormalIsotropicLikelihood']
+
+
+class NormalIsotropicLikelihood(ConjugateLikelihood):
+
+    __slots__ = 'dim'
+
+    def __init__(self, dim):
+        self.dim = dim
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(dim={self.dim})'
+
+    @property
+    def sufficient_statistics_dim(self):
+        return self.dim + 1
+
+    @staticmethod
+    def parameters_from_pdfvector(pdfvec):
+        precision = pdfvec[-3]
+        mean = pdfvec[:-3] / precision
+        return mean, precision
+
+    @staticmethod
+    def pdfvectors_from_rvectors(rvecs):
+        dim = rvecs.shape[-1] - 1
+        mean = rvecs[:, :dim]
+        log_precision = rvecs[:, -2:-1]
+        precision = torch.exp(log_precision)
+        return torch.cat([
+            precision * mean,
+            precision,
+            torch.sum(precision * (mean ** 2), dim=-1)[:, None],
+            torch.sum(log_precision, dim=-1)[:, None]
+        ], dim=-1)        
 
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
@@ -60,9 +96,8 @@ class IsotropicNormalGamma(ExponentialFamily):
         '''
         return (len(self.params.mean), 1)
 
-    @property
-    def conjugate_sufficient_statistics_dim(self):
-        return len(self.params.mean) + 1
+    def conjugate(self):
+        return NormalIsotropicLikelihood(self.dim[0])
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -149,21 +184,37 @@ class IsotropicNormalGamma(ExponentialFamily):
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
 
-    def sufficient_statistics_from_rvectors(self, rvecs):
-        '''
-        Real vector z = (x, y)
-        \mu = x
-        \sigma^2 = \exp(y)
 
-        '''
-        dim = self.dim[0]
-        mean = rvecs[:, :dim]
+class JointNormalIsotropicLikelihood(ConjugateLikelihood):
+
+    __slots__ = 'ncomp', 'dim'
+
+    def __init__(self, ncomp, dim):
+        self.ncomp = ncomp
+        self.dim = dim
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(ncomp={self.ncomp}, dim={self.dim})'
+
+    @property
+    def sufficient_statistics_dim(self):
+        return self.ncomp * self.dim + 1
+
+    def parameters_from_pdfvector(self, pdfvec):
+        ndim = self.ncomp * self.dim
+        precision = pdfvec[ndim: ndim + 1]
+        means = pdfvec[:ndim] / precision
+        return means.reshape(self.ncomp, self.dim), precision
+
+    def pdfvectors_from_rvectors(self, rvecs):
+        k, dim = self.ncomp, self.dim
+        means = rvecs[:, :k * dim].reshape(-1, k, dim)
         log_precision = rvecs[:, -2:-1]
         precision = torch.exp(log_precision)
         return torch.cat([
-            precision * mean,
+            (means * precision[:, None, :]).reshape(-1, k * dim),
             precision,
-            torch.sum(precision * (mean ** 2), dim=-1)[:, None],
+            torch.sum((means ** 2) * precision[:, None, :], dim=-1),
             torch.sum(log_precision, dim=-1)[:, None]
         ], dim=-1)
 
@@ -216,11 +267,9 @@ class JointIsotropicNormalGamma(ExponentialFamily):
 
         '''
         return (tuple(self.params.means.shape), 1)
-
-    @property
-    def conjugate_sufficient_statistics_dim(self):
-        dim = self.dim
-        return dim[0][0] * dim[0][1] + 1
+    
+    def conjugate(self):
+        return JointNormalIsotropicLikelihood(*self.dim[0])
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -292,21 +341,3 @@ class JointIsotropicNormalGamma(ExponentialFamily):
     def update_from_natural_parameters(self, natural_params):
         ncomp = self.dim[0][0]
         self.params = self.params.from_natural_parameters(natural_params, ncomp)
-
-    def sufficient_statistics_from_rvectors(self, rvecs):
-        '''
-        Real vector z = (x, y)
-        \mu = x
-        \sigma^2 = \exp(y)
-
-        '''
-        k, dim = self.dim[0]
-        means = rvecs[:, :k * dim].reshape(-1, k, dim)
-        log_precision = rvecs[:, -2:-1]
-        precision = torch.exp(log_precision)
-        return torch.cat([
-            (means * precision[:, None, :]).reshape(-1, k * dim),
-            precision,
-            torch.sum((means ** 2) * precision[:, None, :], dim=-1),
-            torch.sum(log_precision, dim=-1)[:, None]
-        ], dim=-1)

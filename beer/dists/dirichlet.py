@@ -3,11 +3,58 @@ from dataclasses import dataclass
 import math
 import torch
 from .basedist import ExponentialFamily
+from .basedist import ConjugateLikelihood
 
 
-__all__ = ['Dirichlet', 'DirichletStdParams']
+__all__ = ['Dirichlet', 'DirichletStdParams', 'CategoricalLikelihood']
 
 
+class CategoricalLikelihood(ConjugateLikelihood):
+
+    __slots__ = 'dim'
+
+    def __init__(self, dim):
+        self.dim = dim
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(dim={self.dim})'
+
+    @property
+    def sufficient_statistics_dim(self):
+        return self.dim - 1
+
+    @staticmethod
+    def log_norm(nparams):
+        # Stable implementation of the log-normalizer of a categorical
+        # equivalent of the naive implementation:
+        #   lognorm = torch.log(1 + rvectors.exp())
+        return torch.nn.functional.softplus(torch.logsumexp(nparams, dim=-1))
+
+    @staticmethod
+    def parameters_from_pdfvector(pdfvec):
+        'Return the parameters of the pdf vector.' 
+        retval = torch.zeros_like(pdfvec, requires_grad=False)
+        lnorm = CategoricalLikelihood.log_norm(pdfvec[:-1])
+        remainder = (-lnorm).exp()
+        retval[:-1] = pdfvec[:-1].exp() * remainder
+        retval[-1] = remainder
+        return retval
+
+    @staticmethod
+    def pdfvectors_from_rvectors(rvecs):
+        '''
+        Returns:
+
+            (x, -A(x)) 
+
+        with:
+             A(x) = ln( 1 + exp( sum_i^{D-1} (x_i) ) )
+
+        '''
+        lnorm = CategoricalLikelihood.log_norm(rvecs)
+        return torch.cat([rvecs, -lnorm.view(-1, 1)], dim=-1)
+
+    
 @dataclass(init=False, eq=False, unsafe_hash=True)
 class DirichletStdParams(torch.nn.Module):
     'Standard parameterization of the Dirichlet pdf.'
@@ -30,13 +77,12 @@ class Dirichlet(ExponentialFamily):
         'concentrations': 'Concentrations parameter.'
     }
 
+    def conjugate(self):
+        return CategoricalLikelihood(self.dim)
+
     @property
     def dim(self):
         return len(self.params.concentrations)
-
-    @property
-    def conjugate_sufficient_statistics_dim(self):
-        return len(self.params.concentrations) - 1
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -93,17 +139,3 @@ class Dirichlet(ExponentialFamily):
 
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
-
-    def sufficient_statistics_from_rvectors(self, rvecs):
-        '''
-        Real vector x)
-        \pi_i = \frac{\exp{x_i}}{1 + \sum_i^{D-1} \exp{x_i}}
-
-        '''
-        # Stable implementation of the log-normalizer of a categorical
-        # distribution: ln Z = ln(1 + \sum_i^{D-1} \exp \mu_i)
-        # Naive python implementation:
-        #   w_lognorm = torch.log(1 + w_rvectors.exp())
-        tmp = (1. + torch.logsumexp(rvecs, dim=-1))
-        lognorm = torch.nn.functional.softplus(tmp)
-        return torch.cat([rvecs, lognorm.view(-1, 1)], dim=-1)

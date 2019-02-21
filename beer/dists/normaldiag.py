@@ -3,11 +3,35 @@ from dataclasses import dataclass
 import math
 import torch
 from .basedist import ExponentialFamily
+from .basedist import ConjugateLikelihood
 
 
 __all__ = ['NormalDiagonalCovariance', 'NormalDiagonalCovarianceStdParams',
            'JointNormalDiagonalCovariance', 
-           'JointNormalDiagonalCovarianceStdParams']
+           'JointNormalDiagonalCovarianceStdParams',
+           'NormalFixedDiagonalCovarianceLikelihood',
+           'JointNormalFixedDiagonalCovarianceLikelihood',]
+
+
+class NormalFixedDiagonalCovarianceLikelihood(ConjugateLikelihood):
+
+    __slots__ = 'dim'
+
+    def __init__(self, dim):
+        self.dim = dim
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(dim={self.dim})'
+
+    @property
+    def sufficient_statistics_dim(self):
+        return self.dim 
+
+    def parameters_from_pdfvector(self, pdfvec):
+        return pdfvec[:self.dim]
+
+    def pdfvectors_from_rvectors(self, rvecs):
+        return torch.cat([rvecs, rvecs**2], dim=-1)
 
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
@@ -47,8 +71,13 @@ class NormalDiagonalCovariance(ExponentialFamily):
         return len(self.params.mean)
 
     @property
-    def conjugate_sufficient_statistics_dim(self):
-        return self.dim
+    def conjugate(self):
+        return NormalFixedDiagonalCovarianceLikelihood(self.dim)
+
+    def forward(self, data):
+        nparams = self.natural_parameters()
+        stats = torch.cat([data, data**2], dim=-1)
+        return stats @ nparams - .5 * self.dim * math.log(2 * math.pi)
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -117,12 +146,39 @@ class NormalDiagonalCovariance(ExponentialFamily):
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
 
-    def sufficient_statistics_from_rvectors(self, rvecs):
-        '''
-        Real vector z = (x, y)
-        \mu = x
 
-        '''
+class JointNormalFixedDiagonalCovarianceLikelihood(ConjugateLikelihood):
+
+    __slots__ = 'ncomp', 'dim'
+
+    def __init__(self, ncomp, dim):
+        self.ncomp = ncomp
+        self.dim = dim
+
+    def __repr__(self):
+        return f'{self.__class__.__qualname__}(ncomp={self.ncomp}, dim={self.dim})'
+
+    @property
+    def sufficient_statistics_dim(self):
+        return self.ncomp * self.dim + self.dim
+
+    def parameters_from_pdfvector(self, pdfvec):
+        ndim = self.ncomp * self.dim
+        return pdfvec[:ndim].reshape(self.ncomp, self.dim)
+    
+    def pdfvectors_from_rvectors(self, rvecs):
+        k, dim = self.ncomp, self.dim
+        means = rvecs[:, :k * dim].reshape(-1, k, dim)
+        log_precision = rvecs[:, k * dim:]
+        precision = torch.exp(log_precision)
+        return torch.cat([
+            (means * precision[:, None, :]).reshape(-1, k * dim),
+            precision,
+            torch.sum((means ** 2) * precision[:, None, :], dim=-1),
+            torch.sum(log_precision, dim=-1)[:, None]
+        ], dim=-1)
+
+    def pdfvectors_from_rvectors(self, rvecs):
         return torch.cat([rvecs, rvecs**2], dim=-1)
 
 
@@ -166,9 +222,16 @@ class JointNormalDiagonalCovariance(ExponentialFamily):
         return tuple(self.params.means.shape)
 
     @property
-    def conjugate_sufficient_statistics_dim(self):
-        dim = self.dim
-        return dim[0] * dim[1]
+    def conjugate(self):
+        return JointNormalFixedDiagonalCovarianceLikelihood(**self.dim)
+
+    def forward(self, data):
+        means = self.params.means
+        diag_precs = 1. / self.params.diag_covs
+        nparams = torch.cat([diag_precs * means, -.5 * diag_precs], dim=-1)
+        stats = torch.cat([data, data**2], dim=-1)
+        return torch.sum(stats[:, :] * nparams[:, None, :], dim=-1) \
+            - .5 * self.dim[1] * math.log(2 * math.pi)
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -216,7 +279,8 @@ class JointNormalDiagonalCovariance(ExponentialFamily):
         diag_covs = self.params.diag_covs
         noise = torch.randn(nsamples, *self.dim, dtype=means.dtype, 
                             device=means.device)
-        return means[None] + diag_covs[None] * noise
+        samples = means[None] + diag_covs[None] * noise
+        return samples.permute(1, 0, 2)
 
     def natural_parameters(self):
         '''Natural form of the current parameterization. For the
