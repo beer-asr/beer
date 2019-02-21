@@ -1,7 +1,8 @@
 
 from collections import namedtuple
 import torch
-from .parameters import BayesianParameterSet, BayesianParameter
+from .parameters import BayesianParameterSet
+from .parameters import ConjugateBayesianParameter
 from .modelset import ModelSet
 from .mixture import Mixture
 from ..dists import Dirichlet, DirichletStdParams
@@ -63,7 +64,7 @@ class MixtureSet(ModelSet):
         '''
         super().__init__()
         self.weights = BayesianParameterSet([
-            BayesianParameter(prior_weights, posterior)
+            ConjugateBayesianParameter(prior_weights, posterior)
             for posterior in posterior_weights])
         self.modelset = modelset
 

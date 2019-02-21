@@ -9,7 +9,7 @@ from collections import namedtuple
 import math
 import torch
 
-from .parameters import BayesianParameter
+from .parameters import ConjugateBayesianParameter
 from .parameters import BayesianParameterSet
 from .modelset import ModelSet
 from .normal import Normal
@@ -88,7 +88,7 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
     def __init__(self, prior, posteriors):
         super().__init__()
         self.means_precisions = BayesianParameterSet([
-            BayesianParameter(prior, post)
+            ConjugateBayesianParameter(prior, post)
             for post in posteriors
         ])
 
@@ -110,7 +110,7 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
         return [[*self.means_precisions]]
 
     def expected_log_likelihood(self, stats):
-        nparams = self.means_precisions.expected_natural_parameters()
+        nparams = self.means_precisions.natural_form()
         dim = self.means_precisions[0].prior.dim[0]
         return stats @ nparams.t() - .5 * dim * math.log(2 * math.pi)
 
@@ -241,7 +241,7 @@ class NormalSetSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
 
     def __init__(self, prior, posterior):
         super().__init__()
-        self.means_precision = BayesianParameter(prior, posterior)
+        self.means_precision = ConjugateBayesianParameter(prior, posterior)
 
     def __len__(self):
         return self.means_precision.prior.dim[0][0]
@@ -329,7 +329,7 @@ class NormalSetSharedIsotropicCovariance(NormalSetSharedCovariance):
         dim = self.means_precision.prior.dim[0][1]
         stats1 = stats[:, [dim, -1]]
         stats2 = torch.cat([stats[:, :dim], stats[:, -2:-1]], dim=-1)
-        nparams = self.means_precision.expected_natural_parameters()
+        nparams = self.means_precision.natural_form()
         nparams1, nparams2 = self._split_natural_parameters(nparams)
         exp_llhs = (stats1 @ nparams1)[:, None] + stats2 @ nparams2.t()
         exp_llhs -= .5 * dim * math.log(2 * math.pi)
@@ -429,7 +429,7 @@ class NormalSetSharedDiagonalCovariance(NormalSetSharedCovariance):
     def expected_log_likelihood(self, stats):
         dim = self.means_precision.prior.dim[0][1]
         stats1, stats2 = self._split_stats(stats)
-        nparams = self.means_precision.expected_natural_parameters()
+        nparams = self.means_precision.natural_form()
         nparams1, nparams2 = self._split_natural_parameters(nparams)
         exp_llhs = (stats1 @ nparams1)[:, None] + stats2 @ nparams2.t()
         exp_llhs -= .5 * dim * math.log(2 * math.pi)
@@ -531,7 +531,7 @@ class NormalSetSharedFullCovariance(NormalSetSharedCovariance):
     def expected_log_likelihood(self, stats):
         dim = self.means_precision.prior.dim[0][1]
         stats1, stats2 = self._split_stats(stats)
-        nparams = self.means_precision.expected_natural_parameters()
+        nparams = self.means_precision.natural_form()
         nparams1, nparams2 = self._split_natural_parameters(nparams)
         exp_llhs = (stats1 @ nparams1)[:, None] + stats2 @ nparams2.t()
         exp_llhs -= .5 * dim * math.log(2 * math.pi)

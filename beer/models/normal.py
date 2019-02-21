@@ -3,7 +3,7 @@ import math
 import torch
 
 from .basemodel import Model
-from .parameters import BayesianParameter
+from .parameters import ConjugateBayesianParameter
 from ..dists import NormalWishart, NormalWishartStdParams
 from ..dists import NormalGamma, NormalGammaStdParams
 from ..dists import IsotropicNormalGamma, IsotropicNormalGammaStdParams
@@ -62,7 +62,7 @@ class Normal(Model):
 
     def __init__(self, prior, posterior):
         super().__init__()
-        self.mean_precision = BayesianParameter(prior, posterior)
+        self.mean_precision = ConjugateBayesianParameter(prior, posterior)
 
     ####################################################################
     # The following properties are exposed only for plotting/debugging

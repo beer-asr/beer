@@ -6,3 +6,6 @@ from . import features
 from . import nnet
 from . import dists
 from . import graph
+
+import warnings
+warnings.filterwarnings("default", category=DeprecationWarning, module='beer')
