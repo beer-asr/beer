@@ -2,6 +2,7 @@ import abc
 from functools import reduce
 import torch
 from ..dists import kl_div
+from .parameters import BayesianParameterSet
 
 __all__ = ['Model', 'DiscreteLatentModel', 'svectors_from_rvectors']
 
@@ -24,11 +25,19 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
     def clear_cache(self):
         self._cache = {}
 
-    def bayesian_parameters(self):
-        'Return an iterator over the Bayesian parameters of the model.'
+    def bayesian_parameters(self, paramfilter=None):
+        '''Return an iterator over the Bayesian parameters of the model.
+        
+        Args:
+            paramfilter (function): function that takes a Bayesian
+                parameter as argument and returns a True if the 
+                parameter should be returned by the iterator False
+                otherwise.
+        '''
         for group in self.mean_field_factorization():
             for param in group:
-                yield param
+                if paramfilter is None or paramfilter(param):
+                    yield param
 
     def kl_div_posterior_prior(self):
         '''Kullback-Leibler divergence between the posterior/prior
@@ -36,6 +45,10 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
 
         Returns:
             float: KL( q || p)
+
+        Note:
+            Model that have non conjugate parameters must override this
+            method.
 
         '''
         return sum([kl_div(param.posterior, param.prior)
@@ -45,7 +58,7 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
         'Dimension of the model\'s super-vector of parameters.'
         dim = 1
         return sum([
-            param.posterior.conjugate_sufficient_statistics_dim
+            param.sufficient_statistics_dim
             for param in self.bayesian_parameters()
         ])
                 
@@ -57,6 +70,27 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
             prior_nparams = param.prior.natural_parameters()
             acc_stats.append(post_nparams - prior_nparams)
         return torch.cat(acc_stats)
+
+    @staticmethod
+    def _replace_params(module, paramsmap):
+        for name, child in module.named_children():
+            if child in paramsmap:
+                module.add_module(name, paramsmap[child])
+            elif isinstance(child, Model):
+                Model._replace_params(child, paramsmap)
+            elif isinstance(child, BayesianParameterSet):
+                for name, childmodule in child.named_modules():
+                    Model._replace_params(childmodule, paramsmap)
+
+    def replace_parameters(self, paramsmap):
+        '''Replace the parameters of the model by new ones.
+
+        Args:
+            paramsmap (dict): Dictionary like object where the keys are
+                the parameters of the model to be replaced and the
+                values are the new parameters.
+        '''
+        Model._replace_params(self, paramsmap)
 
     ####################################################################
     # Abstract methods to be implemented by subclasses.

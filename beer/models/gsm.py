@@ -1,14 +1,16 @@
 'Bayesian Generalized Subspace Model.'
 
+import copy
 import math
 import torch
 from .basemodel import Model
+from .parameters import BayesianParameter
 from .parameters import ConjugateBayesianParameter
 from ..dists import NormalDiagonalCovariance
 from ..dists import JointNormalDiagonalCovariance
 
 
-__all__ = ['GSM']
+__all__ = ['GSM', 'SubspaceBayesianParameter']
 
 
 ########################################################################
@@ -37,6 +39,7 @@ class _MeanLogDiagCov(torch.nn.Module):
     @property
     def diag_cov(self):
         return self.log_diag_cov.exp() 
+
 
 
 # The Affine Transform is not a generative model it inherits from 
@@ -127,8 +130,45 @@ class AffineTransform(Model):
     def accumulate(self, stats):
         raise NotImplementedError
 
+
+########################################################################
+# Subspace parameter.
+
+
+class SubspaceBayesianParameter(BayesianParameter):
+    '''Specific class of (non-conjugate) Bayesian parameter for which 
+    the prior/posterior live in a subspace.
+    '''
+    def __init__(self, parameter, prior):
+        init_stats = torch.zeros_like(parameter.stats)
+        super().__init__(init_stats, prior)
+        self.likelihood_fn = parameter.prior.conjugate()
+        self.pdfvec = None
+    
+    @property
+    def sufficient_statistics_dim(self):
+        return self.likelihood_fn.sufficient_statistics_dim
+
+    def expected_value(self):
+        self.likelihood_fn.parameters_from_pdfvector(self.pdfvec)
+
+    def natural_form(self):
+        return self.pdfvec
+
 ########################################################################
 # GSM implementation.
+
+# helper to iterate over all parameters handled by the subspace.
+def _subspace_params(model):
+    paramfilter = lambda param: isinstance(param, SubspaceBayesianParameter)
+    for param in model.bayesian_parameters(paramfilter):
+        yield param
+
+
+# Error raised when attempting to create a GSM with a model having no
+# Subspace parameters.
+class NoSubspaceBayesianParameters(Exception): pass
+
 
 # Parametererization of the Joint Normal distribution for the latent
 # posterior. 
@@ -141,13 +181,29 @@ class _MeansLogDiagCovs(_MeanLogDiagCov):
     def diag_covs(self):
         return self.log_diag_cov.exp() 
 
+# Parameterization of the Normal distribution for the which doesn't copy
+# its parameters. Instead, it uses the parameters of a joint normal
+# distribution.
+class _NormalParamsView:
+    def __init__(self, jointnormalparams, refidx):
+        self.jointnormalparams = jointnormalparams
+        self.refidx = refidx
 
-def _svectors_from_rvectors(model, rvecs):
+    @property
+    def means(self):
+        return self.jointnormalparams.means[self.refidx]
+
+    @property
+    def diag_covs(self):
+        return self.jointnormalparams.diag_covs[self.refidx]
+
+
+def _svectors_from_rvectors(parameters, rvecs):
     'Map a set of real value vectors to the super-vector space.'
     retval = []
     idx = 0
-    for param in model.bayesian_parameters():
-        pdf = param.posterior
+    for param in parameters:
+        pdf = param.conjugate()
         dim = pdf.conjugate_sufficient_statistics_dim
         stats = pdf.sufficient_statistics_from_rvectors(rvecs[:, idx:idx + dim])
         retval.append(stats)
@@ -158,19 +214,54 @@ def _models_stats(models):
     return torch.cat([model.accumulated_statistics()[None] 
                       for model in models])
 
+def _default_parameters_generator(model):
+    return model.bayesian_parameters()
+
 class GSM(Model):
     'Generalized Subspace Model.'
 
     @classmethod
-    def create(cls, observed_dim, latent_dim, latent_prior, prior_strength=1.):
-        trans = AffineTransform.create(latent_dim, observed_dim, 
-                                       prior_strength=prior_strength)
-        return cls(trans, latent_prior)
+    def create(cls, model, latent_dim, latent_prior, prior_strength=1.):
+        '''Create a new GSM. 
 
-    def __init__(self, affine_transform, latent_prior):
+        Args:
+            model (`Model`): Model to integrate with the GSM. The model
+                has to have at least one `SubspaceBayesianParameter`.
+            latent_dim (int): Dimension of the latent space.
+            latent_prior (``Model``): Prior distribution in the latent 
+                space.
+            prior_strength: (float): Strength of the prior over the 
+                subspace parameters (weights and bias).
+        
+        Returns:
+            a randomly initialized `GSM` object.
+
+        '''
+        svec_dim = sum([param.sufficient_statistics_dim 
+                        for param in _subspace_params(model)])
+        if svec_dim == 0:
+            raise NoSubspaceBayesianParameters(
+                'The model has to have at least one SubspaceBayesianParameter.')
+        trans = AffineTransform.create(latent_dim, svec_dim, 
+                                       prior_strength=prior_strength)
+        return cls(model, trans, latent_prior)
+
+    def __init__(self, model, affine_transform, latent_prior):
         super().__init__()
+        self.model = model
         self.affine_transform = affine_transform
         self.latent_prior = latent_prior
+
+    def new_models(self, nmodels):
+        latent_posteriors = self.new_latent_posteriors(nmodels)
+        jointnormalparams = latent_posteriors.params
+        models = []
+        for i in range(nmodels):
+            new_model = copy.deepcopy(self.model)
+            for param in _subspace_params(new_model):
+                param.posterior = NormalDiagonalCovariance(jointnormalparams)
+            models.append(new_model)
+        return models
 
     def new_latent_posteriors(self, nposts):
         'Create a set of `nposts` latent posteriors.'

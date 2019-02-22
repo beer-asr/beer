@@ -5,11 +5,12 @@ from dataclasses import dataclass
 import torch
 
 
-__all__ = ['ConjugateLikelihood', 'ExponentialFamily', 'kl_div']
+__all__ = ['ConjugateLikelihoodDescriptor', 'ExponentialFamily', 
+           'ParametersView', 'kl_div']
 
 
-# Error raised when the user is providing parameters object with a
-#  missing attribute.
+# Error raised when the user is providing parameters with missing 
+# attribute.
 class MissingParameterAttribute(Exception): pass
 
 # Error raised when a "ExponentialFamily" subclass does not define the
@@ -24,12 +25,33 @@ class DistributionTypeMismatch(Exception): pass
 # distribution of the same type but with different support dimension.
 class SupportDimensionMismatch(Exception): pass
 
-
 # Check if a parameter object has a specific attribute.
 def _check_params_have_attr(params, attrname):
     if not hasattr(params, attrname):
         raise MissingParameterAttribute(
                     f'Parameters have no "{attrname}" attribute')
+
+
+class ParametersView(torch.nn.Module    ):
+    '''Set of parameters own the memory of the parameters. Instead, they
+    point to chunk of memory from another parameters.
+    '''
+
+    def __init__(self, ref, names, idx):
+        super().__init__()
+        self.ref = ref
+        self.idx = idx
+        for name in names:
+            def getter(self, name=name):
+                return getattr(self.ref, name)[self.idx]
+            setattr(self.__class__, name, property(fget=getter))
+        self.names = names
+
+    def __repr__(self):
+        paramstr = ', '.join([f'{name}={getattr(self, name)}' 
+                              for name in self.names])
+        clsname = self.ref.__class__.__qualname__
+        return f'view<{clsname}({paramstr})>'
 
 
 class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
@@ -64,28 +86,9 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
         super().__init__()
         self.params = params
 
-    def __eq__(self, other):
-        if self.__class__ is other.__class__:
-            for param_name in self._std_params_def:
-                param0 = getattr(self, param_name)
-                param1 = getattr(other, param_name)
-                if param0.shape != param1.shape:
-                    # Check if the dimension matches.
-                    return False
-                elif not torch.allclose(param0, param1):
-                    # Check if the parameters are the same.
-                    return False
-            else:
-                return True
-        return NotImplemented
-
-    # Even if two instances are equal (have the same parameters) they
-    # will have different hash and considered to be unique. This is
-    # necessary as when training a model, two distribution may be equal
-    # (at initialization for instance) but we need different hash so the
-    # optimizer don't confuse them.
-    def __hash__(self):
-        return hash(id(self))
+    def view(self, idx):
+        names = tuple(self._std_params_def.keys())
+        return self.__class__(ParametersView(self.params, names, idx))
 
     ####################################################################
     ## Subclass interface
@@ -100,7 +103,9 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def conjugate(self):
-        'Returns a conjugate llh function object to the given pdf.'
+        '''Returns a descriptor of the conjugate llh function object 
+        assiocated with the given pdf.
+        '''
         pass
 
     @property
@@ -140,23 +145,22 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
         pass  
 
 
-class ConjugateLikelihood(metaclass=abc.ABCMeta):
-    '''Base class for conjugate likelihood functions associated with a 
-    member of the exponential family.
-
+class ConjugateLikelihoodDescriptor(metaclass=abc.ABCMeta):
+    '''Base class for descriptors of a conjugate likelihood function
+    associated with a member of the exponential family.
     '''
 
-    @property
     @abc.abstractmethod
-    def sufficient_statistics_dim(self):
-        'Dimension of the sufficient statistics of lihekihood function.'
-        pass
+    def sufficient_statistics_dim(self, zero_stats=False):
+        '''Dimension of the sufficient statistics of lihekihood 
+        function.
 
-    @abc.abstractmethod
-    def parameters_from_pdfvector(self, pdfvec):
-        '''Standard parameters of the likelihood function extracted from
-        a pdf vector.
-
+        Args:
+            zero_stats (boolean): Include the zero order statistics 
+                as well.
+        
+        Returns:
+            int: Dimension of the sufficient statistics.
         '''
         pass
 
@@ -164,8 +168,8 @@ class ConjugateLikelihood(metaclass=abc.ABCMeta):
     def pdfvectors_from_rvectors(self, rvecs):
         '''Transform real value vectors into equivalent pdf vectors
         using a default mapping (distribution dependent). For a pdf 
-        with natural parameters u and log-normalization function A the
-        pdf vector is defined as:
+        with natural parameters u and log-normalization function A(u) 
+        the pdf vector is defined as:
                      
             pvec = (u, -A(u))^T
 
@@ -179,6 +183,12 @@ class ConjugateLikelihood(metaclass=abc.ABCMeta):
         '''
         pass  
 
+    @abc.abstractmethod
+    def parameters_from_pdfvector(self, pdfvec):
+        '''Standard parameters of the likelihood function extracted from
+        a pdf vector.
+        '''
+        pass
 
 
 def kl_div(pdf1, pdf2):
@@ -201,4 +211,4 @@ def kl_div(pdf1, pdf2):
     exp_stats = pdf1.expected_sufficient_statistics()
     lnorm1 = pdf1.log_norm()
     lnorm2 = pdf2.log_norm()
-    return lnorm2 - lnorm1 - exp_stats @ (nparams2 - nparams1)
+    return lnorm2 - lnorm1 - torch.sum(exp_stats * (nparams2 - nparams1), dim=-1)

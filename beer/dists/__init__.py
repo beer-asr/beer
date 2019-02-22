@@ -5,11 +5,11 @@
 
 
 from .basedist import *
-from .dirichlet import *
+#from .dirichlet import *
 from .isonormalgamma import *
 from .normalgamma import *
 from .normalwishart import *
-from .normaldiag import *
+#from .normaldiag import *
 
 
 

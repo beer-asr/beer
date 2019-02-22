@@ -51,8 +51,8 @@ class CategoricalLikelihood(ConjugateLikelihood):
              A(x) = ln( 1 + exp( sum_i^{D-1} (x_i) ) )
 
         '''
-        lnorm = CategoricalLikelihood.log_norm(rvecs)
-        return torch.cat([rvecs, -lnorm.view(-1, 1)], dim=-1)
+        lnorm = CategoricalLikelihood.log_norm(rvecs).view(-1, 1)
+        return torch.cat([rvecs - lnorm, -lnorm], dim=-1)
 
     
 @dataclass(init=False, eq=False, unsafe_hash=True)

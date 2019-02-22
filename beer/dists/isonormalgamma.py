@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import math
 import torch
 from .basedist import ExponentialFamily
-from .basedist import ConjugateLikelihood
+from .basedist import ConjugateLikelihoodDescriptor
 
 
 __all__ = ['IsotropicNormalGamma', 'IsotropicNormalGammaStdParams',
@@ -11,9 +11,7 @@ __all__ = ['IsotropicNormalGamma', 'IsotropicNormalGammaStdParams',
            'JointNormalIsotropicLikelihood', 'NormalIsotropicLikelihood']
 
 
-class NormalIsotropicLikelihood(ConjugateLikelihood):
-
-    __slots__ = 'dim'
+class NormalIsotropicLikelihood(ConjugateLikelihoodDescriptor):
 
     def __init__(self, dim):
         self.dim = dim
@@ -24,6 +22,16 @@ class NormalIsotropicLikelihood(ConjugateLikelihood):
     @property
     def sufficient_statistics_dim(self):
         return self.dim + 1
+
+    @staticmethod
+    def sufficient_statistics(data):
+        dim, dtype, device = data.shape[1], data.dtype, data.device
+        return torch.cat([
+            data,
+            -.5 * torch.sum(data**2, dim=-1).reshape(-1, 1),
+            -.5 * torch.ones(len(data), 1, dtype=dtype, device=device),
+            .5 * dim * torch.ones(len(data), 1, dtype=dtype, device=device),
+        ], dim=-1)
 
     @staticmethod
     def parameters_from_pdfvector(pdfvec):
@@ -45,7 +53,7 @@ class NormalIsotropicLikelihood(ConjugateLikelihood):
         ], dim=-1)        
 
 
-@dataclass(init=False, eq=False, unsafe_hash=True)
+@dataclass()
 class IsotropicNormalGammaStdParams(torch.nn.Module):
     'Standard parameterization of the Normal-Gamma pdf.'
 
@@ -185,7 +193,7 @@ class IsotropicNormalGamma(ExponentialFamily):
         self.params = self.params.from_natural_parameters(natural_params)
 
 
-class JointNormalIsotropicLikelihood(ConjugateLikelihood):
+class JointNormalIsotropicLikelihood(ConjugateLikelihoodDescriptor):
 
     __slots__ = 'ncomp', 'dim'
 

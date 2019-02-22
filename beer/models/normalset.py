@@ -16,6 +16,7 @@ from .normal import Normal
 from .normal import NormalIsotropicCovariance
 from .normal import NormalDiagonalCovariance
 from .normal import NormalFullCovariance
+from .normal import FrozenNormal
 from ..dists import IsotropicNormalGamma
 from ..dists import IsotropicNormalGammaStdParams
 from ..dists import JointIsotropicNormalGamma
@@ -99,8 +100,9 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
     def __len__(self):
         return len(self.means_precisions)
 
-    # __getitem__ should be implemented by subclasses as the type of
-    # the return value will depend on the concrete class.
+    def __getitem__(self, key): 
+        bayes_param = self.means_precisions[key]
+        return FrozenNormal(*bayes_param.expected_value())
 
     ####################################################################
     # Model interface.
@@ -122,16 +124,6 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
 class NormalSetIsotropicCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with isotropic covariance matrix.'''
 
-    def __getitem__(self, key):
-        if not isinstance(key, int):
-            prior = self.means_precisions[0].prior
-            posteriors = [bayes_param.posterior
-                          for bayes_param in self.means_precisions[key]]
-            return NormalSetIsotropicCovariance(prior, posteriors)
-        bayes_param = self.means_precisions[key]
-        prior, posterior = bayes_param.prior, bayes_param.posterior
-        return NormalIsotropicCovariance(prior, posterior)
-
     @staticmethod
     def sufficient_statistics(data):
         return NormalIsotropicCovariance.sufficient_statistics(data)
@@ -140,65 +132,13 @@ class NormalSetIsotropicCovariance(NormalSetNonSharedCovariance):
 class NormalSetDiagonalCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with diagonal covariance matrix.'''
 
-    def __getitem__(self, key):
-        if not isinstance(key, int):
-            prior = self.means_precisions[0].prior
-            posteriors = [bayes_param.posterior
-                          for bayes_param in self.means_precisions[key]]
-            return NormalSetDiagonalCovariance(prior, posteriors)
-        bayes_param = self.means_precisions[key]
-        prior, posterior = bayes_param.prior, bayes_param.posterior
-        return NormalDiagonalCovariance(prior, posterior)
-
     @staticmethod
     def sufficient_statistics(data):
         return NormalDiagonalCovariance.sufficient_statistics(data)
 
-    ####################################################################
-    # Super-Vector representation interface.
-    ####################################################################
-
-    def svector_dim(self):
-        return (len(self), self.means_precisions[0].prior.dim[0] * 2)
-
-    def svector_acc_stats(self):
-        acc_stats = []
-        for param in self.means_precisions:
-            acc_stats.append((param.posterior.natural_parameters() 
-                             - param.prior.natural_parameters())[None])
-        return torch.cat(acc_stats, dim=0)
-    
-    def svectors_from_rvectors(self, rvectors):
-        dim = self.means_precisions[0].prior.dim[0]
-        reshaped_rvectors = rvectors.reshape(len(rvectors), len(self), -1)
-        mean = reshaped_rvectors[:, :, :dim]
-        log_precision = reshaped_rvectors[:, :, dim:]
-        precision = torch.exp(reshaped_rvectors[:, :, dim:])
-        return torch.cat([
-            precision * mean,
-            precision,
-            torch.sum(precision * (mean ** 2), dim=-1)[:, :, None],
-            torch.sum(log_precision, dim=-1)[:, :, None]
-        ], dim=-1)
-
-    def svector_log_likelihood(self, svectors, acc_stats):
-        dim = self.means_precisions[0].prior.dim[0]
-        log_base_measure = - .5 * dim * math.log(2 * math.pi)
-        return torch.sum(svectors * acc_stats, dim=-1) + log_base_measure
-
 
 class NormalSetFullCovariance(NormalSetNonSharedCovariance):
     '''Set of Normal models with full covariance matrix.'''
-
-    def __getitem__(self, key):
-        if not isinstance(key, int):
-            prior = self.means_precisions[0].prior
-            posteriors = [bayes_param.posterior
-                          for bayes_param in self.means_precisions[key]]
-            return NormalSetFullCovariance(prior, posteriors)
-        bayes_param = self.means_precisions[key]
-        prior, posterior = bayes_param.prior, bayes_param.posterior
-        return NormalFullCovariance(prior, posterior)
 
     @staticmethod
     def sufficient_statistics(data):

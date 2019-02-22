@@ -4,7 +4,7 @@ from functools import lru_cache
 import math
 import torch
 from .basedist import ExponentialFamily
-from .basedist import ConjugateLikelihood
+from .basedist import ConjugateLikelihoodDescriptor
 
 
 __all__ = ['NormalWishart', 'NormalWishartStdParams', 'JointNormalWishart',
@@ -12,9 +12,7 @@ __all__ = ['NormalWishart', 'NormalWishartStdParams', 'JointNormalWishart',
            'JointNormalLikelihood']
 
 
-class NormalLikelihood(ConjugateLikelihood):
-
-    __slots__ = 'dim'
+class NormalLikelihood(ConjugateLikelihoodDescriptor):
 
     def __init__(self, dim):
         self.dim = dim
@@ -26,6 +24,17 @@ class NormalLikelihood(ConjugateLikelihood):
     def sufficient_statistics_dim(self):
         d = self.dim
         return 2 * d + d * (d - 1) // 2
+    
+    @staticmethod
+    def sufficient_statistics(data):
+        dtype, device = data.dtype, data.device
+        data_quad = data[:, :, None] * data[:, None, :]
+        return torch.cat([
+            data,
+            -.5 * data_quad.reshape(len(data), -1),
+            -.5 * torch.ones(data.size(0), 1, dtype=dtype, device=device),
+            .5 * torch.ones(data.size(0), 1, dtype=dtype, device=device),
+        ], dim=-1)
 
     def parameters_from_pdfvector(self, pdfvec):
         dim = self.dim
@@ -235,7 +244,7 @@ class NormalWishart(ExponentialFamily):
         self.params = self.params.from_natural_parameters(natural_params)
 
 
-class JointNormalLikelihood(ConjugateLikelihood):
+class JointNormalLikelihood(ConjugateLikelihoodDescriptor):
 
     __slots__ = 'ncomp', 'dim'
 
