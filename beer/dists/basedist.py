@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import torch
 
 
-__all__ = ['ConjugateLikelihoodDescriptor', 'ExponentialFamily', 
+__all__ = ['ConjugateLikelihood', 'ExponentialFamily', 
            'ParametersView', 'kl_div']
 
 
@@ -32,10 +32,13 @@ def _check_params_have_attr(params, attrname):
                     f'Parameters have no "{attrname}" attribute')
 
 
-class ParametersView(torch.nn.Module    ):
+class ParametersView(torch.nn.Module):
     '''Set of parameters own the memory of the parameters. Instead, they
     point to chunk of memory from another parameters.
     '''
+
+    def from_natural_parameters(self, natural_parameters):
+        return self.ref.from_natural_parameters(natural_parameters)
 
     def __init__(self, ref, names, idx):
         super().__init__()
@@ -145,10 +148,8 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
         pass  
 
 
-class ConjugateLikelihoodDescriptor(metaclass=abc.ABCMeta):
-    '''Base class for descriptors of a conjugate likelihood function
-    associated with a member of the exponential family.
-    '''
+class ConjugateLikelihood(metaclass=abc.ABCMeta):
+    'Base class for conjugate likelihood function.'
 
     @abc.abstractmethod
     def sufficient_statistics_dim(self, zero_stats=False):
@@ -161,6 +162,19 @@ class ConjugateLikelihoodDescriptor(metaclass=abc.ABCMeta):
         
         Returns:
             int: Dimension of the sufficient statistics.
+        '''
+        pass
+
+    @abc.abstractmethod
+    def sufficient_statistics(self, data):
+        '''Sufficient statistics of the likelihood function for the given
+        data.
+
+        Args:
+            data (``torch.Tensor[N, D]``): Input data.
+        
+        Returns:
+            stats (``torch.Tensor[N, Q]``): Sufficient statistics.
         '''
         pass
 
@@ -187,6 +201,13 @@ class ConjugateLikelihoodDescriptor(metaclass=abc.ABCMeta):
     def parameters_from_pdfvector(self, pdfvec):
         '''Standard parameters of the likelihood function extracted from
         a pdf vector.
+        '''
+        pass
+
+    @abc.abstractmethod
+    def __call__(self, natural_parameters, stats):
+        '''Compute the log likelihood of the data (represented as 
+        sufficient statistics) given the natural parameters.
         '''
         pass
 

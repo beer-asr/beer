@@ -9,14 +9,12 @@ from collections import namedtuple
 import math
 import torch
 
-from .parameters import ConjugateBayesianParameter
+from .parameters import JointConjugateBayesianParameters
 from .parameters import BayesianParameterSet
 from .modelset import ModelSet
 from .normal import Normal
-from .normal import NormalIsotropicCovariance
-from .normal import NormalDiagonalCovariance
-from .normal import NormalFullCovariance
-from .normal import FrozenNormal
+from .normal import _full_cov
+from .normal import UnknownCovarianceType
 from ..dists import IsotropicNormalGamma
 from ..dists import IsotropicNormalGammaStdParams
 from ..dists import JointIsotropicNormalGamma
@@ -33,28 +31,107 @@ from ..dists import JointNormalWishartStdParams
 
 __all__ = ['NormalSet']
 
+########################################################################
+# Helper to build the default parameters.
 
-class NormalSet(ModelSet, metaclass=abc.ABCMeta):
+def _default_fullcov_param(mean, cov, prior_strength, tensorconf):
+    cov = _full_cov(cov, mean.shape[-1], tensorconf)
+    scale = torch.tensor(prior_strength, **tensorconf)
+    dof = torch.tensor(prior_strength + len(mean) - 1, **tensorconf)
+    scale_matrix = cov.inverse() / dof
+    params = NormalWishartStdParams(mean, scale, scale_matrix, dof)
+    prior = NormalWishart(params)
+    params = NormalWishartStdParams(mean, scale, scale_matrix, dof)
+    posterior = NormalWishart(params)
+    return JointConjugateBayesianParameters(prior, posterior)
+
+def _default_diagcov_param(mean, cov, size, prior_strength, noise_std, 
+                           tensorconf):
+    cov = _full_cov(cov, mean.shape[-1], tensorconf)
+    means = mean.repeat(size, 1)
+    noise = torch.randn(size, len(mean), **tensorconf) * noise_std
+    scale = torch.tensor(prior_strength, **tensorconf).repeat(size, 1)
+    shape = torch.tensor(prior_strength, **tensorconf).repeat(size, 1)
+    rates = prior_strength * cov.diag().repeat(size, 1)
+    params = NormalGammaStdParams(means, scale, shape, rates)
+    prior = NormalGamma(params)
+    params = NormalGammaStdParams(mean + noise, scale, shape, rates)
+    posterior = NormalGamma(params)
+    return JointConjugateBayesianParameters(prior, posterior)
+
+def _default_isocov_param(mean, cov, prior_strength, tensorconf):
+    cov = _full_cov(cov, mean.shape[-1], tensorconf)
+    variance = cov.diag().max()
+    scale = torch.tensor(prior_strength, **tensorconf)
+    shape = torch.tensor(prior_strength, **tensorconf)
+    rate =  prior_strength * variance
+    params = IsotropicNormalGammaStdParams(mean, scale, shape, rate)
+    prior = IsotropicNormalGamma(params)
+    params = IsotropicNormalGammaStdParams(mean, scale, shape, rate)
+    posterior = IsotropicNormalGamma(params)
+    return JointConjugateBayesianParameters(prior, posterior)
+
+_default_param = {
+    'full': _default_fullcov_param,
+    'diagonal': _default_diagcov_param,
+    'isotropic': _default_isocov_param,
+}
+
+########################################################################
+
+
+
+class NormalSet(ModelSet):
     '''Set of Normal models.'''
 
-    @staticmethod
-    def create(mean, cov, size, prior_strength=1, noise_std=1.,
+    @classmethod
+    def create(cls, mean, cov, size, prior_strength=1, noise_std=1.,
                cov_type='full', shared_cov=False):
-        cov = cov.clone().detach()
-        if len(cov.shape) <= 1:
-            std_dev = cov.sqrt()
-        else:
-            std_dev = cov.diag().sqrt()
-        if shared_cov:
-            return NormalSetSharedCovariance.create(mean, cov, size,
-                                                    prior_strength,
-                                                    noise_std * std_dev,
-                                                    cov_type)
-        else:
-            return NormalSetNonSharedCovariance.create(mean, cov, size,
-                                                       prior_strength,
-                                                       noise_std * std_dev,
-                                                       cov_type)
+        if cov_type not in cov_type:
+            raise UnknownCovarianceType('Unknown covariance type: ' \
+                                        f'"{cov_type}"')
+
+        tensorconf = {'dtype': mean.dtype, 'device': mean.device, 
+                      'requires_grad': False}
+        mean = mean.detach()
+        cov = cov.detach()
+        makeparam = _default_param[cov_type]
+        return cls(makeparam(mean, cov, size, prior_strength, noise_std,
+                             tensorconf))
+
+    def __init__(self, means_precisions):
+        super().__init__()
+        self.means_precisions = means_precisions
+
+    ####################################################################
+    # Model interface.
+
+    def sufficient_statistics(self, data):
+        return self.means_precisions.likelihood_fn.sufficient_statistics(data)
+
+    def mean_field_factorization(self):
+        return [[self.means_precisions]]
+
+    def expected_log_likelihood(self, stats):
+        nparams = self.means_precisions.natural_form()
+        return self.means_precisions.likelihood_fn(nparams, stats)
+        dim = self.means_precisions[0].prior.dim[0]
+        return stats @ nparams.t() - .5 * dim * math.log(2 * math.pi)
+
+    def accumulate(self, stats, weights):
+        w_stats = weights.t() @ stats
+        return {self.means_precisions: w_stats}
+
+    ####################################################################
+    # ModelSet interface.
+
+    def __len__(self):
+        return len(self.means_precisions)
+
+    def __getitem__(self, key): 
+        if isinstance(key, slice):
+            self.__class__(self.means_precisions[key])
+        return Normal(self.means_precisions[key])
 
 
 ########################################################################
@@ -66,6 +143,7 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
     @staticmethod
     def create(mean, cov, size, prior_strength=1, noise_std=1.,
                cov_type='full'):
+        
         normal = Normal.create(mean, cov, prior_strength, cov_type)
         prior = normal.mean_precision.prior
         posteriors = []
@@ -95,21 +173,20 @@ class NormalSetNonSharedCovariance(NormalSet, metaclass=abc.ABCMeta):
 
     ####################################################################
     # ModelSet interface.
-    ####################################################################
-
+    
     def __len__(self):
         return len(self.means_precisions)
 
     def __getitem__(self, key): 
-        bayes_param = self.means_precisions[key]
-        return FrozenNormal(*bayes_param.expected_value())
+        if isinstance(key, slice):
+            self.__class__(self.means_precisions[key])
+        Normal(self.means_precisions[key])
 
     ####################################################################
     # Model interface.
-    ####################################################################
 
     def mean_field_factorization(self):
-        return [[*self.means_precisions]]
+        return [[self.means_precisions]]
 
     def expected_log_likelihood(self, stats):
         nparams = self.means_precisions.natural_form()

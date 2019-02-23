@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import math
 import torch
 from .basedist import ExponentialFamily
-from .basedist import ConjugateLikelihoodDescriptor
+from .basedist import ConjugateLikelihood
 
 
 __all__ = ['IsotropicNormalGamma', 'IsotropicNormalGammaStdParams',
@@ -11,7 +11,7 @@ __all__ = ['IsotropicNormalGamma', 'IsotropicNormalGammaStdParams',
            'JointNormalIsotropicLikelihood', 'NormalIsotropicLikelihood']
 
 
-class NormalIsotropicLikelihood(ConjugateLikelihoodDescriptor):
+class NormalIsotropicLikelihood(ConjugateLikelihood):
 
     def __init__(self, dim):
         self.dim = dim
@@ -193,7 +193,7 @@ class IsotropicNormalGamma(ExponentialFamily):
         self.params = self.params.from_natural_parameters(natural_params)
 
 
-class JointNormalIsotropicLikelihood(ConjugateLikelihoodDescriptor):
+class JointNormalIsotropicLikelihood(ConjugateLikelihood):
 
     __slots__ = 'ncomp', 'dim'
 

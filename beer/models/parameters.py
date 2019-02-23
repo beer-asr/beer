@@ -6,14 +6,16 @@ from ..dists import ExponentialFamily
 
 
 __all__ = ['BayesianParameter', 'BayesianParameterSet', 
-           'ConjugateBayesianParameter']
+           'ConjugateBayesianParameter',
+           'JointConjugateBayesianParameters']
 
-# Empty object for pretty representation of the Subspace Bayesian 
-# paramters.
+
+# Empty object for pretty representation of the parameters.
 class _UNSPECIFIED_POSTERIOR_CLASS:
     def __repr__(self):
         return '<unspecified>'
 _UNSPECIFIED_POSTERIOR = _UNSPECIFIED_POSTERIOR_CLASS()
+
 
 class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
     '''Base class for a Bayesian Parameter (i.e. a parameter with a prior
@@ -21,10 +23,12 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
      
     '''
 
-    def __init__(self, init_stats, prior, posterior=_UNSPECIFIED_POSTERIOR):
+    def __init__(self, init_stats, prior, posterior=_UNSPECIFIED_POSTERIOR,
+                 likelihood_fn=None):
         super().__init__()
         self.prior = prior
         self.posterior = posterior
+        self.likelihood_fn = likelihood_fn
         self.register_buffer('_stats', init_stats.clone().detach())
         self._callbacks = set()
         self._uuid = uuid.uuid4()
@@ -106,13 +110,6 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
     # Interface to be implemented by other subclasses.
 
     @abc.abstractmethod
-    def sufficient_statistics(self, data):
-        '''Extract the sufficient statistics of the parameter from the 
-        data.
-        '''
-        pass
-
-    @abc.abstractmethod
     def value(self):
         '''Value of the parameter w.r.t. the posterior
         distribution of the parameter. Note that, according to the
@@ -138,7 +135,6 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
             ``torch.Tensor``.
         '''
         pass
-
 
 class BayesianParameterSet(torch.nn.ModuleList):
     '''Set of Bayesian parameters.'''
@@ -168,20 +164,13 @@ class ConjugateBayesianParameter(BayesianParameter):
 
     Note:
         The type of the prior is the same as the posterior. 
-    
     '''
 
-    def __init__(self, prior, posterior):
+    def __init__(self, prior, posterior, likelihood_fn=None):
         init_stats = torch.zeros_like(prior.natural_parameters())
-        self._conjugate = prior.conjugate()
-        super().__init__(init_stats, prior, posterior)
-        
-    @property
-    def sufficient_statistics_dim(self):
-        return self._conjugate.sufficient_statistics_dim
-    
-    def sufficient_statistics(self, data):
-        return self._conjugate.sufficient_statistics(data)
+        lh_fn = likelihood_fn if likelihood_fn is not None \
+                              else prior.conjugate()
+        super().__init__(init_stats, prior, posterior, lh_fn)
 
     def value(self):
         return self.posterior.expected_value()
@@ -196,3 +185,17 @@ class ConjugateBayesianParameter(BayesianParameter):
         new_nparams = posterior_nparams + lrate * natural_grad
         self.posterior.update_from_natural_parameters(new_nparams)
         self.dispatch()
+
+
+class JointConjugateBayesianParameters(ConjugateBayesianParameter):
+    'Set of conjugate Bayesian parameters with a joint pdf posterior.'
+
+    def __len__(self):
+        return self.posterior.dim[0]
+    
+    def __getitem__(self, key):
+        if isinstance(key, slice): 
+            cls = JointConjugateBayesianParameters
+        else:
+            cls = ConjugateBayesianParameter
+        return cls(self.prior.view(key), self.posterior.view(key))

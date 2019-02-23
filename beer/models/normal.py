@@ -22,15 +22,15 @@ class UnknownCovarianceType(Exception): pass
 
 # Return a full covariance matrix whether the user has specified a 
 # scalar, a diagonal or a full matrix.
-def _full_cov(cov, tensorconf):
+def _full_cov(cov, dim, tensorconf):
     if len(cov.shape) == 1 and cov.shape[0] == 1:
-        return cov * torch.eye(len(mean), **tensorconf)
+        return cov * torch.eye(dim, **tensorconf)
     elif len(cov.shape) == 1:
         return cov.diag()
     return cov
 
 def _default_fullcov_param(mean, cov, prior_strength, tensorconf):
-    cov = _full_cov(cov, tensorconf)
+    cov = _full_cov(cov, mean.shape[-1], tensorconf)
     scale = torch.tensor(prior_strength, **tensorconf)
     dof = torch.tensor(prior_strength + len(mean) - 1, **tensorconf)
     scale_matrix = cov.inverse() / dof
@@ -41,7 +41,7 @@ def _default_fullcov_param(mean, cov, prior_strength, tensorconf):
     return ConjugateBayesianParameter(prior, posterior)
 
 def _default_diagcov_param(mean, cov, prior_strength, tensorconf):
-    cov = _full_cov(cov, tensorconf)
+    cov = _full_cov(cov, mean.shape[-1], tensorconf)
     variance = cov.diag()
     scale = torch.tensor(prior_strength, **tensorconf)
     shape = torch.tensor(prior_strength, **tensorconf)
@@ -53,7 +53,7 @@ def _default_diagcov_param(mean, cov, prior_strength, tensorconf):
     return ConjugateBayesianParameter(prior, posterior)
 
 def _default_isocov_param(mean, cov, prior_strength, tensorconf):
-    cov = _full_cov(cov, tensorconf)
+    cov = _full_cov(cov, mean.shape[-1], tensorconf)
     variance = cov.diag().max()
     scale = torch.tensor(prior_strength, **tensorconf)
     shape = torch.tensor(prior_strength, **tensorconf)
@@ -137,12 +137,14 @@ class Normal(Model):
     ####################################################################
 
     def sufficient_statistics(self, data):
-        return self.mean_precision.sufficient_statistics(data)
+        return self.mean_precision.likelihood_fn.sufficient_statistics(data)
 
     def mean_field_factorization(self):
         return [[self.mean_precision]]
 
     def expected_log_likelihood(self, stats):
+        nparams = self.mean_precision.natural_form()
+        return self.mean_precision.likelihood_fn(nparams, stats)
         dim = self.mean_precision.prior.dim[0]
         nparams = self.mean_precision.natural_form()
         return (stats * nparams[None]).sum(dim=-1) \

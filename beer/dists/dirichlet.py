@@ -11,8 +11,6 @@ __all__ = ['Dirichlet', 'DirichletStdParams', 'CategoricalLikelihood']
 
 class CategoricalLikelihood(ConjugateLikelihood):
 
-    __slots__ = 'dim'
-
     def __init__(self, dim):
         self.dim = dim
 
@@ -22,6 +20,9 @@ class CategoricalLikelihood(ConjugateLikelihood):
     @property
     def sufficient_statistics_dim(self):
         return self.dim - 1
+
+    def sufficient_statistics(self, data):
+        raise NotImplementedError
 
     @staticmethod
     def log_norm(nparams):
@@ -53,6 +54,9 @@ class CategoricalLikelihood(ConjugateLikelihood):
         '''
         lnorm = CategoricalLikelihood.log_norm(rvecs).view(-1, 1)
         return torch.cat([rvecs - lnorm, -lnorm], dim=-1)
+
+    def __call__(pdfvecs, stats):
+        return stats @ pdfvecs
 
     
 @dataclass(init=False, eq=False, unsafe_hash=True)

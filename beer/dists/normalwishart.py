@@ -4,7 +4,7 @@ from functools import lru_cache
 import math
 import torch
 from .basedist import ExponentialFamily
-from .basedist import ConjugateLikelihoodDescriptor
+from .basedist import ConjugateLikelihood
 
 
 __all__ = ['NormalWishart', 'NormalWishartStdParams', 'JointNormalWishart',
@@ -12,7 +12,7 @@ __all__ = ['NormalWishart', 'NormalWishartStdParams', 'JointNormalWishart',
            'JointNormalLikelihood']
 
 
-class NormalLikelihood(ConjugateLikelihoodDescriptor):
+class NormalLikelihood(ConjugateLikelihood):
 
     def __init__(self, dim):
         self.dim = dim
@@ -244,7 +244,7 @@ class NormalWishart(ExponentialFamily):
         self.params = self.params.from_natural_parameters(natural_params)
 
 
-class JointNormalLikelihood(ConjugateLikelihoodDescriptor):
+class JointNormalLikelihood(ConjugateLikelihood):
 
     __slots__ = 'ncomp', 'dim'
 

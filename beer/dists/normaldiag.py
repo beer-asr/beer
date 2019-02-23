@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import math
 import torch
 from .basedist import ExponentialFamily
-from .basedist import ConjugateLikelihoodDescriptor
+from .basedist import ConjugateLikelihood
 
 
 __all__ = ['NormalDiagonalCovariance', 'NormalDiagonalCovarianceStdParams',
@@ -13,7 +13,7 @@ __all__ = ['NormalDiagonalCovariance', 'NormalDiagonalCovarianceStdParams',
            'JointNormalFixedDiagonalCovarianceLikelihood',]
 
 
-class NormalFixedDiagonalCovarianceLikelihood(ConjugateLikelihoodDescriptor):
+class NormalFixedDiagonalCovarianceLikelihood(ConjugateLikelihood):
 
     __slots__ = 'dim'
 
@@ -146,7 +146,7 @@ class NormalDiagonalCovariance(ExponentialFamily):
         self.params = self.params.from_natural_parameters(natural_params)
 
 
-class JointNormalFixedDiagonalCovarianceLikelihood(ConjugateLikelihoodDescriptor):
+class JointNormalFixedDiagonalCovarianceLikelihood(ConjugateLikelihood):
 
     __slots__ = 'ncomp', 'dim'
 

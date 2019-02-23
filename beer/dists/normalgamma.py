@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import math
 import torch
 from .basedist import ExponentialFamily
-from .basedist import ConjugateLikelihoodDescriptor
+from .basedist import ConjugateLikelihood
 
 
 __all__ = ['NormalGamma', 'NormalGammaStdParams',
@@ -11,7 +11,7 @@ __all__ = ['NormalGamma', 'NormalGammaStdParams',
            'NormalDiagonalLikelihood', 'JointNormalDiagonalLikelihood']
 
 @dataclass
-class NormalDiagonalLikelihood(ConjugateLikelihoodDescriptor):
+class NormalDiagonalLikelihood(ConjugateLikelihood):
     dim: int
 
     @property
@@ -46,9 +46,15 @@ class NormalDiagonalLikelihood(ConjugateLikelihoodDescriptor):
         precision = pdfvec[dim: 2 * dim]
         mean = pdfvec[:dim] / precision
         return mean, precision  
+    
+    def __call__(self, pdfvecs, stats):
+        if len(pdfvecs.shape) == 1:
+            pdfvecs = pdfvecs.view(1, -1)
+        log_basemeasure = -.5 * self.dim * math.log(2 * math.pi)
+        return stats @ pdfvecs.t() + log_basemeasure
 
 
-@dataclass(init=False)
+@dataclass(init=False, unsafe_hash=True)
 class NormalGammaStdParams(torch.nn.Module):
     mean: torch.Tensor
     scale: torch.Tensor
@@ -80,7 +86,7 @@ class NormalGammaStdParams(torch.nn.Module):
         if len(npsize) == 1:
             return cls(mean.view(-1), scale.view(-1), shape.view(-1), 
                        rates.view(-1))
-        return cls(mean, scale, shape, rates)
+        return cls(mean, scale.view(-1, 1), shape.view(-1, 1), rates)
 
 
 class NormalGamma(ExponentialFamily):
@@ -166,7 +172,7 @@ class NormalGamma(ExponentialFamily):
         self.params = self.params.from_natural_parameters(natural_params)
 
 
-class JointNormalDiagonalLikelihood(ConjugateLikelihoodDescriptor):
+class JointNormalDiagonalLikelihood(ConjugateLikelihood):
     def __init__(self, ncomp, dim):
         self.ncomp = ncomp
         self.dim = dim
