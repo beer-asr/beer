@@ -69,7 +69,7 @@ class NormalGammaStdParams(torch.nn.Module):
 
     @classmethod
     def from_natural_parameters(cls, natural_params):
-        npsize =natural_params.shape
+        npsize = natural_params.shape
         if len(npsize) == 1:
             natural_params = natural_params.view(1, -1)
         dim = (natural_params.shape[-1] -  2) // 2

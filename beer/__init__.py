@@ -1,4 +1,9 @@
-'''BEER -- the Bayesian spEEch Recognizer.'''
+'''BEER -- the Bayesian spEEch Recognizer.
+
+BEER is a machine learning library focused on Bayesian Generative Models
+for speech technologies. 
+
+'''
 
 from .models import *
 from .inference import *

@@ -111,6 +111,5 @@ class Mixture(DiscreteLatentModel):
         log_weights = self.weights.expected_natural_parameters().view(1, -1)
         per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
         per_component_exp_llh += log_weights
-
         lognorm = torch.logsumexp(per_component_exp_llh, dim=1).view(-1)
         return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))

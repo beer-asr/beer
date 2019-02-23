@@ -29,14 +29,17 @@ __all__ = ['NormalSet']
 ########################################################################
 # Helper to build the default parameters.
 
-def _default_fullcov_param(mean, cov, prior_strength, tensorconf):
-    cov = _full_cov(cov, mean.shape[-1], tensorconf)
-    scale = torch.tensor(prior_strength, **tensorconf)
-    dof = torch.tensor(prior_strength + len(mean) - 1, **tensorconf)
-    scale_matrix = cov.inverse() / dof
-    params = NormalWishartStdParams(mean, scale, scale_matrix, dof)
+def _default_fullcov_param(mean, cov, size, prior_strength, noise_std, 
+                           tensorconf):
+    cov = _full_cov(cov, mean.shape[-1], tensorconf).repeat(size, 1, 1)
+    means = mean.repeat(size, 1)
+    noise = torch.randn(size, len(mean), **tensorconf) * noise_std
+    scale = torch.tensor(prior_strength, **tensorconf).repeat(size, 1)
+    dof = torch.tensor(prior_strength + len(mean) - 1, **tensorconf).repeat(size, 1)
+    scale_matrix = (cov.inverse() / dof[:, :, None])
+    params = NormalWishartStdParams(means, scale, scale_matrix, dof)
     prior = NormalWishart(params)
-    params = NormalWishartStdParams(mean, scale, scale_matrix, dof)
+    params = NormalWishartStdParams(means + noise, scale, scale_matrix, dof)
     posterior = NormalWishart(params)
     return JointConjugateBayesianParameters(prior, posterior)
 
@@ -86,7 +89,7 @@ class NormalSet(ModelSet):
                cov_type='full', shared_cov=False):
         if shared_cov:
             import warnings
-            warnings.warn('The "NormalSet" with shared covariance is ' \
+            warnings.warn('The "NormalSet" with shared covariance is not ' \
                           'supported anymore. The argument will be ignored.',
                           DeprecationWarning, stacklevel=2)
     

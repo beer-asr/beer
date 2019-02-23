@@ -101,11 +101,7 @@ class IsotropicNormalGamma(ExponentialFamily):
 
     @property
     def dim(self):
-        '''Return a tuple with the dimension of the Normal and the
-        dimension of the joint Gamma (just one for the latter).
-
-        '''
-        return (len(self.params.mean), 1)
+        return (*self.params.mean.shape, 1)
 
     def conjugate(self):
         return IsotropicNormalLikelihood(self.params.mean.shape[-1])
