@@ -87,9 +87,16 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
 
     def __init__(self, params):
         super().__init__()
-        self.params = params
+        self.params = params        
 
     def view(self, idx):
+        '''Create a new distribution which share its parameters with 
+        another distribution.
+
+        Args:
+            idx (int, slice): Index(ices) of the distribution to use 
+                to create the distribution.
+        '''
         names = tuple(self._std_params_def.keys())
         return self.__class__(ParametersView(self.params, names, idx))
 

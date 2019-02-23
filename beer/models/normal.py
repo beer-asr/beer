@@ -145,10 +145,6 @@ class Normal(Model):
     def expected_log_likelihood(self, stats):
         nparams = self.mean_precision.natural_form()
         return self.mean_precision.likelihood_fn(nparams, stats)
-        dim = self.mean_precision.prior.dim[0]
-        nparams = self.mean_precision.natural_form()
-        return (stats * nparams[None]).sum(dim=-1) \
-               -.5 * dim * math.log(2 * math.pi)
 
     def accumulate(self, stats, parent_msg=None):
         return {self.mean_precision: stats.sum(dim=0)}

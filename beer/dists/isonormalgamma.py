@@ -7,37 +7,28 @@ from .basedist import ConjugateLikelihood
 
 
 __all__ = ['IsotropicNormalGamma', 'IsotropicNormalGammaStdParams',
-           'JointIsotropicNormalGamma', 'JointIsotropicNormalGammaStdParams',
-           'JointNormalIsotropicLikelihood', 'NormalIsotropicLikelihood']
+           'IsotropicNormalLikelihood']
 
-
-class NormalIsotropicLikelihood(ConjugateLikelihood):
-
-    def __init__(self, dim):
-        self.dim = dim
-
-    def __repr__(self):
-        return f'{self.__class__.__qualname__}(dim={self.dim})'
+@dataclass
+class IsotropicNormalLikelihood(ConjugateLikelihood):
+    dim: int
 
     @property
-    def sufficient_statistics_dim(self):
-        return self.dim + 1
+    def sufficient_statistics_dim(self, zero_stats=True):
+        zero_stats_dim = 1 if zero_stats else 0
+        return self.dim + zero_stats_dim
 
     @staticmethod
     def sufficient_statistics(data):
-        dim, dtype, device = data.shape[1], data.dtype, data.device
+        dim = data.shape[-1]
+        length = len(data)
+        tensorconf = {'dtype': data.dtype, 'device': data.device}
         return torch.cat([
             data,
-            -.5 * torch.sum(data**2, dim=-1).reshape(-1, 1),
-            -.5 * torch.ones(len(data), 1, dtype=dtype, device=device),
-            .5 * dim * torch.ones(len(data), 1, dtype=dtype, device=device),
+            -.5 * torch.sum(data**2, dim=-1).view(-1, 1),
+            -.5 * torch.ones(length, 1, **tensorconf),
+            .5 * dim * torch.ones(length, 1, **tensorconf),
         ], dim=-1)
-
-    @staticmethod
-    def parameters_from_pdfvector(pdfvec):
-        precision = pdfvec[-3]
-        mean = pdfvec[:-3] / precision
-        return mean, precision
 
     @staticmethod
     def pdfvectors_from_rvectors(rvecs):
@@ -52,11 +43,21 @@ class NormalIsotropicLikelihood(ConjugateLikelihood):
             torch.sum(log_precision, dim=-1)[:, None]
         ], dim=-1)        
 
+    @staticmethod
+    def parameters_from_pdfvector(pdfvec):
+        precision = pdfvec[-3]
+        mean = pdfvec[:-3] / precision
+        return mean, precision
 
-@dataclass()
+    def __call__(self, pdfvecs, stats):
+        if len(pdfvecs.shape) == 1:
+            pdfvecs = pdfvecs.view(1, -1)
+        log_basemeasure = -.5 * self.dim * math.log(2 * math.pi)
+        return stats @ pdfvecs.t() + log_basemeasure
+
+
+@dataclass(init=False, unsafe_hash=True)
 class IsotropicNormalGammaStdParams(torch.nn.Module):
-    'Standard parameterization of the Normal-Gamma pdf.'
-
     mean: torch.Tensor
     scale: torch.Tensor
     shape: torch.Tensor
@@ -71,24 +72,26 @@ class IsotropicNormalGammaStdParams(torch.nn.Module):
 
     @classmethod
     def from_natural_parameters(cls, natural_params):
-        dim = len(natural_params) - 3
-        np1 = natural_params[:dim]
-        np2 = natural_params[dim:dim+1]
-        np3 = natural_params[-2].view(1)
-        np4 = natural_params[-1].view(1)
+        npsize = natural_params.shape
+        if len(npsize) == 1:
+            natural_params = natural_params.view(1, -1)
+        dim = natural_params.shape[-1] - 3
+        np1 = natural_params[:, :dim]
+        np2 = natural_params[:, dim:dim+1]
+        np3 = natural_params[:, -2].view(-1, 1)
+        np4 = natural_params[:, -1].view(-1, 1)
         scale = -2 * np3
         shape = np4 + 1 - .5 * dim
         mean = np1 / scale
-        rate = -np2 - .5 * scale * torch.sum(mean * mean, dim=-1)
-        return cls(mean, scale, shape, rate)
+        rate = -np2 - .5 * scale * torch.sum(mean * mean, dim=-1, keepdim=True)
+
+        if len(npsize) == 1:
+            return cls(mean.view(-1), scale.view(-1), shape.view(-1), 
+                       rate.view(-1))
+        return cls(mean, scale.view(-1, 1), shape.view(-1, 1), rate.view(-1, 1))
 
 
 class IsotropicNormalGamma(ExponentialFamily):
-    '''Set of independent Normal-Gamma distribution having the same
-    scale (Normal), shape and rate (Gamma) parameters for all dimension.
-
-    '''
-
     _std_params_def = {
         'mean': 'Mean of the Normal.',
         'scale': 'Scale of the (diagonal) covariance matrix.',
@@ -105,7 +108,7 @@ class IsotropicNormalGamma(ExponentialFamily):
         return (len(self.params.mean), 1)
 
     def conjugate(self):
-        return NormalIsotropicLikelihood(self.dim[0])
+        return IsotropicNormalLikelihood(self.params.mean.shape[-1])
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -136,216 +139,51 @@ class IsotropicNormalGamma(ExponentialFamily):
             and "psi" is the "digamma" function.
 
         '''
-        dim = self.dim[0]
-        precision = self.params.shape / self.params.rate
-        logdet = (torch.digamma(self.params.shape) - torch.log(self.params.rate))
-        return torch.cat([
-            precision * self.params.mean,
-            precision.view(1),
-            ((dim / self.params.scale) \
-                    + precision * (self.params.mean**2).sum()).view(1),
-            logdet.view(1)
-        ])
+        mean, scale, shape, rate = self.params.mean, self.params.scale, \
+            self.params.shape, self.params.rate
+        dim = mean.shape[-1]
+        shape_size = shape.shape if len(shape.shape) > 0 else 1
+        precision = shape / rate
+        prec_quad_mean = (precision * (mean**2).sum(dim=-1, keepdim=True))
+        prec_quad_mean += (dim / scale)
+        logdet = (torch.digamma(shape) - torch.log(rate))
+        return torch.cat([precision * mean, precision.reshape(shape_size), 
+                          prec_quad_mean, logdet.reshape(shape_size)], dim=-1)
 
     def expected_value(self):
         'Expected mean and expected precision.'
         return self.params.mean, self.params.shape / self.params.rate
 
     def log_norm(self):
-        dim = self.dim[0]
-        return torch.lgamma(self.params.shape) \
-            - self.params.shape * self.params.rate.log() \
-            - .5 * dim * self.params.scale.log()
+        mean, scale, shape, rate = self.params.mean, self.params.scale, \
+            self.params.shape, self.params.rate
+        dim = mean.shape[-1]
+        return (torch.lgamma(shape) - shape * rate.log() \
+                - .5 * dim * scale.log()).sum(dim=-1)
 
     # TODO
     def sample(self, nsamples):
         raise NotImplementedError
 
     def natural_parameters(self):
-        '''Natural form of the current parameterization. For the
-        standard parameters (m=mean, k=scale, a=shape, b=rate) the
-        natural parameterization is given by:
-
+        '''
         nparams = (
             k * m ,
             -.5 * k * m^2
             -.5 * k,
             a - 1 + .5 * D
         )
-
-        Note:
-            "D" is the dimension of "m" and "^2" is the elementwise
-            square operation.
-
-        Returns:
-            ``torch.Tensor[D + 3]``
-
         '''
+        mean, scale, shape, rate = self.params.mean, self.params.scale, \
+            self.params.shape, self.params.rate
+        dim = mean.shape[-1]
+        shape_size = shape.shape if len(shape.shape) > 0 else 1
         return torch.cat([
-            self.params.scale * self.params.mean,
-            (-.5 * self.params.scale * torch.sum(self.params.mean**2) \
-                    - self.params.rate).view(1),
-            -.5 * self.params.scale.view(1),
-            self.params.shape.view(1) - 1 + .5 * self.dim[0]
-        ])
+            scale * mean,
+            -.5 * scale * torch.sum(mean**2, dim=-1, keepdim=True) - rate,
+            -.5 * scale.view(shape_size),
+            shape.view(shape_size) - 1 + .5 * dim
+        ], dim=-1)
 
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
-
-
-class JointNormalIsotropicLikelihood(ConjugateLikelihood):
-
-    __slots__ = 'ncomp', 'dim'
-
-    def __init__(self, ncomp, dim):
-        self.ncomp = ncomp
-        self.dim = dim
-
-    def __repr__(self):
-        return f'{self.__class__.__qualname__}(ncomp={self.ncomp}, dim={self.dim})'
-
-    @property
-    def sufficient_statistics_dim(self):
-        return self.ncomp * self.dim + 1
-
-    def parameters_from_pdfvector(self, pdfvec):
-        ndim = self.ncomp * self.dim
-        precision = pdfvec[ndim: ndim + 1]
-        means = pdfvec[:ndim] / precision
-        return means.reshape(self.ncomp, self.dim), precision
-
-    def pdfvectors_from_rvectors(self, rvecs):
-        k, dim = self.ncomp, self.dim
-        means = rvecs[:, :k * dim].reshape(-1, k, dim)
-        log_precision = rvecs[:, -2:-1]
-        precision = torch.exp(log_precision)
-        return torch.cat([
-            (means * precision[:, None, :]).reshape(-1, k * dim),
-            precision,
-            torch.sum((means ** 2) * precision[:, None, :], dim=-1),
-            torch.sum(log_precision, dim=-1)[:, None]
-        ], dim=-1)
-
-
-@dataclass(init=False, eq=False, unsafe_hash=True)
-class JointIsotropicNormalGammaStdParams(torch.nn.Module):
-    means: torch.Tensor
-    scales: torch.Tensor
-    shape: torch.Tensor
-    rate: torch.Tensor
-
-    def __init__(self, means, scales, shape, rate):
-        super().__init__()
-        self.register_buffer('means', means)
-        self.register_buffer('scales', scales)
-        self.register_buffer('shape', shape)
-        self.register_buffer('rate', rate)
-
-    @classmethod
-    def from_natural_parameters(cls, natural_params, ncomp):
-        dim = (len(natural_params) - 2 - ncomp) // ncomp
-        np1s = natural_params[:ncomp * dim].reshape(ncomp, dim)
-        np2 = natural_params[ncomp * dim: ncomp * dim + 1]
-        np3s = natural_params[-(ncomp + 1):-1]
-        np4 = natural_params[-1]
-        scales = -2 * np3s
-        shape = np4 + 1 - .5 * dim * ncomp
-        means = np1s / scales[:, None]
-        rate = -np2 - .5 * (scales * (means * means).sum(dim=-1)).sum()
-        return cls(means, scales, shape, rate)
-
-
-class JointIsotropicNormalGamma(ExponentialFamily):
-    '''Set of Normal distributions sharing the same gamma prior over
-    the precision.
-
-    '''
-
-    _std_params_def = {
-        'means': 'Set of mean parameters.',
-        'scales': 'Set of scaling of the precision (for each Normal).',
-        'shape': 'Shape parameter (Gamma).',
-        'rate': 'Rate parameter (Gamma).'
-    }
-
-    @property
-    def dim(self):
-        '''Return a tuple ((k, D), 1)' where K is the number of Normal
-        and D is the dimension of their support.
-
-        '''
-        return (tuple(self.params.means.shape), 1)
-    
-    def conjugate(self):
-        return JointNormalIsotropicLikelihood(*self.dim[0])
-
-    def expected_sufficient_statistics(self):
-        '''Expected sufficient statistics given the current
-        parameterization.
-
-        For the random variables mu (set of vector), l (positive scalar)
-        the sufficient statistics of the joint isotropic Normal-Gamma
-        are given by:
-
-        stats = (
-            l_1 * mu_1,
-            ...,
-            l_k * mu_k
-            l,
-            l * mu^2_i,
-            D * ln(l)
-        )
-
-        For the standard parameters (m=mean, k=scale, a=shape, b=rate)
-        expectation of the sufficient statistics is given by:
-
-        E[stats] = (
-            (a / b) * m,
-            (a / b),
-            (D/k) + (a / b) * \sum_i m^2_i,
-            (psi(a) - ln(b))
-        )
-
-        Note: ""D" is the dimenion of "m", "k" is the number of Normal,
-            and "psi" is the "digamma" function.
-
-.       '''
-        dim = self.dim[0][1]
-        precision = self.params.shape / self.params.rate
-        logdet = torch.digamma(self.params.shape) - torch.log(self.params.rate)
-        return torch.cat([
-            precision * self.params.means.reshape(-1),
-            precision.view(1),
-            ((dim / self.params.scales) \
-             + precision * (self.params.means**2).sum(dim=-1)).reshape(-1),
-            logdet.view(1)
-        ])
-
-    def expected_value(self):
-        'Expected means and expected precision (scalar).'
-        return self.params.means, self.params.shape / self.params.rate
-
-    def log_norm(self, natural_parameters=None):
-        dim = self.dim[0][1]
-        return torch.lgamma(self.params.shape) \
-            - self.params.shape * self.params.rate.log() \
-            - .5 * dim * self.params.scales.log().sum()
-
-    # TODO
-    def sample(self, nsamples):
-        raise NotImplementedError
-
-    def natural_parameters(self):
-        dim = self.dim[0][1]
-        ncomp = self.dim[0][0]
-        return torch.cat([
-            (self.params.scales[:, None] * self.params.means).reshape(-1),
-            (-.5 * (self.params.scales * (self.params.means**2).sum(dim=-1)).sum() \
-             - self.params.rate).view(1),
-            -.5 * self.params.scales.view(-1),
-            self.params.shape.view(1) - 1 + .5 * dim * ncomp,
-        ])
-
-    def update_from_natural_parameters(self, natural_params):
-        ncomp = self.dim[0][0]
-        self.params = self.params.from_natural_parameters(natural_params, ncomp)
