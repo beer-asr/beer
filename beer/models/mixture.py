@@ -12,6 +12,19 @@ from ..utils import onehot
 __all__ = ['Mixture']
 
 
+########################################################################
+# Helper to build the default parameters.
+
+def _default_param(weights, prior_strength):
+    params = DirichletStdParams(prior_strength * weights)
+    prior_weights = Dirichlet(params)
+    params = DirichletStdParams(prior_strength * weights)
+    posterior_weights = Dirichlet(params)
+    return ConjugateBayesianParameter(prior_weights, posterior_weights)
+
+########################################################################
+
+
 class Mixture(DiscreteLatentModel):
     '''Bayesian Mixture Model.'''
 
@@ -30,38 +43,33 @@ class Mixture(DiscreteLatentModel):
 
         '''
         mf_groups = modelset.mean_field_factorization()
-        prior_nparams = mf_groups[0][0].prior.natural_parameters()
-        dtype, device = prior_nparams.dtype, prior_nparams.device
+        tensor = mf_groups[0][0].prior.natural_parameters()
+        tensorconf = {'dtype': tensor.dtype, 'device': tensor.device, 
+                      'requires_grad': False}
 
         if weights is None:
-            weights = torch.ones(len(modelset), dtype=dtype, device=device)
+            weights = torch.ones(len(modelset), **tensorconf)
             weights /= len(modelset)
         else:
-            weights = torch.tensor(weights, dtype=dtype, device=device,
-                                   requires_grad=False)
-        params = DirichletStdParams(prior_strength * weights)
-        prior_weights = Dirichlet(params)
-        params = DirichletStdParams(prior_strength * weights)
-        posterior_weights = Dirichlet(params)
-        return cls(prior_weights, posterior_weights, modelset)
+            weights = torch.tensor(weights, **tensorconf)
+        weights_param = _default_param(weights, prior_strength)
+        return cls(weights_param, modelset)
 
-    def __init__(self, prior_weights, posterior_weights, modelset):
-        '''
-        Args:
-            prior_weights (:any:`DirichletPrior`): Prior distribution
-                over the weights of the mixture.
-            posterior_weights (any:`DirichletPrior`): Posterior
-                distribution over the weights of the mixture.
-            modelset (:any:`BayesianModelSet`): Set of models.
-
-        '''
+    def __init__(self, weights, modelset):
         super().__init__(modelset)
-        self.weights = ConjugateBayesianParameter(prior_weights, 
-                                                  posterior_weights)
+        self.weights = weights
+
+    # Log probability of each components.
+    def _log_weights(self):
+        lhf = self.weights.likelihood_fn
+        nparams = self.weights.natural_form()
+        data = torch.eye(len(self.modelset), dtype=nparams.dtype, 
+                        device=nparams.device, requires_grad=False)
+        stats = lhf.sufficient_statistics(data)
+        return lhf(nparams, stats)
 
     ####################################################################
     # Model interface.
-    ####################################################################
 
     def mean_field_factorization(self):
         mf_groups = self.modelset.mean_field_factorization()
@@ -73,7 +81,8 @@ class Mixture(DiscreteLatentModel):
 
     def expected_log_likelihood(self, stats, labels=None, **kwargs):
         # Per-components weighted log-likelihood.
-        log_weights = self.weights.expected_natural_parameters().view(1, -1)
+        #log_weights = self.weights.expected_natural_parameters().view(1, -1)
+        log_weights = self._log_weights()[None]
         per_component_exp_llh = self.modelset.expected_log_likelihood(stats,
                                                                       **kwargs)
 
@@ -95,8 +104,9 @@ class Mixture(DiscreteLatentModel):
 
     def accumulate(self, stats):
         resps = self.cache['resps']
+        resps_stats = self.weights.likelihood_fn.sufficient_statistics(resps)
         retval = {
-            self.weights: resps.sum(dim=0),
+            self.weights: resps_stats.sum(dim=0),
             **self.modelset.accumulate(stats, resps)
         }
         return retval

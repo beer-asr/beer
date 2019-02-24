@@ -1,4 +1,3 @@
-import abc
 from dataclasses import dataclass
 import math
 import torch
@@ -19,11 +18,7 @@ class CategoricalLikelihood(ConjugateLikelihood):
         return self.dim - 1 + zero_stats_dim
 
     def sufficient_statistics(self, data):
-        length = len(data)
-        dtype, device = data.dtype, data.device
-        retval = torch.zeros(length, self.dim, dtype=dtype, device=device)
-        idxs = torch.arange(0, length).long()
-        retval[range(length), data] = 1
+        retval = data.clone()
         retval[:, -1] = retval.sum(dim=-1)
         return retval
 
@@ -58,7 +53,7 @@ class CategoricalLikelihood(ConjugateLikelihood):
         lnorm = CategoricalLikelihood.log_norm(rvecs).view(-1, 1)
         return torch.cat([rvecs - lnorm, -lnorm], dim=-1)
 
-    def __call__(pdfvecs, stats):
+    def __call__(self, pdfvecs, stats):
         return stats @ pdfvecs 
 
     
@@ -76,7 +71,8 @@ class DirichletStdParams(torch.nn.Module):
         if len(npsize) == 1:
             natural_params = natural_params.view(1, -1)
         concentrations = natural_params + 1
-        concentrations[:, -1] = concentrations.sum(dim=-1)
+        concentrations[:, -1] = natural_params[:, -1] \
+                                - concentrations[:, :-1].sum(dim=-1) + 1
 
         if len(npsize) == 1:
             return cls(concentrations.view(-1))
@@ -127,7 +123,7 @@ class Dirichlet(ExponentialFamily):
     def log_norm(self):
         concentrations = self.params.concentrations
         return torch.lgamma(concentrations).sum(dim=-1) \
-               - torch.lgamma(concentrations.sum(dim=-1))
+               - torch.lgamma(concentrations.sum(dim=-1))   
 
     # TODO
     def sample(self, nsamples):
