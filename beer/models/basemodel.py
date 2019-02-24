@@ -51,7 +51,7 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
             method.
 
         '''
-        return sum([kl_div(param.posterior, param.prior)
+        return sum([kl_div(param.posterior, param.prior).sum()
                     for param in self.bayesian_parameters()])
 
     def svector_dim(self):

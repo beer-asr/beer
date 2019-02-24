@@ -54,7 +54,8 @@ class CategoricalLikelihood(ConjugateLikelihood):
         return torch.cat([rvecs - lnorm, -lnorm], dim=-1)
 
     def __call__(self, pdfvecs, stats):
-        return stats @ pdfvecs 
+        size = len(pdfvecs.shape)
+        return stats @ pdfvecs.t() if size > 1 else stats @ pdfvecs
 
     
 @dataclass(init=False, unsafe_hash=True)
@@ -89,7 +90,11 @@ class Dirichlet(ExponentialFamily):
 
     @property
     def dim(self):
-        return len(self.params.concentrations)
+        concentrations = self.params.concentrations
+        size = len(concentrations.shape) if len(concentrations.shape) > 0 else 1
+        if size == 1:
+            return len(concentrations) 
+        return tuple(concentrations.shape)
 
     def expected_sufficient_statistics(self):
         '''

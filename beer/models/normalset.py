@@ -122,8 +122,8 @@ class NormalSet(ModelSet):
         nparams = self.means_precisions.natural_form()
         return self.means_precisions.likelihood_fn(nparams, stats)
 
-    def accumulate(self, stats, weights):
-        w_stats = weights.t() @ stats
+    def accumulate(self, stats, resps):
+        w_stats = resps.t() @ stats
         return {self.means_precisions: w_stats}
 
     ####################################################################

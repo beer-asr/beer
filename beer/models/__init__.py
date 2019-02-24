@@ -15,6 +15,6 @@ from .mixture import *
 #from .gsm import *
 
 ## Concrete model set.
-#from .mixtureset import *
+from .mixtureset import *
 from .normalset import *
 

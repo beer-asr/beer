@@ -52,7 +52,7 @@ def plot_gmm(fig, gmm, n_std_dev=2, npoints=100, alpha=1., colors=None, **kwargs
         
     for weight, comp, color in zip(weights, gmm.modelset, colors):
         kwargs['color'] = color
-        plot_normal(fig, comp.expected_mean.numpy(), comp.expected_cov.numpy(),
+        plot_normal(fig, comp.mean.numpy(), comp.cov.numpy(),
             n_std_dev, npoints, alpha=alpha * weight.numpy(), **kwargs)
 
 def plot_hmm(fig, hmm, n_std_dev=2, npoints=100, colors=None, **kwargs):
