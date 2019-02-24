@@ -134,5 +134,5 @@ class NormalSet(ModelSet):
 
     def __getitem__(self, key): 
         if isinstance(key, slice):
-            self.__class__(self.means_precisions[key])
+            return self.__class__(self.means_precisions[key])
         return Normal(self.means_precisions[key])

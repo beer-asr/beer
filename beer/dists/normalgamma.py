@@ -10,7 +10,6 @@ __all__ = ['NormalDiagonalLikelihood', 'NormalGamma', 'NormalGammaStdParams']
 
 @dataclass
 class NormalDiagonalLikelihood(ConjugateLikelihood):
-    'Likelihood of a Normal with a diagonal covariance matrix.'
     dim: int
 
     @property

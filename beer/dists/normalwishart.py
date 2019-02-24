@@ -18,7 +18,6 @@ def _batch_trace(As, Bs, keepdim=False):
 
 @dataclass
 class NormalLikelihood(ConjugateLikelihood):
-    'Likelihood of a Normal with full covariance matrix.'
     dim: int
 
     @property

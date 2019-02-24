@@ -6,23 +6,26 @@ from .basedist import ExponentialFamily
 from .basedist import ConjugateLikelihood
 
 
-__all__ = ['Dirichlet', 'DirichletStdParams', 'CategoricalLikelihood']
+__all__ = ['CategoricalLikelihood', 'Dirichlet', 'DirichletStdParams']
 
 
+@dataclass
 class CategoricalLikelihood(ConjugateLikelihood):
-
-    def __init__(self, dim):
-        self.dim = dim
-
-    def __repr__(self):
-        return f'{self.__class__.__qualname__}(dim={self.dim})'
+    dim: int
 
     @property
-    def sufficient_statistics_dim(self):
-        return self.dim - 1
+    def sufficient_statistics_dim(self, zero_stats):
+        zero_stats_dim = 1 if zero_stats else 0
+        return self.dim - 1 + zero_stats_dim
 
     def sufficient_statistics(self, data):
-        raise NotImplementedError
+        length = len(data)
+        dtype, device = data.dtype, data.device
+        retval = torch.zeros(length, self.dim, dtype=dtype, device=device)
+        idxs = torch.arange(0, length).long()
+        retval[range(length), data] = 1
+        retval[:, -1] = retval.sum(dim=-1)
+        return retval
 
     @staticmethod
     def log_norm(nparams):
@@ -56,13 +59,11 @@ class CategoricalLikelihood(ConjugateLikelihood):
         return torch.cat([rvecs - lnorm, -lnorm], dim=-1)
 
     def __call__(pdfvecs, stats):
-        return stats @ pdfvecs
+        return stats @ pdfvecs 
 
     
-@dataclass(init=False, eq=False, unsafe_hash=True)
+@dataclass(init=False, unsafe_hash=True)
 class DirichletStdParams(torch.nn.Module):
-    'Standard parameterization of the Dirichlet pdf.'
-
     concentrations: torch.Tensor
 
     def __init__(self, concentrations):
@@ -71,12 +72,18 @@ class DirichletStdParams(torch.nn.Module):
 
     @classmethod
     def from_natural_parameters(cls, natural_params):
-        return cls(natural_params + 1)
+        npsize = natural_params.shape 
+        if len(npsize) == 1:
+            natural_params = natural_params.view(1, -1)
+        concentrations = natural_params + 1
+        concentrations[:, -1] = concentrations.sum(dim=-1)
+
+        if len(npsize) == 1:
+            return cls(concentrations.view(-1))
+        return cls(concentrations)
 
 
 class Dirichlet(ExponentialFamily):
-    'Dirichlet Distribution.'
-
     _std_params_def = {
         'concentrations': 'Concentrations parameter.'
     }
@@ -89,57 +96,59 @@ class Dirichlet(ExponentialFamily):
         return len(self.params.concentrations)
 
     def expected_sufficient_statistics(self):
-        '''Expected sufficient statistics given the current
-        parameterization.
-
-        For the random variable p (vector of probabilities)
-        the sufficient statistics of the Dirichlet are
-        given by:
-
+        '''
         stats = (
-            ln(p)
+            ln(p_i / (1 - sum_j p_j))
+            ln( 1 - sum_j p_j )
         )
-
-        For the standard parameters (a=concentrations) expectation of
-        the sufficient statistics is given by:
 
         E[stats] = (
-            psi(a) - psi(\sum_i a_i)
+            psi(a_i) - pis(a_d)
+            psi(a_d) - psi( sum_i^{d-1} a_i)
         )
-
-        Note: ""D" is the dimenion of "m"
-            and "psi" is the "digamma" function.
-
         '''
-        return torch.digamma(self.params.concentrations) \
-               - torch.digamma(self.params.concentrations.sum())
+        concentrations = self.params.concentrations
+        size = len(concentrations.shape) if len(concentrations.shape) > 0 else 1
+        if size == 1:
+            concentrations = concentrations.view(1, -1)
+        psis = torch.digamma(concentrations)
+        psi_sum = torch.digamma(concentrations.sum(dim=-1))
+        retval = psis - psis[:, -1].view(-1, 1)
+        retval[:, -1] = psis[:, -1] - psi_sum
+        if size == 1:
+            return retval.view(-1)
+        return retval
 
     def expected_value(self):
         'Expected distribution p.'
-        return self.params.concentrations / self.params.concentrations.sum()
+        norm = self.params.concentrations.sum(dim=-1, keepdim=True)
+        return self.params.concentrations / norm
 
     def log_norm(self):
-        return torch.lgamma(self.params.concentrations).sum() \
-               - torch.lgamma(self.params.concentrations.sum())
+        concentrations = self.params.concentrations
+        return torch.lgamma(concentrations).sum(dim=-1) \
+               - torch.lgamma(concentrations.sum(dim=-1))
 
     # TODO
     def sample(self, nsamples):
         raise NotImplementedError
 
     def natural_parameters(self):
-        '''Natural form of the current parameterization. For the
-        standard parameters (a=concentrations) the natural
-        parameterization is given by:
-
-        nparams = (
-            a - 1,
-        )
-
-        Returns:
-            ``torch.Tensor[D]`` where D is the dimension of the support.
-
         '''
-        return self.params.concentrations - 1
+        nparams = (
+            a_i - 1,
+            sum_i a_i + a_d - 1
+        )
+        '''
+        concentrations = self.params.concentrations
+        size = len(concentrations.shape) if len(concentrations.shape) > 0 else 1
+        if size == 1:
+            concentrations = concentrations.view(1, -1)
+        retval = concentrations - 1
+        retval[:, -1] = concentrations.sum(dim=-1) - 1
+        if size == 1:
+            return retval.view(-1)
+        return retval
 
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
