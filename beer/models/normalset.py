@@ -9,7 +9,7 @@ from collections import namedtuple
 import math
 import torch
 
-from .parameters import JointConjugateBayesianParameters
+from .parameters import ConjugateBayesianParameter
 from .parameters import BayesianParameterSet
 from .modelset import ModelSet
 from .normal import Normal
@@ -41,7 +41,7 @@ def _default_fullcov_param(mean, cov, size, prior_strength, noise_std,
     prior = NormalWishart(params)
     params = NormalWishartStdParams(means + noise, scale, scale_matrix, dof)
     posterior = NormalWishart(params)
-    return JointConjugateBayesianParameters(prior, posterior)
+    return ConjugateBayesianParameter(prior, posterior)
 
 def _default_diagcov_param(mean, cov, size, prior_strength, noise_std, 
                            tensorconf):
@@ -55,7 +55,7 @@ def _default_diagcov_param(mean, cov, size, prior_strength, noise_std,
     prior = NormalGamma(params)
     params = NormalGammaStdParams(means + noise, scale, shape, rates)
     posterior = NormalGamma(params)
-    return JointConjugateBayesianParameters(prior, posterior)
+    return ConjugateBayesianParameter(prior, posterior)
 
 def _default_isocov_param(mean, cov, size, prior_strength, noise_std, 
                           tensorconf):
@@ -70,7 +70,7 @@ def _default_isocov_param(mean, cov, size, prior_strength, noise_std,
     prior = IsotropicNormalGamma(params)
     params = IsotropicNormalGammaStdParams(means + noise, scale, shape, rate)
     posterior = IsotropicNormalGamma(params)
-    return JointConjugateBayesianParameters(prior, posterior)
+    return ConjugateBayesianParameter(prior, posterior)
 
 _default_param = {
     'full': _default_fullcov_param,

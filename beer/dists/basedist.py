@@ -58,7 +58,16 @@ class ParametersView(torch.nn.Module):
 
 
 class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
-    'Base class to all distribution from the exponential family.'
+    '''Base class to all distribution from the exponential family.
+    
+    Note that one instance of the exponential family can represent one
+    or several distribution (of the same type). You can check how 
+    many distributions are handled by one instance by using:
+
+    >>> len(myinstance)
+    3 
+
+    '''
 
     # Sucbclasses need to define the parameters of the distribution
     # in a dictionary stored in a class variable named
@@ -110,6 +119,11 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
     # the parameters.
     #def forward(self, X):
     #    pass
+
+    @abc.abstractmethod
+    def __len__(self):
+        'Number of pdfs handled by the current parameterization.'
+        pass
 
     @abc.abstractmethod
     def conjugate(self):

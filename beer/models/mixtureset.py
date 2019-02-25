@@ -1,7 +1,7 @@
 
 import torch
 from .parameters import BayesianParameterSet
-from .parameters import JointConjugateBayesianParameters
+from .parameters import ConjugateBayesianParameter
 from .modelset import ModelSet
 from .mixture import Mixture
 from ..dists import Dirichlet, DirichletStdParams
@@ -18,7 +18,7 @@ def _default_param(weights, prior_strength):
     prior_weights = Dirichlet(params)
     params = DirichletStdParams(prior_strength * weights)
     posterior_weights = Dirichlet(params)
-    return JointConjugateBayesianParameters(prior_weights, posterior_weights)
+    return ConjugateBayesianParameter(prior_weights, posterior_weights)
 
 ########################################################################
 

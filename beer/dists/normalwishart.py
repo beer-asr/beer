@@ -143,6 +143,10 @@ class NormalWishart(ExponentialFamily):
         'dof': 'Number degree of freedom of the Wishart pdf.',
     }
 
+    def __len__(self):
+        paramshape = self.params.mean.shape
+        return 1 if len(paramshape) <= 1 else paramshape[0]
+
     @property
     def dim(self):
         '''Return a tuple with the dimension of the normal and the

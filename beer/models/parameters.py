@@ -6,9 +6,7 @@ from ..dists import ExponentialFamily
 
 
 __all__ = ['BayesianParameter', 'BayesianParameterSet', 
-           'ConjugateBayesianParameter',
-           'JointConjugateBayesianParameters']
-
+           'ConjugateBayesianParameter']
 
 # Empty object for pretty representation of the parameters.
 class _UNSPECIFIED_POSTERIOR_CLASS:
@@ -107,6 +105,16 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
         return self.value()
 
     ####################################################################
+    # Bayesian parameters is iterable as it can represent a set of 
+    # parameters.
+
+    def __len__(self):
+        return len(self.posterior)
+    
+    def __getitem__(self, key):
+        return self.__class__(self.prior.view(key), self.posterior.view(key))
+
+    ####################################################################
     # Interface to be implemented by other subclasses.
 
     @abc.abstractmethod
@@ -135,6 +143,7 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
             ``torch.Tensor``.
         '''
         pass
+
 
 class BayesianParameterSet(torch.nn.ModuleList):
     '''Set of Bayesian parameters.'''
@@ -185,17 +194,3 @@ class ConjugateBayesianParameter(BayesianParameter):
         new_nparams = posterior_nparams + lrate * natural_grad
         self.posterior.update_from_natural_parameters(new_nparams)
         self.dispatch()
-
-
-class JointConjugateBayesianParameters(ConjugateBayesianParameter):
-    'Set of conjugate Bayesian parameters with a joint pdf posterior.'
-
-    def __len__(self):
-        return self.posterior.dim[0]
-    
-    def __getitem__(self, key):
-        if isinstance(key, slice): 
-            cls = JointConjugateBayesianParameters
-        else:
-            cls = ConjugateBayesianParameter
-        return cls(self.prior.view(key), self.posterior.view(key))

@@ -15,8 +15,8 @@ class IsotropicNormalLikelihood(ConjugateLikelihood):
 
     @property
     def sufficient_statistics_dim(self, zero_stats=True):
-        zero_stats_dim = 1 if zero_stats else 0
-        return self.dim + zero_stats_dim
+        zero_stats_dim = 2 if zero_stats else 0
+        return self.dim + 1 + zero_stats_dim
 
     @staticmethod
     def sufficient_statistics(data):
@@ -98,6 +98,10 @@ class IsotropicNormalGamma(ExponentialFamily):
         'shape': 'Shape parameter of the Gamma (shared across dimension).',
         'rate': 'Rate parameter of the Gamma (shared across dimension).'
     }
+
+    def __len__(self):
+        paramshape = self.params.mean.shape
+        return 1 if len(paramshape) <= 1 else paramshape[0]
 
     @property
     def dim(self):

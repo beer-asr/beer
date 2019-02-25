@@ -95,6 +95,10 @@ class NormalGamma(ExponentialFamily):
         'rates': 'Rate parameters of the Gamma.'
     }
 
+    def __len__(self):
+        paramshape = self.params.mean.shape
+        return 1 if len(paramshape) <= 1 else paramshape[0]
+
     @property
     def dim(self):
         return (*self.params.mean.shape, self.params.rates.shape[-1])

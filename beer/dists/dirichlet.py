@@ -13,7 +13,7 @@ class CategoricalLikelihood(ConjugateLikelihood):
     dim: int
 
     @property
-    def sufficient_statistics_dim(self, zero_stats):
+    def sufficient_statistics_dim(self, zero_stats=True):
         zero_stats_dim = 1 if zero_stats else 0
         return self.dim - 1 + zero_stats_dim
 
@@ -84,6 +84,10 @@ class Dirichlet(ExponentialFamily):
     _std_params_def = {
         'concentrations': 'Concentrations parameter.'
     }
+
+    def __len__(self):
+        paramshape = self.params.concentrations.shape
+        return 1 if len(paramshape) <= 1 else paramshape[0]
 
     def conjugate(self):
         return CategoricalLikelihood(self.dim)

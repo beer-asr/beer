@@ -7,7 +7,6 @@ from .basemodel import Model
 from .parameters import BayesianParameter
 from .parameters import ConjugateBayesianParameter
 from ..dists import NormalDiagonalCovariance
-from ..dists import JointNormalDiagonalCovariance
 
 
 __all__ = ['GSM', 'SubspaceBayesianParameter']
@@ -149,11 +148,17 @@ class SubspaceBayesianParameter(BayesianParameter):
     def sufficient_statistics_dim(self):
         return self.likelihood_fn.sufficient_statistics_dim
 
-    def expected_value(self):
+    def value(self):
         self.likelihood_fn.parameters_from_pdfvector(self.pdfvec)
 
     def natural_form(self):
         return self.pdfvec
+    
+    def __len__(self):
+        return len(self.posterior)
+    
+    def __getitem__(self, key):
+        return SubspaceBayesianParameter(self.prior, self.posterior.view(key))
 
 ########################################################################
 # GSM implementation.
@@ -168,34 +173,6 @@ def _subspace_params(model):
 # Error raised when attempting to create a GSM with a model having no
 # Subspace parameters.
 class NoSubspaceBayesianParameters(Exception): pass
-
-
-# Parametererization of the Joint Normal distribution for the latent
-# posterior. 
-class _MeansLogDiagCovs(_MeanLogDiagCov):
-    @property
-    def means(self):
-        return self.mean
-
-    @property
-    def diag_covs(self):
-        return self.log_diag_cov.exp() 
-
-# Parameterization of the Normal distribution for the which doesn't copy
-# its parameters. Instead, it uses the parameters of a joint normal
-# distribution.
-class _NormalParamsView:
-    def __init__(self, jointnormalparams, refidx):
-        self.jointnormalparams = jointnormalparams
-        self.refidx = refidx
-
-    @property
-    def means(self):
-        return self.jointnormalparams.means[self.refidx]
-
-    @property
-    def diag_covs(self):
-        return self.jointnormalparams.diag_covs[self.refidx]
 
 
 def _svectors_from_rvectors(parameters, rvecs):
@@ -259,7 +236,7 @@ class GSM(Model):
         for i in range(nmodels):
             new_model = copy.deepcopy(self.model)
             for param in _subspace_params(new_model):
-                param.posterior = NormalDiagonalCovariance(jointnormalparams)
+                param.posterior = latent_posteriors.view(i)
             models.append(new_model)
         return models
 
@@ -274,9 +251,9 @@ class GSM(Model):
         init_log_diag_covs = torch.zeros(nposts, self.affine_transform.in_dim,
                                          dtype=dtype, device=device, 
                                          requires_grad=True)
-        params = _MeansLogDiagCovs(mean=init_means, 
+        params = _MeanLogDiagCov(mean=init_means, 
                                  log_diag_cov=init_log_diag_covs)
-        return JointNormalDiagonalCovariance(params)
+        return NormalDiagonalCovariance(params)
 
     def _xentropy(self, s_h, **kwargs):
         s_h = s_h.reshape(len(s_h), -1)
