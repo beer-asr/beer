@@ -1,7 +1,6 @@
 import abc
 from functools import reduce
 import torch
-from ..dists import kl_div
 from .parameters import BayesianParameterSet
 
 __all__ = ['Model', 'DiscreteLatentModel', 'svectors_from_rvectors']
@@ -51,7 +50,7 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
             method.
 
         '''
-        return sum([kl_div(param.posterior, param.prior).sum()
+        return sum([param.kl_div_posterior_prior().sum()
                     for param in self.bayesian_parameters()])
 
     def svector_dim(self):

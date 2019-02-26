@@ -20,7 +20,6 @@ def _batch_trace(As, Bs, keepdim=False):
 class NormalLikelihood(ConjugateLikelihood):
     dim: int
 
-    @property
     def sufficient_statistics_dim(self, zero_stats=True):
         d = self.dim
         zero_stats_dim = 2 if zero_stats else 0
@@ -38,11 +37,16 @@ class NormalLikelihood(ConjugateLikelihood):
         ], dim=-1)
 
     def parameters_from_pdfvector(self, pdfvec):
+        size = pdfvec.shape
+        if len(size) == 1:
+            pdfvec = pdfvec.view(1, -1)
         dim = self.dim
-        precision = pdfvec[dim:dim + dim ** 2].reshape(dim, dim)
+        precision = pdfvec[:, dim:dim + dim ** 2].reshape(-1, dim, dim)
         cov = precision.inverse()
-        mean = cov @ pdfvec[:dim]
-        return mean, precision
+        mean = torch.matmul(cov, pdfvec[:, :dim, None])
+        if len(size) == 1:
+            return mean.view(-1), precision.view(dim, dim)
+        return mean.view(-1, dim), precision.view(-1, dim, dim)
 
     def pdfvectors_from_rvectors(self, rvecs):
         '''

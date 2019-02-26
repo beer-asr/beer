@@ -12,7 +12,6 @@ __all__ = ['CategoricalLikelihood', 'Dirichlet', 'DirichletStdParams']
 class CategoricalLikelihood(ConjugateLikelihood):
     dim: int
 
-    @property
     def sufficient_statistics_dim(self, zero_stats=True):
         zero_stats_dim = 1 if zero_stats else 0
         return self.dim - 1 + zero_stats_dim
@@ -32,6 +31,7 @@ class CategoricalLikelihood(ConjugateLikelihood):
     @staticmethod
     def parameters_from_pdfvector(pdfvec):
         'Return the parameters of the pdf vector.' 
+        pdfvec = pdfvec.view(-1)
         retval = torch.zeros_like(pdfvec, requires_grad=False)
         lnorm = CategoricalLikelihood.log_norm(pdfvec[:-1])
         remainder = (-lnorm).exp()
@@ -51,7 +51,7 @@ class CategoricalLikelihood(ConjugateLikelihood):
 
         '''
         lnorm = CategoricalLikelihood.log_norm(rvecs).view(-1, 1)
-        return torch.cat([rvecs - lnorm, -lnorm], dim=-1)
+        return torch.cat([rvecs, -lnorm], dim=-1)
 
     def __call__(self, pdfvecs, stats):
         size = len(pdfvecs.shape)

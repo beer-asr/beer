@@ -128,7 +128,7 @@ class Normal(Model):
             # Diagonal covariance matrix.
             return (1. / precision).diag()
         # Isotropic covariance matrix.
-        dim = self.mean_precision.prior.dim[0]
+        dim = len(self.mean)
         I = torch.eye(dim, dtype=precision.dtype, device=precision.device)
         return (1. / precision) * I
 

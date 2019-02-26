@@ -13,7 +13,6 @@ __all__ = ['NormalDiagonalCovariance', 'NormalDiagonalCovarianceStdParams',
 class NormalFixedDiagonalCovarianceLikelihood(ConjugateLikelihood):
     dim: int
 
-    @property
     def sufficient_statistics_dim(self, zero_stats=True):
         zero_stats_dim = self.dim if zero_stats else 0
         return self.dim + zero_stats_dim
@@ -26,7 +25,7 @@ class NormalFixedDiagonalCovarianceLikelihood(ConjugateLikelihood):
                       'requires_grad': False}
         return torch.cat([
             data,
-            -.5 * torch.ones_like(data, requires_grad=False),
+            -.5 * torch.ones_like(data, **tensorconf),
         ], dim=-1)
 
     def parameters_from_pdfvector(self, pdfvec):
@@ -88,7 +87,9 @@ class NormalDiagonalCovariance(ExponentialFamily):
     def forward(self, data):
         nparams = self.natural_parameters()
         stats = torch.cat([data, data**2], dim=-1)
-        return stats @ nparams - .5 * self.dim * math.log(2 * math.pi)
+        logdets = self.params.diag_cov.log().sum(dim=-1, keepdim=True)
+        log_basemeasure = -.5 * (logdets + self.dim * math.log(2 * math.pi))
+        return nparams @ stats.t() + log_basemeasure
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
@@ -132,9 +133,16 @@ class NormalDiagonalCovariance(ExponentialFamily):
     def sample(self, nsamples):
         mean = self.params.mean
         diag_cov = self.params.diag_cov
-        noise = torch.randn(nsamples, self.dim, dtype=mean.dtype, 
-                            device=mean.device)
-        return mean[None] + diag_cov[None] * noise
+        size = mean.shape
+        if len(size) == 1:
+            mean = mean.view(1, -1)
+            diag_cov = diag_cov.view(1, -1)
+        noise = torch.randn(mean.shape[0], nsamples, mean.shape[-1],
+                            dtype=mean.dtype, device=mean.device)
+        retval = mean[:, None, :] + diag_cov[:, None, :] * noise
+        if len(size) == 1:
+            return retval.view(-1, mean.shape[-1])
+        return retval
 
     def natural_parameters(self):
         '''Natural form of the current parameterization. For the
@@ -150,9 +158,16 @@ class NormalDiagonalCovariance(ExponentialFamily):
             ``torch.Tensor[2 * D]``
 
         '''
-        mean = self.params.mean
-        diag_prec = 1. / self.params.diag_cov
-        return torch.cat([diag_prec * mean, -.5 * diag_prec])
+        mean, diag_cov = self.params.mean, self.params.diag_cov
+        size = len(mean.shape) if len(mean.shape) > 0 else 1
+        if size == 1:
+            mean = mean.view(1, -1)
+            diag_cov = mean.view(1, -1)
+        diag_prec = 1. / diag_cov
+        retval = torch.cat([diag_prec * mean, -.5 * diag_prec], dim=-1)
+        if size == 1:
+            return retval.view(-1)
+        return retval
 
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)

@@ -88,10 +88,10 @@ class EvidenceLowerBoundInstance:
             self._datasize
         )
 
-    def backward(self):
+    def backward(self, std_params=True):
         # Pytorch minimizes the loss ! We change the sign of the ELBO
         # just before to compute the gradient.
-        if self.value.requires_grad:
+        if self.value.requires_grad and std_params:
             (-self.value).backward()
 
         scale = self._datasize / self._minibatchsize

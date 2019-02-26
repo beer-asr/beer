@@ -13,7 +13,6 @@ __all__ = ['IsotropicNormalGamma', 'IsotropicNormalGammaStdParams',
 class IsotropicNormalLikelihood(ConjugateLikelihood):
     dim: int
 
-    @property
     def sufficient_statistics_dim(self, zero_stats=True):
         zero_stats_dim = 2 if zero_stats else 0
         return self.dim + 1 + zero_stats_dim

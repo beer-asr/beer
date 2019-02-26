@@ -3,16 +3,11 @@ import uuid
 import typing
 import torch
 from ..dists import ExponentialFamily
+from ..dists import kl_div
 
 
 __all__ = ['BayesianParameter', 'BayesianParameterSet', 
            'ConjugateBayesianParameter']
-
-# Empty object for pretty representation of the parameters.
-class _UNSPECIFIED_POSTERIOR_CLASS:
-    def __repr__(self):
-        return '<unspecified>'
-_UNSPECIFIED_POSTERIOR = _UNSPECIFIED_POSTERIOR_CLASS()
 
 
 class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
@@ -21,11 +16,11 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
      
     '''
 
-    def __init__(self, init_stats, prior, posterior=_UNSPECIFIED_POSTERIOR,
+    def __init__(self, init_stats, prior, posterior=None,
                  likelihood_fn=None):
         super().__init__()
         self.prior = prior
-        self.posterior = posterior
+        self.posterior = posterior 
         self.likelihood_fn = likelihood_fn
         self.register_buffer('_stats', init_stats.clone().detach())
         self._callbacks = set()
@@ -36,10 +31,10 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
     def __repr__(self):
         class_name = self.__class__.__qualname__
         prior_name = self.prior.__class__.__qualname__
-        if self.posterior is not _UNSPECIFIED_POSTERIOR:
+        if self.posterior is not None:
             post_name = self.posterior.__class__.__qualname__
         else:
-            post_name = _UNSPECIFIED_POSTERIOR
+            post_name = '<unspecified>'
         return f'{class_name}(prior={prior_name}, posterior={post_name})'
 
     def __hash__(self):
@@ -109,7 +104,9 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
     # parameters.
 
     def __len__(self):
-        return len(self.posterior)
+        if len(self.stats.shape) <= 1:
+            return 1
+        return self.stats.shape[0]
     
     def __getitem__(self, key):
         return self.__class__(self.prior.view(key), self.posterior.view(key))
@@ -142,6 +139,11 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
         Returns:
             ``torch.Tensor``.
         '''
+        pass
+    
+    @abc.abstractmethod
+    def kl_div_posterior_prior(self):
+        '''KL divergence between the posterior and the prior.'''
         pass
 
 
@@ -186,11 +188,14 @@ class ConjugateBayesianParameter(BayesianParameter):
 
     def natural_form(self):
         return self.posterior.expected_sufficient_statistics()
+
+    def kl_div_posterior_prior(self):
+        return kl_div(self.posterior, self.prior)
     
     def natural_grad_update(self, lrate):
         prior_nparams = self.prior.natural_parameters()
         posterior_nparams = self.posterior.natural_parameters()
-        natural_grad = prior_nparams + self._stats - posterior_nparams
+        natural_grad = prior_nparams + self.stats - posterior_nparams
         new_nparams = posterior_nparams + lrate * natural_grad
         self.posterior.update_from_natural_parameters(new_nparams)
         self.dispatch()

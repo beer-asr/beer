@@ -12,7 +12,6 @@ __all__ = ['NormalDiagonalLikelihood', 'NormalGamma', 'NormalGammaStdParams']
 class NormalDiagonalLikelihood(ConjugateLikelihood):
     dim: int
 
-    @property
     def sufficient_statistics_dim(self, zero_stats=True):
         zero_stats_dim = 2 if zero_stats else 0 
         return 2 * self.dim + zero_stats_dim
@@ -28,16 +27,17 @@ class NormalDiagonalLikelihood(ConjugateLikelihood):
         ], dim=-1)
 
     def pdfvectors_from_rvectors(self, rvecs):
-        dim = rvecs.shape[-1] - 1
+        dim = rvecs.shape[-1] // 2
         mean = rvecs[:, :dim]
-        log_precision = rvecs[:, -2:-1]
+        log_precision = rvecs[:, dim: 2 * dim]
         precision = torch.exp(log_precision)
-        return torch.cat([
+        retval =  torch.cat([
             precision * mean,
             precision,
             torch.sum(precision * (mean ** 2), dim=-1)[:, None],
             torch.sum(log_precision, dim=-1)[:, None]
         ], dim=-1) 
+        return retval
 
     def parameters_from_pdfvector(self, pdfvec):
         dim = self.dim
