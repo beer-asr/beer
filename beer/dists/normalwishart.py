@@ -63,7 +63,7 @@ class NormalLikelihood(ConjugateLikelihood):
         prec_L_diag = (.5 * log_prec_L_diag).exp()   
         prec_L_offdiag = rvecs[:, 2*dim:] 
 
-        # Build the precision matrices using the 
+        # Build the precision matrices.
         arg = torch.arange(1, dim**2 + 1).view(dim, dim)
         tril_idxs = arg.tril(diagonal=-1).nonzero().t()
         diag_idxs = torch.arange(dim)
