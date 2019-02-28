@@ -9,6 +9,7 @@ from .basedist import ConjugateLikelihood
 
 __all__ = ['NormalLikelihood', 'NormalWishart', 'NormalWishartStdParams']
 
+
 # Helper function to compute the trace of a batch of pair of
 # square matrices.
 def _batch_trace(As, Bs, keepdim=False):
@@ -24,7 +25,7 @@ class NormalLikelihood(ConjugateLikelihood):
         d = self.dim
         zero_stats_dim = 2 if zero_stats else 0
         return 2 * d + d * (d - 1) // 2 + zero_stats_dim
-    
+
     @staticmethod
     def sufficient_statistics(data):
         dtype, device = data.dtype, data.device
@@ -60,14 +61,14 @@ class NormalLikelihood(ConjugateLikelihood):
         dim = self.dim
         mean = rvecs[:, :dim]
         log_prec_L_diag = rvecs[:, dim:2*dim]
-        prec_L_diag = (.5 * log_prec_L_diag).exp()   
-        prec_L_offdiag = rvecs[:, 2*dim:] 
+        prec_L_diag = (.5 * log_prec_L_diag).exp()
+        prec_L_offdiag = rvecs[:, 2*dim:]
 
         # Build the precision matrices.
         arg = torch.arange(1, dim**2 + 1).view(dim, dim)
         tril_idxs = arg.tril(diagonal=-1).nonzero().t()
         diag_idxs = torch.arange(dim)
-        L = torch.zeros(len(rvecs), dim, dim, dtype=rvecs.dtype, 
+        L = torch.zeros(len(rvecs), dim, dim, dtype=rvecs.dtype,
                         device=rvecs.device)
         L[:, tril_idxs[0], tril_idxs[1]] = prec_L_offdiag
         L[:, diag_idxs, diag_idxs] = prec_L_diag
@@ -83,7 +84,7 @@ class NormalLikelihood(ConjugateLikelihood):
             mPm.reshape(-1, 1),
             log_prec_L_diag.sum(dim=-1).view(-1, 1),
         ], dim=-1)
-    
+
     def __call__(self, pdfvecs, stats):
         if len(pdfvecs.shape) == 1:
             pdfvecs = pdfvecs.view(1, -1)
@@ -133,9 +134,9 @@ class NormalWishartStdParams(torch.nn.Module):
         dof = 2 * np4 + dim
 
         if len(npsize) == 1:
-            return cls(mean.view(-1), scale.view(1), 
+            return cls(mean.view(-1), scale.view(1),
                        scale_matrix.view(dim, dim), dof.view(1))
-        return cls(mean, scale.view(-1, 1), scale_matrix.view(-1, dim, dim), 
+        return cls(mean, scale.view(-1, 1), scale_matrix.view(-1, dim, dim),
                   dof.view(-1, 1))
 
 
@@ -189,7 +190,7 @@ class NormalWishart(ExponentialFamily):
 
         idxs = torch.arange(1, dim + 1, dtype=mean.dtype, device=mean.device)
         L = torch.cholesky(scale_matrix, upper=False)
-        logdet = 2 * torch.log(L[:, range(dim), range(dim)]).sum(dim=-1, 
+        logdet = 2 * torch.log(L[:, range(dim), range(dim)]).sum(dim=-1,
                                                                  keepdim=True)
         mean_quad = mean[:, :, None] * mean[:, None, :]
         exp_prec = dof[:, :, None] * scale_matrix
@@ -223,7 +224,7 @@ class NormalWishart(ExponentialFamily):
 
         idxs = torch.arange(1, dim + 1, dtype=mean.dtype, device=mean.device)
         L = torch.cholesky(scale_matrix, upper=False)
-        logdet = 2 * torch.log(L[:, range(dim), range(dim)]).sum(dim=-1, 
+        logdet = 2 * torch.log(L[:, range(dim), range(dim)]).sum(dim=-1,
                                                                  keepdim=True)
         return (.5 * dof * logdet + .5 * dof * dim * math.log(2) \
                + .25 * dim * (dim - 1) * math.log(math.pi) \
@@ -262,8 +263,8 @@ class NormalWishart(ExponentialFamily):
 
         if len(mean_size) == 1:
             return retval.view(-1)
-        return retval 
+        return retval
 
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
-        
+

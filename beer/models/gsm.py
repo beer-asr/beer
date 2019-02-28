@@ -200,8 +200,18 @@ def _pdfvecs(params, rvecs):
         param_rvecs = rvecs[:, idx: idx + totdim].reshape(-1, dim)
         pdfvec = lhf.pdfvectors_from_rvectors(param_rvecs)
         totdim_with_zerostats = npdfs * pdfvec.shape[-1]
+        idx += totdim
         yield pdfvec.reshape(-1, totdim_with_zerostats)
 
+# Update expected value of the subspace paramters given a set of
+# pdf-vectors.
+def _update_params(params, pdfvecs):
+    idx = 0
+    for param in params:
+        totdim = param.stats.numel()
+        shape = param.stats.shape
+        param.pdfvec = pdfvecs[idx: idx + totdim].reshape(shape)
+        idx += totdim
 
 def _pdfvecs_from_rvectors(parameters, rvecs):
     'Map a set of real value vectors to the pdf vectors.'
@@ -273,31 +283,28 @@ class GSM(Model):
         self.affine_transform = affine_transform
         self.latent_prior = latent_prior
 
-    def update_models(self, models, latent_posteriors, latent_nsamples=1,
-                      params_nsamples=1):
-        samples = latent_posteriors.sample(latent_nsamples)
-        rvecs = self._rvecs_from_samples(samples, params_nsamples)
-        for i, model, model_rvecs in zip(range(len(models)), models, rvecs):
-            pdfvecs = _pdfvecs_from_rvectors(_subspace_params(model),
-                                             model_rvecs)
-            for param, pdfvec in zip(_subspace_params(model), pdfvecs):
-                param.posterior = latent_posteriors.view(i)
-                param.pdfvec = pdfvec
+    def update_models(self, models, pdfvecs):
+        for model, model_pdfvecs in zip(models, pdfvecs):
+            params = _subspace_params(model)
+            _update_params(params, model_pdfvecs)
 
     def new_models(self, nmodels, latent_nsamples=1, params_nsamples=1):
         latent_posteriors = self.new_latent_posteriors(nmodels)
-        jointnormalparams = latent_posteriors.params
+        models = [copy.deepcopy(self.model) for _ in range(nmodels)]
+
+        # Connect the models and the latent posteriors.
+        for model in models:
+            params = _subspace_params(model)
+            for param in params:
+                param.posterior = latent_posteriors
+                param.pdfvecs = torch.zeros_like(param.stats)
+
+        # Initialize the newly created models.
         samples = latent_posteriors.sample(latent_nsamples)
         rvecs = self._rvecs_from_samples(samples, params_nsamples)
-        models = []
-        for i, model_rvecs in zip(range(nmodels), rvecs):
-            new_model = copy.deepcopy(self.model)
-            pdfvecs = _pdfvecs_from_rvectors(_subspace_params(new_model),
-                                             model_rvecs)
-            for param, pdfvec in zip(_subspace_params(new_model), pdfvecs):
-                param.posterior = latent_posteriors.view(i)
-                param.pdfvec = pdfvec
-            models.append(new_model)
+        pdfvecs = self._pdfvecs_from_rvecs(rvecs).mean(dim=1)
+        self.update_models(models, pdfvecs)
+
         return models, latent_posteriors
 
     def new_latent_posteriors(self, nposts):
@@ -324,11 +331,15 @@ class GSM(Model):
     def _entropy(self, s_h, latent_posteriors):
         shape = s_h.shape
         dim = shape[-1]
-        stats = torch.cat([s_h, s_h**2], dim=-1)
+        stats = torch.cat([s_h, -.5 * s_h ** 2], dim=-1)
         nparams = latent_posteriors.natural_parameters()
-        logdets = latent_posteriors.params.diag_cov.log().sum(dim=-1,
-                                                              keepdim=True)
-        log_basemeasure = -.5 * (logdets + dim * math.log(2 * math.pi))
+        diag_cov = latent_posteriors.params.diag_cov
+        mean = latent_posteriors.params.mean
+        logdets = diag_cov.log().sum(dim=-1, keepdim=True)
+        diag_prec = 1. / diag_cov
+        quad_term = (diag_prec * (mean ** 2)).sum(dim=-1, keepdim=True)
+        log_basemeasure = -.5 * (logdets + dim * math.log(2 * math.pi) + \
+                                 quad_term)
         llh = (nparams[:, None, :] * stats).sum(dim=-1) + log_basemeasure
         return -llh.mean(dim=-1)
 
@@ -348,6 +359,12 @@ class GSM(Model):
         pdfvecs = torch.cat(list_pdfvecs, dim=-1)
         return pdfvecs.reshape(shape[0], -1, pdfvecs.shape[-1])
 
+    def expected_pdfvecs(self, latent_posteriors, latent_nsamples=1,
+                         params_nsamples=1):
+        s_h = latent_posteriors.sample(latent_nsamples)
+        rvecs = self._rvecs_from_samples(s_h, params_nsamples)
+        return self._pdfvecs_from_rvecs(rvecs).mean(dim=1)
+
     ####################################################################
     # Model interface.
 
@@ -355,6 +372,10 @@ class GSM(Model):
         return self.latent_prior.mean_field_factorization()
 
     def sufficient_statistics(self, models):
+        # We keep a pointer to the model object to update the posterior
+        # of their parameters.
+        self.cache['models'] = models
+
         stats = []
         for model in models:
             params = _subspace_params(model)
@@ -363,7 +384,8 @@ class GSM(Model):
         return torch.cat(stats, dim=0)
 
     def expected_log_likelihood(self, stats, latent_posts, latent_nsamples=1,
-                                params_nsamples=1, **kwargs):
+                                params_nsamples=1, update_models=True,
+                                **kwargs):
         nsamples = latent_nsamples * params_nsamples
         s_h = latent_posts.sample(latent_nsamples)
 
@@ -378,6 +400,11 @@ class GSM(Model):
         rvecs = self._rvecs_from_samples(s_h, params_nsamples)
         pdfvecs = self._pdfvecs_from_rvecs(rvecs).mean(dim=1)
         llh = (pdfvecs * stats).sum(dim=-1)
+
+        # Update the models' expected value of their parameters if
+        # requrested.
+        if update_models:
+            self.update_models(self.cache['models'], pdfvecs)
 
         return llh - local_kl_div
 

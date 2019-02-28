@@ -14,9 +14,9 @@ class NormalFixedDiagonalCovarianceLikelihood(ConjugateLikelihood):
     dim: int
 
     def sufficient_statistics_dim(self, zero_stats=True):
-        zero_stats_dim = self.dim if zero_stats else 0
+        zero_stats_dim = 1 if zero_stats else 0
         return self.dim + zero_stats_dim
-    
+
     @staticmethod
     def sufficient_statistics(data):
         dim = data.shape[-1]
@@ -43,7 +43,7 @@ class NormalFixedDiagonalCovarianceLikelihood(ConjugateLikelihood):
 
 @dataclass(init=False, eq=False, unsafe_hash=True)
 class NormalDiagonalCovarianceStdParams(torch.nn.Module):
-    '''Standard parameterization of the Normal pdf with diagonal 
+    '''Standard parameterization of the Normal pdf with diagonal
     covariance matrix.
     '''
 
@@ -86,16 +86,22 @@ class NormalDiagonalCovariance(ExponentialFamily):
 
     def forward(self, data):
         nparams = self.natural_parameters()
-        stats = torch.cat([data, data**2], dim=-1)
-        logdets = self.params.diag_cov.log().sum(dim=-1, keepdim=True)
+        dtype, device = data.dtype, data.device
+        zero_stats = torch.ones(len(data), dtype=dtype, device=device,
+                                requires_grad=False)
+        stats = torch.cat([data, zero_stats], dim=-1)
+        diag_cov = self.params.diag_cov
+        logdets = diag_cov.log().sum(dim=-1, keepdim=True)
+        quad_term = (diag_cov * data**2).sum(dim=-1, keepdim=True)
         log_basemeasure = -.5 * (logdets + self.dim * math.log(2 * math.pi))
+        log_basemeasure += -.5 * quad_term
         return nparams @ stats.t() + log_basemeasure
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
         parameterization.
 
-        For the random variable x (vector)the sufficient statistics of 
+        For the random variable x (vector)the sufficient statistics of
         the Normal with diagonal covariance matrix are given by:
 
         stats = (
@@ -103,7 +109,7 @@ class NormalDiagonalCovariance(ExponentialFamily):
             x**2,
         )
 
-        For the standard parameters (m=mean, s=diagonal of the cov. 
+        For the standard parameters (m=mean, s=diagonal of the cov.
         matrix) the expectation of the sufficient statistics is
         given by:
 
@@ -139,7 +145,7 @@ class NormalDiagonalCovariance(ExponentialFamily):
             diag_cov = diag_cov.view(1, -1)
         noise = torch.randn(mean.shape[0], nsamples, mean.shape[-1],
                             dtype=mean.dtype, device=mean.device)
-        retval = mean[:, None, :] + diag_cov[:, None, :] * noise
+        retval = mean[:, None, :] + diag_cov.sqrt()[:, None, :] * noise
         if len(size) == 1:
             return retval.view(-1, mean.shape[-1])
         return retval
@@ -164,10 +170,11 @@ class NormalDiagonalCovariance(ExponentialFamily):
             mean = mean.view(1, -1)
             diag_cov = mean.view(1, -1)
         diag_prec = 1. / diag_cov
-        retval = torch.cat([diag_prec * mean, -.5 * diag_prec], dim=-1)
+        retval = torch.cat([diag_prec * mean, diag_prec], dim=-1)
         if size == 1:
             return retval.view(-1)
         return retval
 
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
+

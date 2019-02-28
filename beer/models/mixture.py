@@ -44,7 +44,7 @@ class Mixture(DiscreteLatentModel):
         '''
         mf_groups = modelset.mean_field_factorization()
         tensor = mf_groups[0][0].prior.natural_parameters()
-        tensorconf = {'dtype': tensor.dtype, 'device': tensor.device, 
+        tensorconf = {'dtype': tensor.dtype, 'device': tensor.device,
                       'requires_grad': False}
 
         if weights is None:
@@ -63,7 +63,7 @@ class Mixture(DiscreteLatentModel):
     def _log_weights(self):
         lhf = self.weights.likelihood_fn
         nparams = self.weights.natural_form()
-        data = torch.eye(len(self.modelset), dtype=nparams.dtype, 
+        data = torch.eye(len(self.modelset), dtype=nparams.dtype,
                         device=nparams.device, requires_grad=False)
         stats = lhf.sufficient_statistics(data)
         return lhf(nparams, stats)
@@ -123,3 +123,4 @@ class Mixture(DiscreteLatentModel):
         per_component_exp_llh += log_weights
         lognorm = torch.logsumexp(per_component_exp_llh, dim=1).view(-1)
         return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
+
