@@ -1,7 +1,7 @@
 
-from collections import namedtuple
 import torch
-from .parameters import BayesianParameterSet, BayesianParameter
+from .parameters import BayesianParameterSet
+from .parameters import ConjugateBayesianParameter
 from .modelset import ModelSet
 from .mixture import Mixture
 from ..dists import Dirichlet, DirichletStdParams
@@ -9,6 +9,18 @@ from ..utils import logsumexp
 
 __all__ = ['MixtureSet']
 
+
+########################################################################
+# Helper to build the default parameters.
+
+def _default_param(weights, prior_strength):
+    params = DirichletStdParams(prior_strength * weights)
+    prior_weights = Dirichlet(params)
+    params = DirichletStdParams(prior_strength * weights)
+    posterior_weights = Dirichlet(params)
+    return ConjugateBayesianParameter(prior_weights, posterior_weights)
+
+########################################################################
 
 
 class MixtureSet(ModelSet):
@@ -39,75 +51,44 @@ class MixtureSet(ModelSet):
 
         n_comp_per_mixture = len(modelset) // size
         if weights is None:
-            weights = torch.ones(n_comp_per_mixture, dtype=dtype, device=device)
+            weights = torch.ones(size, n_comp_per_mixture, dtype=dtype, 
+                                 device=device)
             weights *= 1. / n_comp_per_mixture
-        prior_weights = []
-        params = DirichletStdParams(prior_strength * weights)
-        prior_weights = Dirichlet(params)
-        posterior_weights = []
-        for _ in range(size):
-            params = DirichletStdParams(prior_strength * weights)
-            posterior_weights.append(Dirichlet(params))
-        return cls(prior_weights, posterior_weights, modelset)
+        weights_param = _default_param(weights, prior_strength)
+        return cls(weights_param, modelset)
 
-    def __init__(self, prior_weights, posterior_weights, modelset):
-        '''
-        Args:
-            prior_weights (:any:`Dirichlet`): Prior distribution
-                over the weights for each mixture.
-            posterior_weights (list of :any:`Dirichlet`): Posterior
-                distribution over the weights for each mixture.
-            modelset (:any:`BayesianModelSet`): Set of models for all
-                mixtures.
-
-        '''
+    def __init__(self, weights, modelset):
         super().__init__()
-        self.weights = BayesianParameterSet([
-            BayesianParameter(prior_weights, posterior)
-            for posterior in posterior_weights])
+        self.weights = weights
         self.modelset = modelset
-
-    def __getitem__(self, key):
-        if isinstance(key, slice):
-            weights = self.weights[key]
-            prior = weights[0].prior
-            posteriors = [bayes_param.posterior for bayes_param in weights]
-            shift = self.n_comp_per_mixture
-            if key.step is not None:
-                raise NotImplementedError('specific slice step is not implemented')
-            new_slice = slice(
-                key.start * shift if key.start is not None else None,
-                key.stop * shift if key.stop is not None else None,
-                None
-            )
-            mdlset = self.modelset[new_slice]
-            return MixtureSet(prior, posteriors, mdlset)
-        weights = self.weights[key]
-        start = key * self.n_comp_per_mixture
-        stop = (key + 1) * self.n_comp_per_mixture
-        mdlset = self.modelset[start:stop]
-        return Mixture(weights.prior, weights.posterior, mdlset)
-
-    def __len__(self):
-        return len(self.weights)
 
     @property
     def n_comp_per_mixture(self):
         'Number of components per mixture'
         return len(self.modelset) // len(self)
+    
+    # Log probability of each components.
+    def _log_weights(self):
+        lhf = self.weights.likelihood_fn
+        nparams = self.weights.natural_form()
+        data = torch.eye(self.n_comp_per_mixture, dtype=nparams.dtype, 
+                        device=nparams.device, requires_grad=False)
+        stats = lhf.sufficient_statistics(data)
+        return lhf(nparams, stats).t()
 
     ####################################################################
     # Model interface.
-    ####################################################################
 
     def mean_field_factorization(self):
-        return [self.modelset.mean_field_factorization()[0] + [*self.weights]]
+        retval = self.modelset.mean_field_factorization() 
+        retval[0] += [self.weights]
+        return retval
 
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats):
-        log_weights = self.weights.expected_natural_parameters()
+        log_weights = self._log_weights()
         pc_exp_llhs = self.modelset.expected_log_likelihood(stats)
         pc_exp_llhs = pc_exp_llhs.reshape(-1, len(self), self.n_comp_per_mixture)
         w_pc_exp_llhs = pc_exp_llhs + log_weights[None]
@@ -118,21 +99,36 @@ class MixtureSet(ModelSet):
         resps = log_resps.exp()
         self.cache['resps'] = resps
 
-        # expected llh.
-        exp_llh = (pc_exp_llhs * resps).sum(dim=-1)
-
-        # Local KL divergence.
-        local_kl_div = torch.sum(resps * (log_resps - log_weights), dim=-1)
-
-        return exp_llh - local_kl_div
+        return log_norm
 
     def accumulate(self, stats, resps):
-        ret_val = {}
-        joint_resps = self.cache['resps'] * resps[:,:, None]
-        sum_joint_resps = joint_resps.sum(dim=0)
-        ret_val = dict(zip(self.weights, sum_joint_resps))
-        acc_stats = self.modelset.accumulate(stats,
-            joint_resps.reshape(-1, len(self) * self.n_comp_per_mixture))
-        ret_val = {**ret_val, **acc_stats}
-        return ret_val
+        jointresps = self.cache['resps'] * resps[:,:, None]
+        lhf = self.weights.likelihood_fn
+        jointresps_stats = lhf.sufficient_statistics(jointresps.sum(dim=0))
+        totalresps = jointresps.reshape(-1, len(self) * self.n_comp_per_mixture)
+        retval = {
+            self.weights: jointresps_stats,
+            **self.modelset.accumulate(stats, totalresps)
+        }
+        return retval
 
+    ####################################################################
+    # ModelSet interface.
+
+    def __len__(self):
+        return len(self.weights)
+
+    def __getitem__(self, key):
+        ncpm = self.n_comp_per_mixture
+        if isinstance(key, int):    
+            s = slice(key * ncpm, (key + 1) * ncpm)
+            return Mixture(self.weights[key], self.modelset[s])
+        if isinstance(key, slice):   
+            start = 0 if key.start is None else key.start * ncpm
+            stop = len(self) if key.stop is None else key.stop * ncpm
+            step = 1 if key.step is None else key.step * ncpm
+            new_s = slice(start, stop, step) 
+            return self.__class__(self.weights[key], self.modelset[new_s])
+        raise IndexError(f'Unsupported index: {key}')
+
+    

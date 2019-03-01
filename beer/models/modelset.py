@@ -209,4 +209,3 @@ class RepeatedModelSet(ModelSet):
 
     def __len__(self):
         return len(self.modelset) * self.repeat
-
