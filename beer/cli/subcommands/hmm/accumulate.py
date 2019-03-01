@@ -40,8 +40,8 @@ def main(args, logger):
         uttid = line.strip().split()[0]
         utt = dataset[uttid]
 
+        aligraph = None
         if alis:
-            aligraph = None
             try:
                 aligraph = alis[uttid][0]
             except KeyError:

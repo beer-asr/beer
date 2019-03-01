@@ -1,7 +1,7 @@
 
 import torch
 from .hmm import HMM
-from .parameters import BayesianParameter
+from .parameters import ConjugateBayesianParameter
 from ..dists import Dirichlet, DirichletStdParams
 from ..utils import logsumexp
 
@@ -36,7 +36,7 @@ class PhoneLoop(HMM):
         super().__init__(graph, modelset)
         self.start_pdf = start_pdf
         self.end_pdf = end_pdf
-        self.weights = BayesianParameter(prior_weights, posterior_weights)
+        self.weights = ConjugateBayesianParameter(prior_weights, posterior_weights)
         self.weights.register_callback(self._on_weights_update)
         self._on_weights_update()
 
