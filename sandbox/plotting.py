@@ -40,14 +40,14 @@ def plot_normal(fig, mean, cov, n_std_dev=2, npoints=100, **kwargs):
                     **kwargs)
 
 
-def plot_gmm(fig, gmm, n_std_dev=2, npoints=100, alpha=1., colors=None, **kwargs):
+def plot_gmm(fig, gmm, n_std_dev=2, npoints=100, alpha=1., **kwargs):
     'Plot a Normal density'
     try:
         weights = gmm.weights.expected_value()
     except Exception:
         weights = gmm.weights
     
-    for weight, comp in zip(weights, gmm.modelset):
+    for weight, comp, color in zip(weights, gmm.modelset):
         plot_normal(fig, comp.mean.clone().detach().numpy(), comp.cov.clone().detach().numpy(),
             n_std_dev, npoints, alpha=alpha * weight.clone().detach().numpy(), **kwargs)
 

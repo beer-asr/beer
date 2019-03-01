@@ -47,13 +47,11 @@ def plot_gmm(fig, gmm, n_std_dev=2, npoints=100, alpha=1., colors=None, **kwargs
     except Exception:
         weights = gmm.weights
     
-    if colors is None:
-        colors = ['#1F77B4'] * len(gmm.modelset)
         
-    for weight, comp, color in zip(weights, gmm.modelset, colors):
-        kwargs['color'] = color
-        plot_normal(fig, comp.mean.numpy(), comp.cov.numpy(),
-            n_std_dev, npoints, alpha=alpha * weight.numpy(), **kwargs)
+    for weight, comp in zip(weights, gmm.modelset):
+
+        plot_normal(fig, comp.mean.detach().numpy(), comp.cov.detach().numpy(),
+            n_std_dev, npoints, alpha=alpha * weight.detach().numpy(), **kwargs)
 
 def plot_hmm(fig, hmm, n_std_dev=2, npoints=100, colors=None, **kwargs):
     'Plot a Normal density'
@@ -62,6 +60,6 @@ def plot_hmm(fig, hmm, n_std_dev=2, npoints=100, colors=None, **kwargs):
     for comp, color in zip(hmm.modelset, colors):
         if color is not None:
             kwargs['color'] = color
-        plot_normal(fig, comp.expected_mean.numpy(), comp.expected_cov.numpy(),
+        plot_normal(fig, comp.mean.numpy(), comp.cov.numpy(),
                     n_std_dev, npoints, **kwargs)
         
