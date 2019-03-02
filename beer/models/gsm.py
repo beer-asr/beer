@@ -168,11 +168,6 @@ class SubspaceBayesianParameter(BayesianParameter):
         dtype, device = self.pdfvec.dtype, self.pdfvec.device
         return torch.tensor(0., dtype=dtype, device=device, requires_grad=False)
 
-    #def __len__(self):
-    #    if len(self.stats.shape) <= 1:
-    #        return 1
-    #    return self.stats.shape[0]
-
     def __getitem__(self, key):
         return SubspaceBayesianParameterView(key, self)
         return SubspaceBayesianParameter(self.stats[key], self.prior,
@@ -184,9 +179,8 @@ class SubspaceBayesianParameter(BayesianParameter):
 class SubspaceBayesianParameterView(BayesianParameter):
 
     def __init__(self, key, param):
-        self.prior = self.param.prior
-        self.posterior = self.param.posterior
-        self.likelihood_fn = self.param.likelihood_fn
+        BayesianParameter.__init__(self, param.stats, param.prior,
+                                   param.posterior, param.likelihood_fn)
         self.key = key
         self.param = param
 
@@ -197,6 +191,7 @@ class SubspaceBayesianParameterView(BayesianParameter):
     @stats.setter
     def stats(self, value):
         self.stats[self.key] = value
+        return self.param.stats[self.key]
 
     @property
     def pdfvec(self):
@@ -230,7 +225,7 @@ def _subspace_params(model):
     for param in model.bayesian_parameters(paramfilter):
         yield param
 
-# Iterate over the pdfvectors corresponing to the given real vectors.
+# Iterate over the pdfvectors corresponding to the given real vectors.
 def _pdfvecs(params, rvecs):
     idx = 0
     for param in params:
