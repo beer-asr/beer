@@ -1,9 +1,13 @@
 
 import torch
 from .hmm import HMM
+from .mixture import _default_param
 from .parameters import ConjugateBayesianParameter
 from ..dists import Dirichlet, DirichletStdParams
 from ..utils import logsumexp
+
+
+__all__ = ['PhoneLoop']
 
 
 class PhoneLoop(HMM):
@@ -12,7 +16,20 @@ class PhoneLoop(HMM):
     @classmethod
     def create(cls, graph, start_pdf, end_pdf, modelset, weights=None,
                prior_strength=1.0):
-        'Create a :any:`PhoneLoop` model.'
+        '''Create a PhoneLoop model.
+
+        Args:
+            graph (:any:`CompiledGraph`): Decoding graph of the
+                phone-loop.
+            start_pdf (dict): Mapping symbol/start state of the
+                corresponding sub-HMM.
+            end_pdf (dict): Mapping symbol/end state of the
+                corresponding sub-HMM.
+            weights (:any:`BayesianParameter`): Initial unigram
+                probability of each phone.
+            prior_strength (float): Strength of the prior over the
+                weights.
+        '''
         # We look at one parameter to check the type of the model.
         bayes_param = modelset.mean_field_factorization()[0][0]
         tensor = bayes_param.prior.natural_parameters()
@@ -24,19 +41,14 @@ class PhoneLoop(HMM):
         else:
             weights = torch.tensor(weights, dtype=dtype, device=device,
                                    requires_grad=False)
-        params = DirichletStdParams(prior_strength * weights)
-        prior_weights = Dirichlet(params)
-        params = DirichletStdParams(prior_strength * weights)
-        posterior_weights = Dirichlet(params)
-        return cls(graph, modelset, start_pdf, end_pdf, prior_weights,
-                   posterior_weights)
+        weights_param = _default_param(weights, prior_strength)
+        return cls(graph, modelset, start_pdf, end_pdf, weights_param)
 
-    def __init__(self, graph, modelset, start_pdf, end_pdf, prior_weights,
-                 posterior_weights):
+    def __init__(self, graph, modelset, start_pdf, end_pdf, weights):
         super().__init__(graph, modelset)
         self.start_pdf = start_pdf
         self.end_pdf = end_pdf
-        self.weights = ConjugateBayesianParameter(prior_weights, posterior_weights)
+        self.weights = weights
         self.weights.register_callback(self._on_weights_update)
         self._on_weights_update()
 
@@ -47,8 +59,7 @@ class PhoneLoop(HMM):
             self.graph.trans_log_probs[end_idx, start_idxs] = log_weights
 
     ####################################################################
-    # BayesianModel interface.
-    ####################################################################
+    # Model interface.
 
     def mean_field_factorization(self):
         params = super().mean_field_factorization()
@@ -73,7 +84,4 @@ class PhoneLoop(HMM):
             fake_stats = torch.zeros_like(nparams, requires_grad=False)
             retval.update({self.weights: fake_stats})
         return retval
-
-
-__all__ = ['PhoneLoop']
 
