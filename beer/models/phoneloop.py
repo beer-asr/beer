@@ -53,7 +53,7 @@ class PhoneLoop(HMM):
         self._on_weights_update()
 
     def _on_weights_update(self):
-        log_weights = self.weights.expected_natural_parameters()
+        log_weights = self.weights.natural_form()
         start_idxs = [value for value in self.start_pdf.values()]
         for end_idx in self.end_pdf.values():
             self.graph.trans_log_probs[end_idx, start_idxs] = log_weights
@@ -78,7 +78,9 @@ class PhoneLoop(HMM):
             phone_resps = trans_resps[:, start_idxs]
             phone_resps = phone_resps[end_idxs, :].sum(dim=0)
             phone_resps += self.cache['resps'][0][start_idxs]
-            retval.update({self.weights: phone_resps})
+            lhf = self.weights.likelihood_fn
+            resps_stats = lhf.sufficient_statistics(phone_resps.view(1, -1))
+            retval.update({self.weights: resps_stats.view(-1)})
         else:
             nparams = self.weights.posterior.natural_parameters()
             fake_stats = torch.zeros_like(nparams, requires_grad=False)
