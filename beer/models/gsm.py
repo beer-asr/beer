@@ -153,6 +153,7 @@ class SubspaceBayesianParameter(BayesianParameter):
     def __init__(self, init_stats, prior, posterior=None, likelihood_fn=None,
                  pdfvec=None):
         super().__init__(init_stats, prior, posterior, likelihood_fn)
+        pdfvec = pdfvec if pdfvec is not None else torch.zeros_like(self.stats)
         self.pdfvec = pdfvec
 
     def value(self):
@@ -167,16 +168,45 @@ class SubspaceBayesianParameter(BayesianParameter):
         dtype, device = self.pdfvec.dtype, self.pdfvec.device
         return torch.tensor(0., dtype=dtype, device=device, requires_grad=False)
 
-    #def __len__(self):
-    #    if len(self.stats.shape) <= 1:
-    #        return 1
-    #    return self.stats.shape[0]
-
     def __getitem__(self, key):
+        return SubspaceBayesianParameterView(key, self)
         return SubspaceBayesianParameter(self.stats[key], self.prior,
                                          self.posterior,
                                          self.likelihood_fn,
                                          self.pdfvec[key])
+
+
+class SubspaceBayesianParameterView(SubspaceBayesianParameter):
+    '''Specific class of (non-conjugate) Bayesian parameter for which
+    the prior/posterior live in a subspace.
+    '''
+
+    def __init__(self, key, param):
+
+        BayesianParameter.__init__(self, param.stats, param.prior, param.posterior,
+                         param.likelihood_fn)
+        self.key = key
+        self.param = param
+
+    @property
+    def stats(self):
+        return self.param.stats[self.key]
+
+    @stats.setter
+    def stats(self, value):
+        self.param.stats[self.key] = value
+
+    @property
+    def pdfvec(self):
+        return self.param.pdfvec[self.key]
+
+    @pdfvec.setter
+    def pdfvec(self, value):
+        self.param.pdfvec[self.key] = value
+
+    def __getitem__(self, key):
+        self.SubspaceBayesianParameterView(key, self.param)
+
 
 ########################################################################
 # Helpers for work with the super-vector space, the "real" super-vector,
@@ -189,7 +219,7 @@ def _subspace_params(model):
     for param in model.bayesian_parameters(paramfilter):
         yield param
 
-# Iterate over the pdfvectors corresponing to the given real vectors.
+# Iterate over the pdfvectors corresponding to the given real vectors.
 def _pdfvecs(params, rvecs):
     idx = 0
     for param in params:

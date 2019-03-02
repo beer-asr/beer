@@ -20,7 +20,7 @@ feaname=mbn_babel
 
 # AUD
 nunits=100      # maximum number of discovered units
-epochs=30       # number of training epochs
+epochs=10       # number of training epochs
 
 #######################################################################
 

@@ -111,7 +111,7 @@ class JointModelSet(ModelSet):
 
 class DynamicallyOrderedModelSet(ModelSet):
     '''Set of model for which the order of the components might
-    change for each called.
+    change for each call.
 
     Attributes:
         original_modelset (:any:`BayesianModelSet`): original model.
