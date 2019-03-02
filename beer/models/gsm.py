@@ -153,6 +153,7 @@ class SubspaceBayesianParameter(BayesianParameter):
     def __init__(self, init_stats, prior, posterior=None, likelihood_fn=None,
                  pdfvec=None):
         super().__init__(init_stats, prior, posterior, likelihood_fn)
+        pdfvec = pdfvec if pdfvec is not None else torch.zeros_like(self.stats)
         self.pdfvec = pdfvec
 
     def value(self):
@@ -173,10 +174,50 @@ class SubspaceBayesianParameter(BayesianParameter):
     #    return self.stats.shape[0]
 
     def __getitem__(self, key):
+        return SubspaceBayesianParameterView(key, self)
         return SubspaceBayesianParameter(self.stats[key], self.prior,
                                          self.posterior,
                                          self.likelihood_fn,
                                          self.pdfvec[key])
+
+
+class SubspaceBayesianParameterView(BayesianParameter):
+
+    def __init__(self, key, param):
+        self.prior = self.param.prior
+        self.posterior = self.param.posterior
+        self.likelihood_fn = self.param.likelihood_fn
+        self.key = key
+        self.param = param
+
+    @property
+    def stats(self):
+        return self.stats[self.key]
+
+    @stats.setter
+    def stats(self, value):
+        self.stats[self.key] = value
+
+    @property
+    def pdfvec(self):
+        return self.param.pdfvec[self.key]
+
+    @pdfvec.setter
+    def pdfvec(self, value):
+        self.param.pdfvec[self.key] = value
+
+    def value(self):
+        return self.likelihood_fn.parameters_from_pdfvector(self.pdfvec)
+
+    def natural_form(self):
+        self.pdfvec
+
+    def kl_div_posterior_prior(self):
+        return self.param.kl_div_posterior_prior()
+
+    def __getitem__(self, key):
+        return SubspaceBayesianParameterView(key, self.param)
+
 
 ########################################################################
 # Helpers for work with the super-vector space, the "real" super-vector,
@@ -184,8 +225,8 @@ class SubspaceBayesianParameter(BayesianParameter):
 
 # Iterate over all parameters handled by the GSM.
 def _subspace_params(model):
-    sbp_class = SubspaceBayesianParameter
-    paramfilter = lambda param: isinstance(param, sbp_class)
+    sbp_classes = (SubspaceBayesianParameter, SubspaceBayesianParameterView)
+    paramfilter = lambda param: isinstance(param, sbp_classes)
     for param in model.bayesian_parameters(paramfilter):
         yield param
 
