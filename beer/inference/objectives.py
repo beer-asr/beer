@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import typing
 import torch
+from ..models import ConjugateBayesianParameter
 
 
 __all__ = ['evidence_lower_bound']
@@ -96,8 +97,9 @@ class EvidenceLowerBoundInstance:
 
         scale = self._datasize / self._minibatchsize
         for parameter in self._model_parameters:
-            acc_stats = self._acc_stats[parameter]
-            parameter.store_stats(scale * acc_stats)
+            if isinstance(parameter, ConjugateBayesianParameter):
+                acc_stats = self._acc_stats[parameter]
+                parameter.store_stats(scale * acc_stats)
 
     def sync(self, vboptimizer):
         '''If the ELBO was stored on disk and loaded again, it will lose

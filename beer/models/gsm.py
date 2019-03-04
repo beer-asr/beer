@@ -7,7 +7,7 @@ from operator import mul
 import torch
 from .basemodel import Model
 from .parameters import BayesianParameter
-from .parameters import ConjugateBayesianParameter
+from .parameters import NonConjugateBayesianParameter
 from ..dists import NormalDiagonalCovariance
 
 
@@ -53,7 +53,7 @@ class AffineTransform(Model):
 
     @classmethod
     def create(cls, in_dim, out_dim, prior_strength=1.):
-        log_strength = math.log(prior_strength)
+        log_strength = -math.log(prior_strength)
         # Bias prior/posterior.
         prior_bias = NormalDiagonalCovariance(
             _MeanLogDiagCov(
@@ -65,8 +65,7 @@ class AffineTransform(Model):
         posterior_bias = NormalDiagonalCovariance(
             _MeanLogDiagCov(
                 mean=torch.zeros(out_dim, requires_grad=True),
-                log_diag_cov=torch.zeros(out_dim, requires_grad=True) \
-                             + log_strength,
+                log_diag_cov=torch.zeros(out_dim, requires_grad=True),
             )
         )
 
@@ -81,8 +80,7 @@ class AffineTransform(Model):
         posterior_weights = NormalDiagonalCovariance(
             _MeanLogDiagCov(
                 mean=torch.zeros(in_dim * out_dim, requires_grad=True),
-                log_diag_cov=torch.zeros(in_dim * out_dim, requires_grad=True) \
-                             + log_strength,
+                log_diag_cov=torch.zeros(in_dim * out_dim, requires_grad=True),
             )
         )
         return cls(prior_weights, posterior_weights, prior_bias, posterior_bias)
@@ -90,8 +88,9 @@ class AffineTransform(Model):
     def __init__(self, prior_weights, posterior_weights, prior_bias,
                  posterior_bias):
         super().__init__()
-        self.weights = ConjugateBayesianParameter(prior_weights, posterior_weights)
-        self.bias = ConjugateBayesianParameter(prior_bias, posterior_bias)
+        self.weights = NonConjugateBayesianParameter(prior_weights,
+                                                     posterior_weights)
+        self.bias = NonConjugateBayesianParameter(prior_bias, posterior_bias)
 
         # Compute the input/output dimension from the priors.
         self._out_dim = self.bias.prior.dim
@@ -181,17 +180,17 @@ class SubspaceBayesianParameterView(BayesianParameter):
     def __init__(self, key, param):
         BayesianParameter.__init__(self, param.stats, param.prior,
                                    param.posterior, param.likelihood_fn)
+        del self.stats
         self.key = key
         self.param = param
 
     @property
     def stats(self):
-        return self.stats[self.key]
+        return self.param.stats[self.key]
 
     @stats.setter
     def stats(self, value):
-        self.stats[self.key] = value
-        return self.param.stats[self.key]
+        self.param.stats[self.key] = value
 
     @property
     def pdfvec(self):
@@ -360,9 +359,10 @@ class GSM(Model):
         shape = s_h.shape
         s_h = s_h.reshape(-1, s_h.shape[-1])
         stats = self.latent_prior.sufficient_statistics(s_h)
+        stats = stats.reshape(shape[0], shape[1], -1).mean(dim=1)
         llh = self.latent_prior.expected_log_likelihood(stats, **kwargs)
-        llh = llh.reshape(shape[0], shape[1]).mean(dim=-1)
-        return -llh, stats.reshape(shape[0], shape[1], stats.shape[-1]).mean(dim=1)
+        #llh = llh.reshape(shape[0], shape[1]).mean(dim=-1)
+        return -llh, stats.detach()
 
     def _entropy(self, s_h, latent_posteriors):
         shape = s_h.shape
@@ -405,7 +405,9 @@ class GSM(Model):
     # Model interface.
 
     def mean_field_factorization(self):
-        return self.latent_prior.mean_field_factorization()
+        #return self.latent_prior.mean_field_factorization()
+        return [*self.latent_prior.mean_field_factorization(),
+                [self.affine_transform]]
 
     def sufficient_statistics(self, models):
         # We keep a pointer to the model object to update the posterior

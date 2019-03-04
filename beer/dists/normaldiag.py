@@ -121,7 +121,7 @@ class NormalDiagonalCovariance(ExponentialFamily):
         '''
         return torch.cat([
             self.params.mean,
-            self.params.diag_cov + self.params.mean ** 2
+            -.5 * (self.params.diag_cov + self.params.mean ** 2)
         ])
 
     def expected_value(self):
@@ -130,10 +130,11 @@ class NormalDiagonalCovariance(ExponentialFamily):
     def log_norm(self):
         dim = self.dim
         mean = self.params.mean
-        diag_prec = 1./ self.params.diag_cov
+        diag_cov = self.params.diag_cov
+        diag_prec = 1./ diag_cov
         log_base_measure = -.5 * dim * math.log(2 * math.pi)
-        return -.5 * (diag_prec * mean) @ mean \
-                + .5 * diag_prec.log().sum() \
+        return -.5 * (diag_prec * (mean ** 2)).sum(dim=-1) \
+                - .5 * diag_cov.log().sum(dim=-1) \
                 + log_base_measure
 
     def sample(self, nsamples):
@@ -168,7 +169,7 @@ class NormalDiagonalCovariance(ExponentialFamily):
         size = len(mean.shape) if len(mean.shape) > 0 else 1
         if size == 1:
             mean = mean.view(1, -1)
-            diag_cov = mean.view(1, -1)
+            diag_cov = diag_cov.view(1, -1)
         diag_prec = 1. / diag_cov
         retval = torch.cat([diag_prec * mean, diag_prec], dim=-1)
         if size == 1:
