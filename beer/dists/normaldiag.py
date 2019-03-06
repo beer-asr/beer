@@ -79,7 +79,7 @@ class NormalDiagonalCovariance(ExponentialFamily):
 
     @property
     def dim(self):
-        return len(self.params.mean)
+        return self.params.mean.shape[-1]
 
     def conjugate(self):
         return NormalFixedDiagonalCovarianceLikelihood(self.dim)
@@ -132,9 +132,9 @@ class NormalDiagonalCovariance(ExponentialFamily):
         mean = self.params.mean
         diag_cov = self.params.diag_cov
         diag_prec = 1./ diag_cov
-        log_base_measure = -.5 * dim * math.log(2 * math.pi)
-        return -.5 * (diag_prec * (mean ** 2)).sum(dim=-1) \
-                - .5 * diag_cov.log().sum(dim=-1) \
+        log_base_measure = .5 * dim * math.log(2 * math.pi)
+        return .5 * (diag_prec * (mean ** 2)).sum(dim=-1) \
+                + .5 * diag_cov.log().sum(dim=-1) \
                 + log_base_measure
 
     def sample(self, nsamples):

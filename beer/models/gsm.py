@@ -405,9 +405,8 @@ class GSM(Model):
     # Model interface.
 
     def mean_field_factorization(self):
-        #return self.latent_prior.mean_field_factorization()
         return [*self.latent_prior.mean_field_factorization(),
-                [self.affine_transform]]
+                *self.affine_transform.mean_field_factorization()]
 
     def sufficient_statistics(self, models):
         # We keep a pointer to the model object to update the posterior

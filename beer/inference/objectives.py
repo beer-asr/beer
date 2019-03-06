@@ -97,9 +97,14 @@ class EvidenceLowerBoundInstance:
 
         scale = self._datasize / self._minibatchsize
         for parameter in self._model_parameters:
-            if isinstance(parameter, ConjugateBayesianParameter):
+            #if isinstance(parameter, ConjugateBayesianParameter):
+            #    acc_stats = self._acc_stats[parameter]
+            #    parameter.store_stats(scale * acc_stats)
+            try:
                 acc_stats = self._acc_stats[parameter]
                 parameter.store_stats(scale * acc_stats)
+            except KeyError:
+                pass
 
     def sync(self, vboptimizer):
         '''If the ELBO was stored on disk and loaded again, it will lose
