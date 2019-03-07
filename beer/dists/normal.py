@@ -71,6 +71,7 @@ class NormalFullCovariance(ExponentialFamily):
     def forward(self, stats, pdfwise=False):
         nparams = self.natural_parameters()
         mean = self.params.mean
+        cov = self.params.cov
         size = mean.shape
         dim = self.dim
         if len(size) <= 1:
@@ -81,8 +82,8 @@ class NormalFullCovariance(ExponentialFamily):
         # to inverse the covariance matrix once more time.
         prec = nparams[:, dim: dim * (dim + 1)].reshape(-1, dim, dim)
 
-        # Log determinant of all the precision matrices.
-        L = torch.cholesky(prec, upper=False)
+        # Log determinant of all the covariance matrix.
+        L = torch.cholesky(cov, upper=False)
         logdet = 2 * torch.log(L[:, range(dim), range(dim)]).sum(dim=-1)
 
         # Quadratic term of the log-normalizer: -.5 * mu^T S mu
@@ -168,10 +169,9 @@ class NormalFullCovariance(ExponentialFamily):
             mean = mean.view(1, -1)
             cov = cov.view(1, dim, dim)
         L = torch.cholesky(cov, upper=False)
-        noise = torch.randn(mean.shape[0], mean.shape[1], nsamples,
+        noise = torch.randn(mean.shape[0], nsamples, mean.shape[1],
                             dtype=mean.dtype, device=mean.device)
-        retval = mean[:, :, None] + torch.matmul(L, noise)
-        retval = retval.permute(0, 2, 1)
+        retval = mean[:, None, :] + torch.matmul(noise, L.permute(0, 2, 1))
         if len(size) <= 1:
             return retval.reshape(nsamples, -1)
         return retval
