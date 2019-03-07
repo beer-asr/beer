@@ -84,18 +84,30 @@ class NormalDiagonalCovariance(ExponentialFamily):
     def conjugate(self):
         return NormalFixedDiagonalCovarianceLikelihood(self.dim)
 
-    def forward(self, data):
+    def forward(self, stats, pdfwise=False):
         nparams = self.natural_parameters()
-        dtype, device = data.dtype, data.device
-        zero_stats = torch.ones(len(data), dtype=dtype, device=device,
-                                requires_grad=False)
-        stats = torch.cat([data, zero_stats], dim=-1)
+        mean = self.params.mean
         diag_cov = self.params.diag_cov
+        size = mean.shape
+        dim = self.dim
+        if len(size) <= 1:
+            mean = mean.view(1, -1)
+            nparams = nparams.view(1, -1)
         logdets = diag_cov.log().sum(dim=-1, keepdim=True)
-        quad_term = (diag_cov * data**2).sum(dim=-1, keepdim=True)
-        log_basemeasure = -.5 * (logdets + self.dim * math.log(2 * math.pi))
-        log_basemeasure += -.5 * quad_term
-        return nparams @ stats.t() + log_basemeasure
+        mSm = ((1. / diag_cov) * (mean**2)).sum(dim=-1, keepdim=True)
+        lnorm = .5 * (logdets + mSm)
+        log_basemeasure = -.5 * self.dim * math.log(2 * math.pi)
+
+        if pdfwise:
+            return torch.sum(nparams * stats, dim=-1) - lnorm \
+                   + log_basemeasure
+        retval = nparams @ stats.t() - lnorm + log_basemeasure
+        if len(size) <= 1:
+            return retval.reshape(-1)
+        return retval
+
+    def sufficient_statistics(self, data):
+        return torch.cat([data, -.5 * (data**2)], dim=-1)
 
     def expected_sufficient_statistics(self):
         '''Expected sufficient statistics given the current
