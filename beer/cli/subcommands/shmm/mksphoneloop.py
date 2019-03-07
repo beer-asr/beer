@@ -60,6 +60,7 @@ def setup(parser):
                                           'subspace from')
     parser.add_argument('gsm', help='output generalized subspace model')
     parser.add_argument('posts', help='output units posterior')
+    parser.add_argument('sploop', help='output subspace Phone-Loop')
 
 
 def main(args, logger):
@@ -141,7 +142,11 @@ def main(args, logger):
 
     logger.debug('saving the units posterior')
     with open(args.posts, 'wb') as f:
-        pickle.dump(latent_posts, f)
+        pickle.dump((latent_posts, nunits, nstates), f)
+
+    logger.debug('saving the subspace phoneloop')
+    with open(args.sploop, 'wb') as f:
+        pickle.dump(ploop, f)
 
     logger.info(f'created {nunits} subspace HMMs')
 
