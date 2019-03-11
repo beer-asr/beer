@@ -13,7 +13,7 @@ class NormalDiagonalLikelihood(ConjugateLikelihood):
     dim: int
 
     def sufficient_statistics_dim(self, zero_stats=True):
-        zero_stats_dim = 2 if zero_stats else 0 
+        zero_stats_dim = 2 if zero_stats else 0
         return 2 * self.dim + zero_stats_dim
 
     @staticmethod
@@ -26,6 +26,18 @@ class NormalDiagonalLikelihood(ConjugateLikelihood):
             .5 * torch.ones(len(data), 1, dtype=dtype, device=device),
         ], dim=-1)
 
+    def parameters_from_pdfvector(self, pdfvec):
+        size = pdfvec.shape
+        if len(size) == 1:
+            pdfvec = pdfvec.view(1, -1)
+        dim = self.dim
+        precision = pdfvec[:, dim: 2 * dim]
+        mean = pdfvec[:, :dim] / precision
+        if len(size) == 1:
+            return mean.view(1), precision.view(1)
+        return mean.view(-1, dim), precision.view(-1, dim)
+
+
     def pdfvectors_from_rvectors(self, rvecs):
         dim = rvecs.shape[-1] // 2
         mean = rvecs[:, :dim]
@@ -36,15 +48,9 @@ class NormalDiagonalLikelihood(ConjugateLikelihood):
             precision,
             torch.sum(precision * (mean ** 2), dim=-1)[:, None],
             torch.sum(log_precision, dim=-1)[:, None]
-        ], dim=-1) 
+        ], dim=-1)
         return retval
 
-    def parameters_from_pdfvector(self, pdfvec):
-        dim = self.dim
-        precision = pdfvec[dim: 2 * dim]
-        mean = pdfvec[:dim] / precision
-        return mean, precision  
-    
     def __call__(self, pdfvecs, stats):
         if len(pdfvecs.shape) == 1:
             pdfvecs = pdfvecs.view(1, -1)
@@ -82,7 +88,7 @@ class NormalGammaStdParams(torch.nn.Module):
         rates = -np2 - .5 * scale[:, None] * mean**2
 
         if len(npsize) == 1:
-            return cls(mean.view(-1), scale.view(-1), shape.view(-1), 
+            return cls(mean.view(-1), scale.view(-1), shape.view(-1),
                        rates.view(-1))
         return cls(mean, scale.view(-1, 1), shape.view(-1, 1), rates)
 
@@ -132,8 +138,8 @@ class NormalGamma(ExponentialFamily):
         logdet = torch.sum(torch.digamma(shape) - torch.log(rates), dim=-1)
         return torch.cat([
             diag_precision * mean, diag_precision,
-            prec_quad_mean.reshape(shape_size), 
-            logdet.reshape(shape_size)], 
+            prec_quad_mean.reshape(shape_size),
+            logdet.reshape(shape_size)],
         dim=-1)
 
     def expected_value(self):

@@ -68,6 +68,10 @@ class Mixture(DiscreteLatentModel):
         stats = lhf.sufficient_statistics(data)
         return lhf(nparams, stats)
 
+    def _local_kl_divergence(self, log_resps, log_weights):
+        retval = torch.sum(log_resps.exp() * (log_resps - log_weights), dim=-1)
+        return retval
+
     ####################################################################
     # Model interface.
 
@@ -81,7 +85,6 @@ class Mixture(DiscreteLatentModel):
 
     def expected_log_likelihood(self, stats, labels=None, **kwargs):
         # Per-components weighted log-likelihood.
-        #log_weights = self.weights.expected_natural_parameters().view(1, -1)
         log_weights = self._log_weights()[None]
         per_component_exp_llh = self.modelset.expected_log_likelihood(stats,
                                                                       **kwargs)
@@ -89,18 +92,19 @@ class Mixture(DiscreteLatentModel):
         # Responsibilities and expected llh.
         if labels is None:
             w_per_component_exp_llh = (per_component_exp_llh + log_weights).detach()
-            exp_llh = torch.logsumexp(w_per_component_exp_llh, dim=1).view(-1)
-            log_resps = w_per_component_exp_llh.detach() - exp_llh.view(-1, 1)
+            lnorm = torch.logsumexp(w_per_component_exp_llh, dim=1).view(-1, 1)
+            log_resps = w_per_component_exp_llh - lnorm
             resps = log_resps.exp()
+            local_kl_div = self._local_kl_divergence(log_resps, log_weights)
         else:
             resps = onehot(labels, len(self.modelset),
                             dtype=log_weights.dtype, device=log_weights.device)
-            exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
 
         # Store the responsibilites to accumulate the statistics.
         self.cache['resps'] = resps
 
-        return exp_llh
+        exp_llh = (per_component_exp_llh * resps).sum(dim=-1)
+        return exp_llh - local_kl_div
 
     def accumulate(self, stats):
         resps = self.cache['resps']

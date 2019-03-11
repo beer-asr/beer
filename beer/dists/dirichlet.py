@@ -28,23 +28,25 @@ class CategoricalLikelihood(ConjugateLikelihood):
         #   lognorm = torch.log(1 + rvectors.exp())
         return torch.nn.functional.softplus(torch.logsumexp(nparams, dim=-1))
 
-    @staticmethod
-    def parameters_from_pdfvector(pdfvec):
-        'Return the parameters of the pdf vector.' 
-        pdfvec = pdfvec.view(-1)
+    def parameters_from_pdfvector(self, pdfvec):
+        size = pdfvec.shape
+        if len(size) == 1:
+            pdfvec = pdfvec.view(1, -1)
         retval = torch.zeros_like(pdfvec, requires_grad=False)
-        lnorm = CategoricalLikelihood.log_norm(pdfvec[:-1])
+        lnorm = CategoricalLikelihood.log_norm(pdfvec[:, :-1])
         remainder = (-lnorm).exp()
-        retval[:-1] = pdfvec[:-1].exp() * remainder
-        retval[-1] = remainder
-        return retval
+        retval[:, :-1] = pdfvec[:, :-1].exp() * remainder[:, None]
+        retval[:, -1] = remainder
+        if len(size) == 1:
+            return retval.view(-1)
+        return retval.view(-1, self.dim)
 
     @staticmethod
     def pdfvectors_from_rvectors(rvecs):
         '''
         Returns:
 
-            (x, -A(x)) 
+            (x, -A(x))
 
         with:
              A(x) = ln( 1 + exp( sum_i^{D-1} (x_i) ) )
@@ -57,7 +59,7 @@ class CategoricalLikelihood(ConjugateLikelihood):
         size = len(pdfvecs.shape)
         return stats @ pdfvecs.t() if size > 1 else stats @ pdfvecs
 
-    
+
 @dataclass(init=False, unsafe_hash=True)
 class DirichletStdParams(torch.nn.Module):
     concentrations: torch.Tensor
@@ -68,7 +70,7 @@ class DirichletStdParams(torch.nn.Module):
 
     @classmethod
     def from_natural_parameters(cls, natural_params):
-        npsize = natural_params.shape 
+        npsize = natural_params.shape
         if len(npsize) == 1:
             natural_params = natural_params.view(1, -1)
         concentrations = natural_params + 1
@@ -90,14 +92,14 @@ class Dirichlet(ExponentialFamily):
         return 1 if len(paramshape) <= 1 else paramshape[0]
 
     def conjugate(self):
-        return CategoricalLikelihood(self.dim)
+        return CategoricalLikelihood(self.params.concentrations.shape[-1])
 
     @property
     def dim(self):
         concentrations = self.params.concentrations
         size = len(concentrations.shape) if len(concentrations.shape) > 0 else 1
         if size == 1:
-            return len(concentrations) 
+            return len(concentrations)
         return tuple(concentrations.shape)
 
     def expected_sufficient_statistics(self):
@@ -132,7 +134,7 @@ class Dirichlet(ExponentialFamily):
     def log_norm(self):
         concentrations = self.params.concentrations
         return torch.lgamma(concentrations).sum(dim=-1) \
-               - torch.lgamma(concentrations.sum(dim=-1))   
+               - torch.lgamma(concentrations.sum(dim=-1))
 
     # TODO
     def sample(self, nsamples):

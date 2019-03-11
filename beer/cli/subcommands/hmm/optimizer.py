@@ -18,7 +18,7 @@ def main(args, logger):
     with open(args.model, 'rb') as f:
         model = pickle.load(f)
 
-    optim = beer.BayesianModelOptimizer(model.mean_field_factorization())
+    optim = beer.VariationalBayesOptimizer(model.mean_field_factorization())
     optim.init_step()
 
     logger.debug('saving the optimizer')

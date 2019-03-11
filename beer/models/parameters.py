@@ -7,7 +7,7 @@ from ..dists import kl_div
 
 
 __all__ = ['BayesianParameter', 'BayesianParameterSet',
-           'ConjugateBayesianParameter']
+           'ConjugateBayesianParameter', 'NonConjugateBayesianParameter']
 
 
 class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
@@ -16,8 +16,7 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
 
     '''
 
-    def __init__(self, init_stats, prior, posterior=None,
-                 likelihood_fn=None):
+    def __init__(self, init_stats, prior, posterior=None, likelihood_fn=None):
         super().__init__()
         self.prior = prior
         self.posterior = posterior
@@ -104,7 +103,9 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
         return self.stats.shape[0]
 
     def __getitem__(self, key):
-        return self.__class__(self.prior.view(key), self.posterior.view(key))
+        return self.__class__(prior=self.prior.view(key),
+                              posterior=self.posterior.view(key),
+                              init_stats=self.stats[key])
 
     ####################################################################
     # Interface to be implemented by other subclasses.
@@ -172,11 +173,12 @@ class ConjugateBayesianParameter(BayesianParameter):
         The type of the prior is the same as the posterior.
     '''
 
-    def __init__(self, prior, posterior, likelihood_fn=None):
-        init_stats = torch.zeros_like(prior.natural_parameters())
-        lh_fn = likelihood_fn if likelihood_fn is not None \
-                              else prior.conjugate()
-        super().__init__(init_stats, prior, posterior, lh_fn)
+    def __init__(self, prior, posterior, init_stats=None,
+                 likelihood_fn=None):
+        if init_stats is None:
+            init_stats = torch.zeros_like(prior.natural_parameters())
+        lhf = likelihood_fn if likelihood_fn is not None else prior.conjugate()
+        super().__init__(init_stats, prior, posterior, lhf)
 
     def value(self):
         return self.posterior.expected_value()
@@ -194,4 +196,23 @@ class ConjugateBayesianParameter(BayesianParameter):
         new_nparams = posterior_nparams + lrate * natural_grad
         self.posterior.update_from_natural_parameters(new_nparams)
         self.dispatch()
+
+
+class NonConjugateBayesianParameter(BayesianParameter):
+    'Parameter for model having a posterior/prior.'
+
+    def __init__(self, prior, posterior, init_stats=None,
+                 likelihood_fn=None):
+        if init_stats is None:
+            init_stats = torch.zeros_like(prior.natural_parameters())
+        super().__init__(init_stats, prior, posterior)
+
+    def value(self):
+        return self.posterior.expected_value()
+
+    def natural_form(self):
+        return self.posterior.expected_sufficient_statistics()
+
+    def kl_div_posterior_prior(self):
+        return kl_div(self.posterior, self.prior)
 

@@ -115,12 +115,13 @@ class NormalWishartStdParams(torch.nn.Module):
         # First we recover the dimension of the mean parameters (D).
         # Since the dimension of the natural parameters of the
         # Normal-Wishart is:
-        #       l = natural_params.shape[-1]
-        #       D^2 + D + 2 = l
+        #       l = natural_params.shape[-1] - 2
+        #       D^2 + D = l
         # we can find D by looking for the positive root of the above
         # polynomial which is given by:
         #       D = .5 * (-1 + sqrt(1 + 4 * l))
-        dim = int(.5 * (-1 + math.sqrt(1 + 4 * natural_params.shape[-1])))
+        l = natural_params.shape[-1] - 2
+        dim = int(.5 * (-1 + math.sqrt(1 + 4 * l)))
 
         np1 = natural_params[:, :dim]
         np2 = natural_params[:, dim: dim * (dim + 1)]

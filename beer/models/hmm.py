@@ -5,6 +5,9 @@ from .modelset import DynamicallyOrderedModelSet
 from ..utils import onehot
 
 
+__all__ = ['HMM']
+
+
 class HMM(DiscreteLatentModel):
     'Hidden Markov Model with fixed transition probabilities.'
 
@@ -58,8 +61,7 @@ class HMM(DiscreteLatentModel):
         return retval
 
     ####################################################################
-    # BayesianModel interface.
-    ####################################################################
+    # Model interface.
 
     def mean_field_factorization(self):
         return self.modelset.mean_field_factorization()
@@ -92,12 +94,13 @@ class HMM(DiscreteLatentModel):
     def accumulate(self, stats, parent_msg=None):
         scaled_resps = self.cache['scale'] * self.cache['resps']
         retval = {**self.modelset.accumulate(stats, scaled_resps)}
-        # By default, we don't do anything with the transition probabilities
+
+        # By default, we don't do anything with the transition
+        # probabilities.
         return retval
 
     ####################################################################
-    # DiscreteLatentBayesianModel interface.
-    ####################################################################
+    # DiscreteLatentModel interface.
 
     def decode(self, data, inference_graph=None, scale=1.):
         if inference_graph is None:
@@ -117,56 +120,3 @@ class HMM(DiscreteLatentModel):
         pc_llhs = self._pc_llhs(stats, inference_graph)
         return self._inference(pc_llhs, inference_graph)
 
-    ####################################################################
-    # Super-Vector representation interface.
-    #################################################################### 
-
-    def svector_dim(self):
-        mset_svector_dim = self.modelset.svector_dim()
-        return mset_svector_dim + len(self.modelset) - 1
-    
-    def svector_acc_stats(self):
-        _, idxs = self.weights.expected_value().sort(descending=True)
-        w_stats = self.weights.posterior.natural_parameters() \
-            - self.weights.prior.natural_parameters()
-        w_stats = w_stats[idxs]
-        w_stats[-1] = w_stats.sum()
-        c_stats = self.modelset.svector_acc_stats()[idxs, :]
-        return torch.cat([
-            c_stats.reshape(-1),
-            w_stats
-        ])
-
-    def svectors_from_rvectors(self, rvectors):
-        ncomps = len(self.modelset)
-        comp_rvectors = rvectors[:, :-(ncomps - 1)]
-        w_rvectors = rvectors[:, -(ncomps - 1):]
-        comp_svectors = self.modelset.svectors_from_rvectors(comp_rvectors)
-
-        # Stable implementation of the log-normalizer of a categorical
-        # distribution: ln Z = ln(1 + \sum_i^{D-1} \exp \mu_i)
-        # Naive python implementation:
-        #   w_lognorm = torch.log(1 + w_rvectors.exp())
-        tmp = (1. + torch.logsumexp(w_rvectors, dim=-1))
-        w_lognorm = torch.nn.functional.softplus(tmp)
-        w_svectors = torch.cat([w_rvectors, w_lognorm.view(-1, 1)], dim=-1)
-
-        return torch.cat([
-            comp_svectors.reshape(len(rvectors), -1),
-            w_svectors.reshape(len(rvectors), -1)
-        ], dim=-1)
-
-    def svector_log_likelihood(self, svectors, acc_stats):
-        ncomps = len(self.modelset)
-        comp_svectors = svectors[:, :-ncomps]
-        comp_svectors = comp_svectors.reshape(len(svectors), ncomps, -1)
-        w_svectors = svectors [:, -ncomps:]
-        comp_acc_stats = acc_stats[:-ncomps]
-        comp_acc_stats = comp_acc_stats.reshape(ncomps, -1)
-        w_acc_stats = acc_stats [-ncomps:]
-        pc_llhs =  self.modelset.svector_log_likelihood(comp_svectors, 
-                                                       comp_acc_stats)
-        return pc_llhs.sum(dim=-1) + w_svectors @ w_acc_stats
-
-
-__all__ = ['HMM']

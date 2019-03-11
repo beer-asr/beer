@@ -7,8 +7,10 @@ from operator import mul
 import torch
 from .basemodel import Model
 from .parameters import BayesianParameter
-from .parameters import ConjugateBayesianParameter
+from .parameters import NonConjugateBayesianParameter
 from ..dists import NormalDiagonalCovariance
+from ..dists import NormalFullCovariance
+from .normal import UnknownCovarianceType
 
 
 __all__ = ['GSM', 'SubspaceBayesianParameter']
@@ -19,9 +21,8 @@ __all__ = ['GSM', 'SubspaceBayesianParameter']
 # "W" and "b" have a Normal (with diagonal covariance matrix) prior.
 
 
-# Parametererization of the Normal distribution. We use the log variance
-# instead of the variance so we don't have any constraints during the
-# S.G.D.
+# Parametererization of the Normal distribution with diagonal
+# covariance matrix to be optimized with S.G.D.
 @dataclass(init=False, unsafe_hash=True)
 class _MeanLogDiagCov(torch.nn.Module):
     mean: torch.Tensor
@@ -45,6 +46,51 @@ class _MeanLogDiagCov(torch.nn.Module):
         return self.log_diag_cov.exp()
 
 
+# Parametererization of the Normal distribution with full
+# covariance matrix to be optimized with S.G.D.
+@dataclass(init=False, unsafe_hash=True)
+class _MeanLogDiagLL(torch.nn.Module):
+    mean: torch.Tensor
+    log_diag_L: torch.Tensor
+    L_offdiag: torch.Tensor
+
+    def __init__(self, mean, log_diag_L, L_offdiag):
+        super().__init__()
+        if mean.requires_grad:
+            self.register_parameter('mean', torch.nn.Parameter(mean))
+        else:
+            self.register_buffer('mean', mean)
+
+        if log_diag_L.requires_grad:
+            self.register_parameter('log_diag_L',
+                                    torch.nn.Parameter(log_diag_L))
+        else:
+            self.register_buffer('log_diag_L', log_diag_L)
+
+        if L_offdiag.requires_grad:
+            self.register_parameter('L_offdiag',
+                                    torch.nn.Parameter(L_offdiag))
+        else:
+            self.register_buffer('L_offdiag', L_offdiag)
+
+    @property
+    def cov(self):
+        diag_L = 1e-3 + self.log_diag_L.exp()
+        L_offdiag = self.L_offdiag
+        size = len(self.mean.shape)
+        ncomps = len(self.mean) if size > 1 else 1
+        dim = self.mean.shape[-1]
+        dtype = diag_L.dtype
+        device = diag_L.device
+
+        tril_indices = torch.ones(dim, dim, dtype=torch.long,
+                                  device=device).tril(diagonal=-1).nonzero()
+        L = torch.zeros(ncomps, dim, dim, dtype=dtype, device=device)
+        L[:, range(dim), range(dim)] = diag_L
+        L[:, tril_indices[:, 0], tril_indices[:, 1]] = L_offdiag
+        cov = torch.matmul(L, L.permute(0, 2, 1))
+        return cov
+
 
 # The Affine Transform is not a generative model it but inherits from
 # "Model" as it has some Bayesian parameters.
@@ -53,7 +99,7 @@ class AffineTransform(Model):
 
     @classmethod
     def create(cls, in_dim, out_dim, prior_strength=1.):
-        log_strength = math.log(prior_strength)
+        log_strength = -math.log(prior_strength)
         # Bias prior/posterior.
         prior_bias = NormalDiagonalCovariance(
             _MeanLogDiagCov(
@@ -65,8 +111,7 @@ class AffineTransform(Model):
         posterior_bias = NormalDiagonalCovariance(
             _MeanLogDiagCov(
                 mean=torch.zeros(out_dim, requires_grad=True),
-                log_diag_cov=torch.zeros(out_dim, requires_grad=True) \
-                             + log_strength,
+                log_diag_cov=torch.zeros(out_dim, requires_grad=True),
             )
         )
 
@@ -81,8 +126,7 @@ class AffineTransform(Model):
         posterior_weights = NormalDiagonalCovariance(
             _MeanLogDiagCov(
                 mean=torch.zeros(in_dim * out_dim, requires_grad=True),
-                log_diag_cov=torch.zeros(in_dim * out_dim, requires_grad=True) \
-                             + log_strength,
+                log_diag_cov=torch.zeros(in_dim * out_dim, requires_grad=True),
             )
         )
         return cls(prior_weights, posterior_weights, prior_bias, posterior_bias)
@@ -90,8 +134,9 @@ class AffineTransform(Model):
     def __init__(self, prior_weights, posterior_weights, prior_bias,
                  posterior_bias):
         super().__init__()
-        self.weights = ConjugateBayesianParameter(prior_weights, posterior_weights)
-        self.bias = ConjugateBayesianParameter(prior_bias, posterior_bias)
+        self.weights = NonConjugateBayesianParameter(prior_weights,
+                                                     posterior_weights)
+        self.bias = NonConjugateBayesianParameter(prior_bias, posterior_bias)
 
         # Compute the input/output dimension from the priors.
         self._out_dim = self.bias.prior.dim
@@ -176,15 +221,12 @@ class SubspaceBayesianParameter(BayesianParameter):
                                          self.pdfvec[key])
 
 
-class SubspaceBayesianParameterView(SubspaceBayesianParameter):
-    '''Specific class of (non-conjugate) Bayesian parameter for which
-    the prior/posterior live in a subspace.
-    '''
+class SubspaceBayesianParameterView(BayesianParameter):
 
     def __init__(self, key, param):
-
-        BayesianParameter.__init__(self, param.stats, param.prior, param.posterior,
-                         param.likelihood_fn)
+        BayesianParameter.__init__(self, param.stats, param.prior,
+                                   param.posterior, param.likelihood_fn)
+        del self.stats
         self.key = key
         self.param = param
 
@@ -204,8 +246,17 @@ class SubspaceBayesianParameterView(SubspaceBayesianParameter):
     def pdfvec(self, value):
         self.param.pdfvec[self.key] = value
 
+    def value(self):
+        return self.likelihood_fn.parameters_from_pdfvector(self.pdfvec)
+
+    def natural_form(self):
+        self.pdfvec
+
+    def kl_div_posterior_prior(self):
+        return self.param.kl_div_posterior_prior()
+
     def __getitem__(self, key):
-        self.SubspaceBayesianParameterView(key, self.param)
+        return SubspaceBayesianParameterView(key, self.param)
 
 
 ########################################################################
@@ -214,8 +265,8 @@ class SubspaceBayesianParameterView(SubspaceBayesianParameter):
 
 # Iterate over all parameters handled by the GSM.
 def _subspace_params(model):
-    sbp_class = SubspaceBayesianParameter
-    paramfilter = lambda param: isinstance(param, sbp_class)
+    sbp_classes = (SubspaceBayesianParameter, SubspaceBayesianParameterView)
+    paramfilter = lambda param: isinstance(param, sbp_classes)
     for param in model.bayesian_parameters(paramfilter):
         yield param
 
@@ -318,8 +369,9 @@ class GSM(Model):
             params = _subspace_params(model)
             _update_params(params, model_pdfvecs)
 
-    def new_models(self, nmodels, latent_nsamples=1, params_nsamples=1):
-        latent_posteriors = self.new_latent_posteriors(nmodels)
+    def new_models(self, nmodels, cov_type='diagonal', latent_nsamples=1,
+                   params_nsamples=1):
+        latent_posteriors = self.new_latent_posteriors(nmodels, cov_type)
         models = [copy.deepcopy(self.model) for _ in range(nmodels)]
 
         # Connect the models and the latent posteriors.
@@ -337,16 +389,25 @@ class GSM(Model):
 
         return models, latent_posteriors
 
-    def new_latent_posteriors(self, nposts):
+    def new_latent_posteriors(self, nposts, cov_type='diagonal'):
         'Create a set of `nposts` latent posteriors.'
-        # Check the type/device of the model.
+        if cov_type not in ['full', 'diagonal']:
+            raise UnknownCovarianceType('f{cov_type}')
         tensor = self.affine_transform.bias.prior.params.mean
+        dim = self.affine_transform.in_dim
         dtype, device = tensor.dtype, tensor.device
         tensorconf = {'dtype': dtype, 'device': device, 'requires_grad':True}
-        init_means = torch.zeros(nposts, self.affine_transform.in_dim,
-                                 **tensorconf)
-        init_log_diag_covs = torch.zeros(nposts, self.affine_transform.in_dim,
-                                         **tensorconf)
+        init_means = torch.zeros(nposts, dim, **tensorconf)
+        init_log_diag_covs = torch.zeros(nposts, dim, **tensorconf)
+
+        if cov_type == 'full':
+            init_corrs = torch.zeros(nposts, int( .5 * dim * (dim - 1)),
+                                     **tensorconf)
+            params = _MeanLogDiagLL(init_means, init_log_diag_covs,
+                                         init_corrs)
+            return NormalFullCovariance(params)
+
+        # Diagonal covariance case.
         params = _MeanLogDiagCov(init_means, init_log_diag_covs)
         return NormalDiagonalCovariance(params)
 
@@ -354,24 +415,16 @@ class GSM(Model):
         shape = s_h.shape
         s_h = s_h.reshape(-1, s_h.shape[-1])
         stats = self.latent_prior.sufficient_statistics(s_h)
+        stats = stats.reshape(shape[0], shape[1], -1).mean(dim=1)
         llh = self.latent_prior.expected_log_likelihood(stats, **kwargs)
-        llh = llh.reshape(shape[0], shape[1]).mean(dim=-1)
-        return -llh, stats.reshape(shape[0], shape[1], stats.shape[-1]).mean(dim=1)
+        return -llh, stats.detach()
 
     def _entropy(self, s_h, latent_posteriors):
-        shape = s_h.shape
-        dim = shape[-1]
-        stats = torch.cat([s_h, -.5 * s_h ** 2], dim=-1)
-        nparams = latent_posteriors.natural_parameters()
-        diag_cov = latent_posteriors.params.diag_cov
-        mean = latent_posteriors.params.mean
-        logdets = diag_cov.log().sum(dim=-1, keepdim=True)
-        diag_prec = 1. / diag_cov
-        quad_term = (diag_prec * (mean ** 2)).sum(dim=-1, keepdim=True)
-        log_basemeasure = -.5 * (logdets + dim * math.log(2 * math.pi) + \
-                                 quad_term)
-        llh = (nparams[:, None, :] * stats).sum(dim=-1) + log_basemeasure
-        return -llh.mean(dim=-1)
+        length, nsamples, dim = s_h.shape
+        s_h = s_h.reshape(-1, s_h.shape[-1])
+        stats = latent_posteriors.sufficient_statistics(s_h)
+        stats = stats.reshape(length, nsamples, -1).mean(dim=1)
+        return - latent_posteriors(stats, pdfwise=True)
 
     def _rvecs_from_samples(self, samples, params_nsamples):
         shape = samples.shape
@@ -399,7 +452,8 @@ class GSM(Model):
     # Model interface.
 
     def mean_field_factorization(self):
-        return self.latent_prior.mean_field_factorization()
+        return [*self.latent_prior.mean_field_factorization(),
+                *self.affine_transform.mean_field_factorization()]
 
     def sufficient_statistics(self, models):
         # We keep a pointer to the model object to update the posterior

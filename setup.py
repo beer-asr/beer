@@ -24,6 +24,7 @@ setup(
         'beer.cli.subcommands.dataset',
         'beer.cli.subcommands.features',
         'beer.cli.subcommands.hmm',
+        'beer.cli.subcommands.shmm',
     ],
     scripts=['beer/cli/beer']
 )

@@ -10,6 +10,7 @@ from .isonormalgamma import *
 from .normalgamma import *
 from .normalwishart import *
 from .normaldiag import *
+from .normal import *
 
 
 
