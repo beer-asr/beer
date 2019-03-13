@@ -49,9 +49,9 @@ class VBOptimizer:
 
     def load_state_dict(self, state_dict):
         if self.cjg_optim is not None:
-            self.cjg_optim.load_state_dict(state_dict['cjg_optim']
+            self.cjg_optim.load_state_dict(state_dict['cjg_optim'])
         if self.std_optim is not None:
-            self.std_optim.load_state_dict(state_dict['std_optim']
+            self.std_optim.load_state_dict(state_dict['std_optim'])
 
     def load_state(self, path):
         with open(path, 'rb') as f:

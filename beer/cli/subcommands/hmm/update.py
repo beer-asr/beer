@@ -46,7 +46,7 @@ def main(args, logger):
     # This step is necessary once the elbo object has been stored on
     # disk.
     logger.debug('synchronizing the ELBO and the optimizer')
-    elbo.sync(optimizer)
+    elbo.sync(model)
 
     logger.debug('computing the gradient')
     elbo.backward()
