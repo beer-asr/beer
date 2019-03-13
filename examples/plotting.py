@@ -42,12 +42,7 @@ def plot_normal(fig, mean, cov, n_std_dev=2, npoints=100, **kwargs):
 
 def plot_gmm(fig, gmm, n_std_dev=2, npoints=100, alpha=1., colors=None, **kwargs):
     'Plot a Normal density'
-    try:
-        weights = gmm.weights.expected_value()
-    except Exception:
-        weights = gmm.weights
-    
-        
+    weights = gmm.weights.value().detach()
     for weight, comp in zip(weights, gmm.modelset):
 
         plot_normal(fig, comp.mean.detach().numpy(), comp.cov.detach().numpy(),

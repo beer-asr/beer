@@ -10,7 +10,6 @@ import math
 import torch
 
 from .parameters import ConjugateBayesianParameter
-from .parameters import BayesianParameterSet
 from .modelset import ModelSet
 from .normal import Normal
 from .normal import _full_cov

@@ -1,7 +1,6 @@
 import abc
 from functools import reduce
 import torch
-from .parameters import BayesianParameterSet
 
 __all__ = ['Model', 'DiscreteLatentModel', 'svectors_from_rvectors']
 
@@ -26,10 +25,10 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
 
     def bayesian_parameters(self, paramfilter=None):
         '''Return an iterator over the Bayesian parameters of the model.
-        
+
         Args:
             paramfilter (function): function that takes a Bayesian
-                parameter as argument and returns a True if the 
+                parameter as argument and returns a True if the
                 parameter should be returned by the iterator False
                 otherwise.
         '''
@@ -60,7 +59,7 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
             param.sufficient_statistics_dim
             for param in self.bayesian_parameters()
         ])
-                
+
     def accumulated_statistics(self):
         'Accumulated statistics as a vector for all Bayesian parameters.'
         acc_stats = []
@@ -77,9 +76,6 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
                 module.add_module(name, paramsmap[child])
             elif isinstance(child, Model):
                 Model._replace_params(child, paramsmap)
-            elif isinstance(child, BayesianParameterSet):
-                for name, childmodule in child.named_modules():
-                    Model._replace_params(childmodule, paramsmap)
 
     def replace_parameters(self, paramsmap):
         '''Replace the parameters of the model by new ones.
@@ -163,7 +159,7 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
 
         '''
         pass
-    
+
 
 
 class DiscreteLatentModel(Model, metaclass=abc.ABCMeta):
@@ -178,10 +174,7 @@ class DiscreteLatentModel(Model, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def posteriors(self, data, **kwargs):
-        '''Abstract method to be implemented by subclasses of
-        :any:`BayesianModelSet`.
-
-        Compute the probability of the discrete latent variable given
+        '''Compute the probability of the discrete latent variable given
         the data.
 
         Args:

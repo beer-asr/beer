@@ -1,6 +1,5 @@
 
 import torch
-from .parameters import BayesianParameterSet
 from .parameters import ConjugateBayesianParameter
 from .modelset import ModelSet
 from .mixture import Mixture

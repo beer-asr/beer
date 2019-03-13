@@ -7,7 +7,6 @@ from operator import mul
 import torch
 from .basemodel import Model
 from .parameters import BayesianParameter
-from .parameters import NonConjugateBayesianParameter
 from ..dists import NormalDiagonalCovariance
 from ..dists import NormalFullCovariance
 from .normal import UnknownCovarianceType
@@ -134,9 +133,8 @@ class AffineTransform(Model):
     def __init__(self, prior_weights, posterior_weights, prior_bias,
                  posterior_bias):
         super().__init__()
-        self.weights = NonConjugateBayesianParameter(prior_weights,
-                                                     posterior_weights)
-        self.bias = NonConjugateBayesianParameter(prior_bias, posterior_bias)
+        self.weights = BayesianParameter(prior_weights, posterior_weights)
+        self.bias = BayesianParameter(prior_bias, posterior_bias)
 
         # Compute the input/output dimension from the priors.
         self._out_dim = self.bias.prior.dim
