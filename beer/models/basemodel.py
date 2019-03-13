@@ -38,10 +38,12 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
                 otherwise.
         '''
         def _yield_params(group):
-           for param in group:
-               if paramtype is None or isinstance(param, paramtype):
-                   if paramfilter is None or paramfilter(param):
-                       yield param
+            for param in group:
+                # Note we don't consider subclasses of paramtype as a
+                # hit.
+                if paramtype is None or type(param) == paramtype:
+                    if paramfilter is None or paramfilter(param):
+                        yield param
 
         for group in self.mean_field_factorization():
             if not keepgroups:

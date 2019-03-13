@@ -24,13 +24,17 @@ def main(args, logger):
         model = pickle.load(f)
 
     logger.debug('building the optimizer')
-    optim = beer.VBConjugateOptimizer(model.mean_field_factorization(),
-                                      lrate=args.learning_rate)
+    optim = beer.VBConjugateOptimizer(
+        model.conjugate_bayesian_parameters(keepgroups=True),
+        lrate=args.learning_rate
+    )
 
     if args.optim_state and os.path.isfile(args.optim_state):
         logger.debug(f'loading optimizer state from: {args.optim_state}')
         state = torch.load(args.optim_state)
         optim.load_state_dict(state)
+
+    optim.init_step()
 
     elbo = None
     nutts = 0
@@ -56,9 +60,6 @@ def main(args, logger):
 
     logger.debug('updating the model')
     optim.step()
-
-    logger.debug('preparing the optimizer for the next step')
-    optim.init_step()
 
     logger.debug('saving the new model')
     with open(args.out_model, 'wb') as f:
