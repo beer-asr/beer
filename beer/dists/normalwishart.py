@@ -149,6 +149,8 @@ class NormalWishart(ExponentialFamily):
         'dof': 'Number degree of freedom of the Wishart pdf.',
     }
 
+    _std_params_cls = NormalWishartStdParams
+
     def __len__(self):
         paramshape = self.params.mean.shape
         return 1 if len(paramshape) <= 1 else paramshape[0]

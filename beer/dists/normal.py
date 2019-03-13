@@ -50,12 +50,12 @@ class NormalFullCovarianceStdParams(torch.nn.Module):
 
 
 class NormalFullCovariance(ExponentialFamily):
-    'Normal pdf with full covariance matrix.'
-
     _std_params_def = {
         'mean': 'Mean parameter.',
         'cov': 'Covariance matrix.',
     }
+
+    _std_params_cls = NormalFullCovarianceStdParams
 
     def __len__(self):
         paramshape = self.params.mean.shape

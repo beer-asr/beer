@@ -66,12 +66,12 @@ class NormalDiagonalCovarianceStdParams(torch.nn.Module):
 
 
 class NormalDiagonalCovariance(ExponentialFamily):
-    'Normal pdf with diagonal covariance matrix.'
-
     _std_params_def = {
         'mean': 'Mean parameter.',
         'diag_cov': 'Diagonal of the covariance matrix.',
     }
+
+    _std_params_cls = NormalDiagonalCovarianceStdParams
 
     def __len__(self):
         paramshape = self.params.mean.shape

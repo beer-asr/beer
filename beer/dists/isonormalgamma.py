@@ -40,7 +40,7 @@ class IsotropicNormalLikelihood(ConjugateLikelihood):
             precision,
             torch.sum(precision * (mean ** 2), dim=-1)[:, None],
             torch.sum(log_precision, dim=-1)[:, None]
-        ], dim=-1)        
+        ], dim=-1)
 
     @staticmethod
     def parameters_from_pdfvector(pdfvec):
@@ -85,7 +85,7 @@ class IsotropicNormalGammaStdParams(torch.nn.Module):
         rate = -np2 - .5 * scale * torch.sum(mean * mean, dim=-1, keepdim=True)
 
         if len(npsize) == 1:
-            return cls(mean.view(-1), scale.view(-1), shape.view(-1), 
+            return cls(mean.view(-1), scale.view(-1), shape.view(-1),
                        rate.view(-1))
         return cls(mean, scale.view(-1, 1), shape.view(-1, 1), rate.view(-1, 1))
 
@@ -97,6 +97,8 @@ class IsotropicNormalGamma(ExponentialFamily):
         'shape': 'Shape parameter of the Gamma (shared across dimension).',
         'rate': 'Rate parameter of the Gamma (shared across dimension).'
     }
+
+    _std_params_cls = IsotropicNormalGammaStdParams
 
     def __len__(self):
         paramshape = self.params.mean.shape
@@ -146,7 +148,7 @@ class IsotropicNormalGamma(ExponentialFamily):
         prec_quad_mean = (precision * (mean**2).sum(dim=-1, keepdim=True))
         prec_quad_mean += (dim / scale)
         logdet = (torch.digamma(shape) - torch.log(rate))
-        return torch.cat([precision * mean, precision.reshape(shape_size), 
+        return torch.cat([precision * mean, precision.reshape(shape_size),
                           prec_quad_mean, logdet.reshape(shape_size)], dim=-1)
 
     def expected_value(self):

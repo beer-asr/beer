@@ -103,8 +103,8 @@ class BayesianParameter(torch.nn.Module, metaclass=abc.ABCMeta):
         return self.stats.shape[0]
 
     def __getitem__(self, key):
-        return self.__class__(prior=self.prior.view(key),
-                              posterior=self.posterior.view(key),
+        return self.__class__(prior=self.prior[key],
+                              posterior=self.posterior[key],
                               init_stats=self.stats[key])
 
     ####################################################################
