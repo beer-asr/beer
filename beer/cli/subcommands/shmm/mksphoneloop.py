@@ -142,7 +142,7 @@ def main(args, logger):
 
     logger.debug('saving the units posterior')
     with open(args.posts, 'wb') as f:
-        pickle.dump((latent_posts, nunits, nstates), f)
+        pickle.dump((latent_posts, nunits, nstates, groupidx), f)
 
     logger.debug('saving the subspace phoneloop')
     with open(args.sploop, 'wb') as f:

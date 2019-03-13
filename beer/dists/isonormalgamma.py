@@ -44,9 +44,14 @@ class IsotropicNormalLikelihood(ConjugateLikelihood):
 
     @staticmethod
     def parameters_from_pdfvector(pdfvec):
-        precision = pdfvec[-3]
-        mean = pdfvec[:-3] / precision
-        return mean, precision
+        size = pdfvec.shape
+        if len(size) == 1:
+            pdfvec = pdfvec.view(1, -1)
+        precision = pdfvec[:, -3]
+        mean = pdfvec[:, :-3] / precision
+        if len(size) == 1:
+            return mean.view(-1), precision.view(-1)
+        return mean.view(-1, dim), precision.view(-1, dim)
 
     def __call__(self, pdfvecs, stats):
         if len(pdfvecs.shape) == 1:

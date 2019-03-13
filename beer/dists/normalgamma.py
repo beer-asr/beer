@@ -34,7 +34,7 @@ class NormalDiagonalLikelihood(ConjugateLikelihood):
         precision = pdfvec[:, dim: 2 * dim]
         mean = pdfvec[:, :dim] / precision
         if len(size) == 1:
-            return mean.view(1), precision.view(1)
+            return mean.view(-1), precision.view(-1)
         return mean.view(-1, dim), precision.view(-1, dim)
 
 

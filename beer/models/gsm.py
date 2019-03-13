@@ -214,10 +214,6 @@ class SubspaceBayesianParameter(ConjugateBayesianParameter):
 
     def __getitem__(self, key):
         return SubspaceBayesianParameterView(key, self)
-        return SubspaceBayesianParameter(self.stats[key], self.prior,
-                                         self.posterior,
-                                         self.likelihood_fn,
-                                         self.pdfvec[key])
 
 
 class SubspaceBayesianParameterView(ConjugateBayesianParameter):
@@ -265,7 +261,8 @@ class SubspaceBayesianParameterView(ConjugateBayesianParameter):
 # Iterate over all parameters handled by the GSM.
 def _subspace_params(model):
     sbp_classes = (SubspaceBayesianParameter, SubspaceBayesianParameterView)
-    for param in model.bayesian_parameters(paramtype=sbp_classes):
+    pfilter = lambda param: isinstance(param, sbp_classes)
+    for param in model.bayesian_parameters(paramfilter=pfilter):
         yield param
 
 # Iterate over the pdfvectors corresponding to the given real vectors.
