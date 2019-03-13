@@ -7,6 +7,7 @@ from operator import mul
 import torch
 from .basemodel import Model
 from .parameters import BayesianParameter
+from .parameters import ConjugateBayesianParameter
 from ..dists import NormalDiagonalCovariance
 from ..dists import NormalFullCovariance
 from .normal import UnknownCovarianceType
@@ -181,7 +182,7 @@ class AffineTransform(Model):
 # Subspace parameter.
 
 
-class SubspaceBayesianParameter(BayesianParameter):
+class SubspaceBayesianParameter(ConjugateBayesianParameter):
     '''Specific class of (non-conjugate) Bayesian parameter for which
     the prior/posterior live in a subspace.
     '''
@@ -191,11 +192,11 @@ class SubspaceBayesianParameter(BayesianParameter):
         'Build a SubspaceBayesianParameter from an existing BayesianParameter.'
         init_stats = parameter.stats.clone().detach()
         lhf = parameter.prior.conjugate()
-        return cls(init_stats, prior, likelihood_fn=lhf)
+        return cls(prior, init_stats=init_stats, likelihood_fn=lhf)
 
-    def __init__(self, init_stats, prior, posterior=None, likelihood_fn=None,
-                 pdfvec=None):
-        super().__init__(init_stats, prior, posterior, likelihood_fn)
+    def __init__(self, prior, posterior=None, init_stats=None,
+                 likelihood_fn=None, pdfvec=None):
+        super().__init__(prior, posterior, init_stats, likelihood_fn)
         pdfvec = pdfvec if pdfvec is not None else torch.zeros_like(self.stats)
         self.pdfvec = pdfvec
 
@@ -219,11 +220,11 @@ class SubspaceBayesianParameter(BayesianParameter):
                                          self.pdfvec[key])
 
 
-class SubspaceBayesianParameterView(BayesianParameter):
+class SubspaceBayesianParameterView(ConjugateBayesianParameter):
 
     def __init__(self, key, param):
-        BayesianParameter.__init__(self, param.stats, param.prior,
-                                   param.posterior, param.likelihood_fn)
+        ConjugateBayesianParameter.__init__(self, param.prior, param.posterior,
+                                            param.stats, param.likelihood_fn)
         del self.stats
         self.key = key
         self.param = param
@@ -264,8 +265,7 @@ class SubspaceBayesianParameterView(BayesianParameter):
 # Iterate over all parameters handled by the GSM.
 def _subspace_params(model):
     sbp_classes = (SubspaceBayesianParameter, SubspaceBayesianParameterView)
-    paramfilter = lambda param: isinstance(param, sbp_classes)
-    for param in model.bayesian_parameters(paramfilter):
+    for param in model.bayesian_parameters(paramtype=sbp_classes):
         yield param
 
 # Iterate over the pdfvectors corresponding to the given real vectors.
@@ -291,22 +291,6 @@ def _update_params(params, pdfvecs):
         shape = param.stats.shape
         param.pdfvec = pdfvecs[idx: idx + totdim].reshape(shape)
         idx += totdim
-
-def _pdfvecs_from_rvectors(parameters, rvecs):
-    'Map a set of real value vectors to the pdf vectors.'
-    retval = []
-    idx = 0
-    for param in parameters:
-        lhf = param.likelihood_fn
-        npdfs = len(param)
-        dim = lhf.sufficient_statistics_dim(zero_stats=False)
-        totdim = dim * npdfs
-        rvec = rvecs[:, idx: idx + totdim].reshape(-1, dim)
-        pdfvec = lhf.pdfvectors_from_rvectors(rvec)
-        pdfvec = pdfvec.reshape(len(rvecs), npdfs, -1).mean(dim=0)
-        retval.append(pdfvec.reshape(param.stats.shape))
-        idx += totdim
-    return retval
 
 
 ########################################################################

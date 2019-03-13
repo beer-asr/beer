@@ -18,8 +18,8 @@ class BayesianParameter(torch.nn.Module):
         super().__init__()
         self.prior = prior
         self.posterior = posterior
+        self.uuid = uuid.uuid4()
         self._callbacks = set()
-        self._uuid = uuid.uuid4()
 
     def __len__(self):
         return len(self.prior)
@@ -40,7 +40,7 @@ class BayesianParameter(torch.nn.Module):
         return f'{class_name}(prior={prior_name}, posterior={post_name})'
 
     def __hash__(self):
-        return hash(self._uuid)
+        return hash(self.uuid)
 
     def __eq__(self, other):
         if other.__class__ is other.__class__:
@@ -92,6 +92,10 @@ class ConjugateBayesianParameter(BayesianParameter):
         if likelihood_fn is None:
             likelihood_fn = prior.conjugate()
         self.likelihood_fn = likelihood_fn
+
+    def __len__(self):
+        if len(self.stats.shape) <= 1: return 1
+        return self.stats.shape[0]
 
     def __getitem__(self, key):
         return self.__class__(prior=self.prior[key],

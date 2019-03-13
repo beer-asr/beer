@@ -1,8 +1,9 @@
 import abc
 from functools import reduce
 import torch
+from .parameters import ConjugateBayesianParameter
 
-__all__ = ['Model', 'DiscreteLatentModel', 'svectors_from_rvectors']
+__all__ = ['Model', 'DiscreteLatentModel']
 
 
 class Model(torch.nn.Module, metaclass=abc.ABCMeta):
@@ -23,19 +24,35 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
     def clear_cache(self):
         self._cache = {}
 
-    def bayesian_parameters(self, paramfilter=None):
+    def bayesian_parameters(self, paramtype=None, paramfilter=None,
+                            keepgroups=False):
         '''Return an iterator over the Bayesian parameters of the model.
 
         Args:
+            keepgroups (boolean): If true, preserve the mean field group
+                of the model.
+            paramtype (class): Class of parameters to retrieve.
             paramfilter (function): function that takes a Bayesian
                 parameter as argument and returns a True if the
                 parameter should be returned by the iterator False
                 otherwise.
         '''
+        def _yield_params(group):
+           for param in group:
+               if paramtype is None or isinstance(param, paramtype):
+                   if paramfilter is None or paramfilter(param):
+                       yield param
+
         for group in self.mean_field_factorization():
-            for param in group:
-                if paramfilter is None or paramfilter(param):
-                    yield param
+            if not keepgroups:
+                yield from _yield_params(group)
+            else:
+                yield [param for param in _yield_params(group)]
+
+    def conjugate_bayesian_parameters(self, keepgroups=False):
+        'Convenience method to retrieve the mf groups to be trained.'
+        return self.bayesian_parameters(paramtype=ConjugateBayesianParameter,
+                                        keepgroups=keepgroups)
 
     def kl_div_posterior_prior(self):
         '''Kullback-Leibler divergence between the posterior/prior
@@ -51,14 +68,6 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
         '''
         return sum([param.kl_div_posterior_prior().sum()
                     for param in self.bayesian_parameters()])
-
-    def svector_dim(self):
-        'Dimension of the model\'s super-vector of parameters.'
-        dim = 1
-        return sum([
-            param.sufficient_statistics_dim
-            for param in self.bayesian_parameters()
-        ])
 
     def accumulated_statistics(self):
         'Accumulated statistics as a vector for all Bayesian parameters.'
@@ -187,15 +196,3 @@ class DiscreteLatentModel(Model, metaclass=abc.ABCMeta):
         '''
         pass
 
-
-def svectors_from_rvectors(model, rvecs):
-    'Map a set of real value vectors to the super-vector space.'
-    retval = []
-    idx = 0
-    for param in model.bayesian_parameters():
-        pdf = param.posterior
-        dim = pdf.conjugate_sufficient_statistics_dim
-        stats = pdf.sufficient_statistics_from_rvectors(rvecs[:, idx:idx + dim])
-        retval.append(stats)
-        idx += dim
-    return torch.cat(retval, dim=-1)
