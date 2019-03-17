@@ -43,7 +43,7 @@ class _MeanLogDiagCov(torch.nn.Module):
 
     @property
     def diag_cov(self):
-        return self.log_diag_cov.exp()
+        return 1e-4 + self.log_diag_cov.exp()
 
 
 # Parametererization of the Normal distribution with full
@@ -377,7 +377,8 @@ class GSM(Model):
         dtype, device = tensor.dtype, tensor.device
         tensorconf = {'dtype': dtype, 'device': device, 'requires_grad':True}
         init_means = torch.zeros(nposts, dim, **tensorconf)
-        init_log_diag_covs = torch.zeros(nposts, dim, **tensorconf)
+        init_log_diag_covs = torch.zeros(nposts, dim, **tensorconf) \
+                             - math.log(dim)
 
         if cov_type == 'full':
             init_corrs = torch.zeros(nposts, int( .5 * dim * (dim - 1)),
@@ -429,6 +430,10 @@ class GSM(Model):
 
     ####################################################################
     # Model interface.
+
+    def clear_cache(self):
+        super().clear_cache()
+        self.latent_prior.clear_cache()
 
     def mean_field_factorization(self):
         return [*self.latent_prior.mean_field_factorization(),

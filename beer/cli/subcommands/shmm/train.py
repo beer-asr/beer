@@ -2,6 +2,7 @@
 
 import argparse
 import copy
+import os
 import pickle
 import sys
 
@@ -51,14 +52,27 @@ def main(args, logger):
 
     logger.debug('loading the units posterior')
     with open(args.posts, 'rb') as f:
-        latent_posts, nunits, nstates, groupidx = pickle.load(f)
+        lp_data = pickle.load(f)
+        if len(lp_data) == 4:
+            latent_posts, nunits, nstates, groupidx = lp_data
+            labels = None
+        else:
+            logger.debug('using labels for training the latent prior')
+            latent_posts, nunits, nstates, groupidx, labels = lp_data
+
 
     logger.debug('loading the subspace phoneloop')
     with open(args.sploop, 'rb') as f:
         sploop = pickle.load(f)
 
-    # Move to gpu here.
-    # model = model.cuda()
+    if args.gpu:
+        gpu_idx = beer.utils.reserve_gpu(logger=logger)
+        logger.info(f'using gpu device: {gpu_idx}')
+        sploop = sploop.cuda()
+        gsm = gsm.cuda()
+        latent_posts = latent_posts.cuda()
+        if labels is not None:
+            labels = labels.cuda()
 
     logger.debug('loading the units')
     units_emissions = sploop.modelset.original_modelset.modelsets[groupidx]
@@ -72,24 +86,37 @@ def main(args, logger):
     optim = beer.VBOptimizer(cjg_optim, std_optim)
     if args.optim_state and os.path.isfile(args.optim_state):
         logger.debug(f'loading optimizer state from: {args.optim_state}')
-        state = torch.load(args.optim_state)
+        if args.gpu:
+            maplocation = 'cuda'
+        else:
+            maplocation = 'cpu'
+        state = torch.load(args.optim_state, maplocation)
         optim.load_state_dict(state)
 
+    kwargs = {
+        'latent_posts': latent_posts,
+        'latent_nsamples': args.latent_nsamples,
+        'params_nsamples': args.params_nsamples,
+    }
+    if labels is not None:
+        kwargs['labels'] = labels
     for epoch in range(1, args.epochs + 1):
         optim.init_step()
-        elbo = beer.evidence_lower_bound(gsm, units, latent_posts=latent_posts,
-                                         latent_nsamples=args.latent_nsamples,
-                                         params_nsamples=args.params_nsamples)
+        elbo = beer.evidence_lower_bound(gsm, units, **kwargs)
         elbo.backward()
         optim.step()
 
-        if epoch % args.logging_rate == 0:
+        if args.logging_rate > 0 and epoch % args.logging_rate == 0:
             logger.info(f'epoch={epoch:<20} elbo={float(elbo):<20}')
 
     logger.info(f'finished training at epoch={epoch} with elbo={float(elbo)}')
 
-    # Move the model to cpu
-    # model = model.cpu()
+    if args.gpu:
+        sploop = sploop.cpu()
+        gsm = gsm.cpu()
+        latent_posts = latent_posts.cpu()
+        if labels is not None:
+            labels = labels.cpu()
 
     logger.debug('saving the GSM')
     with open(args.out_gsm, 'wb') as f:
@@ -97,11 +124,18 @@ def main(args, logger):
 
     logger.debug('saving the units posterior')
     with open(args.out_posts, 'wb') as f:
-        pickle.dump((latent_posts, nunits, nstates, groupidx), f)
+        if labels is None:
+            pickle.dump((latent_posts, nunits, nstates, groupidx), f)
+        else:
+            pickle.dump((latent_posts, nunits, nstates, groupidx, labels), f)
 
     logger.debug('saving the subspace phoneloop')
     with open(args.out_sploop, 'wb') as f:
         pickle.dump(sploop, f)
+
+    if args.optim_state:
+        logger.debug(f'saving the optimizer state to: {args.optim_state}')
+        torch.save(optim.state_dict(), args.optim_state)
 
 
 if __name__ == "__main__":

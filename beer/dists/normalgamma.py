@@ -43,6 +43,7 @@ class NormalDiagonalLikelihood(ConjugateLikelihood):
         mean = rvecs[:, :dim]
         log_precision = rvecs[:, dim: 2 * dim]
         precision = torch.exp(log_precision)
+        log_basemeasure = self.dim * math.log(2 * math.pi)
         retval =  torch.cat([
             precision * mean,
             precision,

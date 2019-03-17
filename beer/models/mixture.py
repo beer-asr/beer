@@ -96,6 +96,7 @@ class Mixture(DiscreteLatentModel):
         else:
             resps = onehot(labels, len(self.modelset),
                             dtype=log_weights.dtype, device=log_weights.device)
+            local_kl_div = 0.
 
         # Store the responsibilites to accumulate the statistics.
         self.cache['resps'] = resps

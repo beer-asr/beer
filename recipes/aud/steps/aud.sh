@@ -102,8 +102,6 @@ if [ ! -f $outdir/final.mdl ]; then
             $outdir/epoch${epoch}|| exit 1
 
         # Update the model' parameters.
-        # Note: We don't keep track of the optimizer over time to save
-        # space.
         find $outdir/epoch${epoch} -name '*pkl' | \
             beer hmm update -o $outdir/optim_state.pth $outdir/$mdl \
                 $outdir/${epoch}.mdl || exit 1
@@ -115,14 +113,4 @@ if [ ! -f $outdir/final.mdl ]; then
 else
     echo "Model already trained. Skipping."
 fi
-
-# Generating labels.
-#if [ ! -f $outdir/trans.txt ]; then
-#    # Creating the most likely transcription.
-#    echo "generating transcription for the $dataset dataset..."
-#    beer hmm decode --per-frame $outdir/final.mdl \
-#        $dataset > $outdir/trans.txt || exit 1
-#else
-#    echo "transcription already generated. Skipping."
-#fi
 
