@@ -25,8 +25,9 @@ class VBConjugateOptimizer:
                 param.zero_stats()
 
     def step(self):
-        for parameter in self.groups[self.update_count % len(self.groups)]:
-            parameter.natural_grad_update(self.lrate)
+        if len(self.groups) > 0:
+            for parameter in self.groups[self.update_count % len(self.groups)]:
+                parameter.natural_grad_update(self.lrate)
         self.update_count += 1
 
 
