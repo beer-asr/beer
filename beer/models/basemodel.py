@@ -23,6 +23,9 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
 
     def clear_cache(self):
         self._cache = {}
+        for module in self.modules():
+            if module is not self and isinstance(module, Model):
+                module.clear_cache()
 
     def bayesian_parameters(self, paramtype=None, paramfilter=None,
                             keepgroups=False):
@@ -49,7 +52,9 @@ class Model(torch.nn.Module, metaclass=abc.ABCMeta):
             if not keepgroups:
                 yield from _yield_params(group)
             else:
-                yield [param for param in _yield_params(group)]
+                group = [param for param in _yield_params(group)]
+                if len(group) > 0:
+                    yield group
 
     def conjugate_bayesian_parameters(self, keepgroups=False):
         'Convenience method to retrieve the mf groups to be trained.'
