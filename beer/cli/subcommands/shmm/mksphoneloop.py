@@ -50,13 +50,14 @@ def init_means_precisions_stats(means_precisions, weights):
 
 def setup(parser):
     parser.add_argument('-c', '--classes',
-                        help='assign a class for each unit by usign a ' \
-                             'GMM as latent prior')
+                        help='assign a broad class to each unit')
     parser.add_argument('-g', '--unit-group', default='speech-unit',
                        help='group of unit to model with the subspace ' \
                             '(default:"speech-unit")')
     parser.add_argument('-l', '--latent-dim', default=2, type=int,
                         help='dimension of the latent space (default:2)')
+    parser.add_argument('-d', '--dlatent-dim', default=2, type=int,
+                        help='dimension of the discriminant latent space (default:2)')
     parser.add_argument('conf', help='configuration file use to create ' \
                                      'the phone-loop')
     parser.add_argument('phoneloop', help='phone-loop to initialize the ' \
@@ -117,8 +118,9 @@ def main(args, logger):
                 unit, uclass = line.strip().split()
                 unit2class[unit] = uclass
                 class2unit[uclass] = unit
-        class2idx = {uclass: i for i, uclass in enumerate(class2unit)}
-        nclasses = len(class2unit)
+        classnames = [classname for classname in class2unit]
+        class2idx = {uclass: i for i, uclass in enumerate(sorted(classnames))}
+        nclasses = len(classnames)
         labels = torch.zeros(nunits).long()
         unit_idx = 0
         for unit in ploop.start_pdf:
@@ -128,17 +130,9 @@ def main(args, logger):
 
 
     logger.debug('create the latent normal prior')
-    if labels is not None:
-        mset = beer.NormalSet.create(torch.zeros(args.latent_dim),
-                                     torch.ones(args.latent_dim),
-                                     noise_std=1.0,
-                                     size=nclasses,
-                                     cov_type='full')
-        latent_prior = beer.Mixture.create(mset)
-    else:
-        latent_prior = beer.Normal.create(torch.zeros(args.latent_dim),
-                                          torch.ones(args.latent_dim),
-                                          cov_type = 'full')
+    latent_prior = beer.Normal.create(torch.zeros(args.latent_dim),
+                                      torch.ones(args.latent_dim),
+                                      cov_type = 'full')
 
     logger.debug('setting the parameters to be handled by the subspace')
     newparams = {
@@ -153,20 +147,28 @@ def main(args, logger):
         means_precisions.stats = init_means_precisions_stats(means_precisions,
                                                              weights)
 
-
     logger.debug('creating the units model')
     units = [unit for unit in iterate_units(units_emissions, nunits, nstates)]
 
     logger.debug('creating the GSM')
     tpl = copy.deepcopy(units[0])
-    gsm = beer.GSM.create(tpl, args.latent_dim, latent_prior)
+    if labels is None:
+        gsm = beer.GSM.create(tpl, args.latent_dim, latent_prior)
+        latent_posts = gsm.new_latent_posteriors(len(units))
+        pdfvecs = gsm.expected_pdfvecs(latent_posts)
+        gsm.update_models(units, pdfvecs)
+    else:
+        dlatent_prior = beer.Normal.create(torch.zeros(args.dlatent_dim),
+                                           torch.ones(args.dlatent_dim),
+                                           cov_type = 'full')
 
-    logger.debug('creating the units posterior')
-    latent_posts = gsm.new_latent_posteriors(len(units))
-
-    logger.debug('initializing the subspace models')
-    pdfvecs = gsm.expected_pdfvecs(latent_posts)
-    gsm.update_models(units, pdfvecs)
+        gsmset = beer.GSMSet.create(tpl, nclasses, args.latent_dim,
+                                    args.dlatent_dim, latent_prior,
+                                    dlatent_prior)
+        latent_posts = gsmset.new_latent_posteriors(len(units))
+        pdfvecs = gsmset.expected_pdfvecs(latent_posts)
+        gsmset.update_models(units, pdfvecs)
+        gsm = beer.Mixture.create(gsmset)
 
     logger.debug('saving the GSM')
     with open(args.gsm, 'wb') as f:

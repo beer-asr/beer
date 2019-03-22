@@ -19,7 +19,7 @@ dataset=train
 feaname=mbn_babel
 
 # Model
-latent_dim=2
+latent_dim=5
 
 # Training
 epochs=30
@@ -85,5 +85,5 @@ steps/subspace_monophone.sh \
     $expdir/$db/monophone_${feaname} \
     data/$db/$dataset \
     $expdir/$db/datasets/$feaname/${dataset}.pkl \
-    $epochs $expdir/$db/subspace_monophone_${feaname}_gmm_ldim${latent_dim}
+    $epochs $expdir/$db/dsubspace_monophone_${feaname}_ldim${latent_dim}
 

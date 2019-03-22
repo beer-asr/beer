@@ -101,7 +101,7 @@ if [ ! -f $outdir/0.mdl ]; then
     utils/parallel/submit_single.sh \
         "$parallel_env" \
         "gsm-pretraining" \
-        "-l gpu=1,mem_free=1G" \
+        "-l gpu=1,gpu_ram=2G" \
         "$cmd" \
         $outdir/pretraining || exit 1
 
@@ -175,7 +175,7 @@ if [ ! -f $outdir/final.mdl ]; then
         utils/parallel/submit_single.sh \
             "$parallel_env" \
             "gsm-training" \
-            "-l gpu=1,mem_free=1G" \
+            "-l gpu=1,gpu_ram=2G" \
             "$cmd" \
             $outdir/epoch${epoch} || exit 1
 

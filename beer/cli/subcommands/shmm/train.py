@@ -46,6 +46,9 @@ def setup(parser):
 
 
 def main(args, logger):
+    if args.gpu:
+        gpu_idx = beer.utils.reserve_gpu(logger=logger)
+
     logger.debug('loading the GSM')
     with open(args.gsm, 'rb') as f:
         gsm = pickle.load(f)
@@ -66,7 +69,6 @@ def main(args, logger):
         sploop = pickle.load(f)
 
     if args.gpu:
-        gpu_idx = beer.utils.reserve_gpu(logger=logger)
         logger.info(f'using gpu device: {gpu_idx}')
         sploop = sploop.cuda()
         gsm = gsm.cuda()

@@ -14,7 +14,7 @@ from ..dists import NormalFullCovariance
 from .normal import UnknownCovarianceType
 
 
-__all__ = ['GSM', 'SubspaceBayesianParameter']
+__all__ = ['GSM', 'GSMSet', 'SubspaceBayesianParameter']
 
 
 ########################################################################
@@ -157,7 +157,7 @@ class AffineTransform(Model):
         res = torch.matmul(X[None], s_W) + s_b[:, None, :]
 
         # For coherence with other components we reorganize the 3d
-        # tensor to have:
+        # tensor to have:pplication to Other Languages
         #   - 1st dimension: number of input data points (i.e. len(X))
         #   - 2nd dimension: number samples to estimate the expectation
         #   - 3rd dimension: dimension of the latent space.
@@ -199,14 +199,14 @@ class LinearTransform(Model):
                 log_diag_cov=torch.zeros(in_dim * out_dim, requires_grad=True),
             )
         )
-        return cls(prior_weights, posterior_weights)
+        return cls(prior_weights, posterior_weights, out_dim)
 
-    def __init__(self, prior_weights, posterior_weights):
+    def __init__(self, prior_weights, posterior_weights, out_dim):
         super().__init__()
         self.weights = BayesianParameter(prior_weights, posterior_weights)
 
         # Compute the input/output dimension from the priors.
-        self._out_dim = self.bias.prior.dim
+        self._out_dim = out_dim
         self._in_dim = self.weights.prior.dim // self._out_dim
 
     @property
@@ -378,7 +378,7 @@ def _xentropy(s_h, model, **kwargs):
     stats = model.sufficient_statistics(s_h)
     stats = stats.reshape(shape[0], shape[1], -1).mean(dim=1)
     llh = model.expected_log_likelihood(stats, **kwargs)
-    return -llh, stats.detach()
+    return -llh.reshape(-1), stats.detach()
 
 # Approximate entropy given samples and a (set of) distributions.
 def _entropy(s_h, dists):
@@ -493,8 +493,11 @@ class GSM(Model):
     def expected_pdfvecs(self, latent_posteriors, latent_nsamples=1,
                          params_nsamples=1):
         s_h = latent_posteriors.sample(latent_nsamples)
-        rvecs = _rvecs_from_samples(s_h, params_nsamples)
+        rvecs = _rvecs_from_samples(s_h, self.transform, params_nsamples)
         return _pdfvecs_from_rvecs(rvecs, self.model).mean(dim=1)
+
+    def update_models(self, models, pdfvecs):
+        return _update_models(models, pdfvecs)
 
     ####################################################################
     # Model interface.
@@ -542,20 +545,34 @@ class GSM(Model):
         return self.latent_prior.accumulate(self.cache['lp_stats'])
 
 
-class GSMSet(GSM, ModelSet):
+class GSMSetMeansParameter(BayesianParameter):
+
+    def __init__(self, prior, posterior):
+        super().__init__(prior, posterior)
+        tensor = posterior.sample(1)
+        dtype, device = tensor.dtype, tensor.device
+        val = torch.tensor(0., dtype=dtype, device=device)
+        self.register_buffer('kl_div', val)
+
+    def kl_div_posterior_prior(self):
+       return self.kl_div
+
+
+class GSMSet(ModelSet):
     '''Model set that share a  Generalized Subspace Model and has a
     model specific subspace. It is analogous to a PLDA model in the
     parameter space of the standard Model.
 
     '''
     @classmethod
-    def create(cls, model, latent_dim, dlatent_dim, latent_prior,
+    def create(cls, model, size, latent_dim, dlatent_dim, latent_prior,
                dlatent_prior, prior_strength=1.):
         '''Create a new GSM.
 
         Args:
             model (`Model`): Model to integrate with the GSM. The model
                 has to have at least one `SubspaceBayesianParameter`.
+            size (int): Size of the set.
             latent_dim (int): Dimension of the latent space.
             mean_latent_dim (int): Dimenion of the discriminant latent
                 space.
@@ -576,111 +593,55 @@ class GSMSet(GSM, ModelSet):
                 'The model has to have at least one SubspaceBayesianParameter.')
         trans = AffineTransform.create(latent_dim, svec_dim,
                                        prior_strength=prior_strength)
-        disc_trans = LinearTransform.craete(dlatent_dim, svec_dim,
+        disc_trans = LinearTransform.create(dlatent_dim, svec_dim,
                                             prior_strength=prior_strength)
-        return cls(model, trans, disc_trans, latent_prior, dlatent_prior)
 
-    def __init__(self, model, transform, disc_transofrm, latent_prior,
-                 dlatent_prior):
+        # Create the class mean posteriors.
+        dim = disc_trans.in_dim
+        tensor = disc_trans.weights.prior.params.mean
+        dtype, device = tensor.dtype, tensor.device
+        tensorconf = {'dtype': dtype, 'device': device, 'requires_grad':True}
+        means = torch.zeros(size, dim, **tensorconf)
+        log_diag_covs = torch.zeros(size, dim, **tensorconf) - math.log(dim)
+        params = _MeanLogDiagCov(means, log_diag_covs)
+        means = GSMSetMeansParameter(dlatent_prior,
+                                     NormalDiagonalCovariance(params))
+
+        return cls(model, trans, disc_trans, means, latent_prior)
+
+    def __init__(self, model, transform, disc_transform, means, latent_prior):
         super().__init__()
         self.model = model
         self.transform = transform
-        self.disc_tranform = disc_transform
+        self.means = means
+        self.disc_transform = disc_transform
         self.latent_prior = latent_prior
-        self.dlatent_prior = dlatent_prior
-
-
-    def update_models(self, models, pdfvecs):
-        for model, model_pdfvecs in zip(models, pdfvecs):
-            params = _subspace_params(model)
-            _update_params(params, model_pdfvecs)
 
     def new_models(self, nmodels, cov_type='diagonal', latent_nsamples=1,
                    params_nsamples=1):
-        latent_posteriors = self.new_latent_posteriors(nmodels, cov_type)
-        models = [copy.deepcopy(self.model) for _ in range(nmodels)]
-
-        # Connect the models and the latent posteriors.
-        for model in models:
-            params = _subspace_params(model)
-            for param in params:
-                param.posterior = latent_posteriors
-                param.pdfvecs = torch.zeros_like(param.stats)
-
-        # Initialize the newly created models.
-        samples = latent_posteriors.sample(latent_nsamples)
-        rvecs = self._rvecs_from_samples(samples, params_nsamples)
-        pdfvecs = self._pdfvecs_from_rvecs(rvecs).mean(dim=1)
-        self.update_models(models, pdfvecs)
-
-        return models, latent_posteriors
+        return GSM.new_models(self, nmodels, cov_type, latent_nsamples,
+                              params_nsamples)
 
     def new_latent_posteriors(self, nposts, cov_type='diagonal'):
-        'Create a set of `nposts` latent posteriors.'
-        if cov_type not in ['full', 'diagonal']:
-            raise UnknownCovarianceType('f{cov_type}')
-        tensor = self.transform.bias.prior.params.mean
-        dim = self.transform.in_dim
-        dtype, device = tensor.dtype, tensor.device
-        tensorconf = {'dtype': dtype, 'device': device, 'requires_grad':True}
-        init_means = torch.zeros(nposts, dim, **tensorconf)
-        init_log_diag_covs = torch.zeros(nposts, dim, **tensorconf) \
-                             - math.log(dim)
-
-        if cov_type == 'full':
-            init_corrs = torch.zeros(nposts, int( .5 * dim * (dim - 1)),
-                                     **tensorconf)
-            params = _MeanLogDiagLL(init_means, init_log_diag_covs,
-                                         init_corrs)
-            return NormalFullCovariance(params)
-
-        # Diagonal covariance case.
-        params = _MeanLogDiagCov(init_means, init_log_diag_covs)
-        return NormalDiagonalCovariance(params)
-
-    def _xentropy(self, s_h, **kwargs):
-        shape = s_h.shape
-        s_h = s_h.reshape(-1, s_h.shape[-1])
-        stats = self.latent_prior.sufficient_statistics(s_h)
-        stats = stats.reshape(shape[0], shape[1], -1).mean(dim=1)
-        llh = self.latent_prior.expected_log_likelihood(stats, **kwargs)
-        return -llh, stats.detach()
-
-    def _entropy(self, s_h, latent_posteriors):
-        length, nsamples, dim = s_h.shape
-        s_h = s_h.reshape(-1, s_h.shape[-1])
-        stats = latent_posteriors.sufficient_statistics(s_h)
-        stats = stats.reshape(length, nsamples, -1).mean(dim=1)
-        return - latent_posteriors(stats, pdfwise=True)
-
-    def _rvecs_from_samples(self, samples, params_nsamples):
-        shape = samples.shape
-        samples = samples.reshape(-1, shape[-1])
-        rvecs = self.transform(samples, params_nsamples)
-        return rvecs.reshape(shape[0], -1, rvecs.shape[-1])
-
-    # Return the pdf-vectors NxSxQ corresponding to the real
-    # vectors NxSxD.
-    def _pdfvecs_from_rvecs(self, rvecs):
-        shape = rvecs.shape
-        rvecs = rvecs.reshape(-1, rvecs.shape[-1])
-        params = _subspace_params(self.model)
-        list_pdfvecs = [pdfvecs for pdfvecs in _pdfvecs(params, rvecs)]
-        pdfvecs = torch.cat(list_pdfvecs, dim=-1)
-        return pdfvecs.reshape(shape[0], -1, pdfvecs.shape[-1])
+        return GSM.new_latent_posteriors(self, nposts, cov_type)
 
     def expected_pdfvecs(self, latent_posteriors, latent_nsamples=1,
                          params_nsamples=1):
-        s_h = latent_posteriors.sample(latent_nsamples)
-        rvecs = self._rvecs_from_samples(s_h, params_nsamples)
-        return self._pdfvecs_from_rvecs(rvecs).mean(dim=1)
+        return GSM.expected_pdfvecs(self, latent_posteriors, latent_nsamples,
+                                    params_nsamples)
+
+    def update_models(self, models, pdfvecs):
+        return _update_models(models, pdfvecs)
 
     ####################################################################
     # Model interface.
 
     def mean_field_factorization(self):
         return [*self.latent_prior.mean_field_factorization(),
-                *self.transform.mean_field_factorization()]
+                [self.means],
+                *self.means.prior.mean_field_factorization(),
+                *self.transform.mean_field_factorization(),
+                *self.disc_transform.mean_field_factorization()]
 
     def sufficient_statistics(self, models):
         # We keep a pointer to the model object to update the posterior
@@ -699,27 +660,57 @@ class GSMSet(GSM, ModelSet):
                                 **kwargs):
         nsamples = latent_nsamples * params_nsamples
         s_h = latent_posts.sample(latent_nsamples)
+        s_means = self.means.posterior.sample(latent_nsamples)
 
         # Local KL divergence posterior/prior
         # D(q || p) = H[q, p] - H[q]
         # where H[q, p] is the cross-entropy and H[q] is the entropy.
-        xent, self.cache['lp_stats'] = self._xentropy(s_h, **kwargs)
-        ent = self._entropy(s_h, latent_posts)
+        # 1) within class subspace kl div..
+        xent, self.cache['lp_stats'] = _xentropy(s_h, self.latent_prior,
+                                                 **kwargs)
+        ent = _entropy(s_h, latent_posts)
         local_kl_div = xent - ent
 
+        # 2) across class subspace kl div.
+        dxent, self.cache['dlp_stats'] = _xentropy(s_means, self.means.prior,
+                                                   **kwargs)
+        dent = _entropy(s_means, self.means.posterior)
+        dlocal_kl_div = (dxent - dent).sum()
+        self.means.kl_div = dlocal_kl_div
+
         # Compute the expected log-likelihood.
-        rvecs = self._rvecs_from_samples(s_h, params_nsamples)
-        pdfvecs = self._pdfvecs_from_rvecs(rvecs).mean(dim=1)
+        rvecs = _rvecs_from_samples(s_h, self.transform, params_nsamples)
+        means_rvecs = _rvecs_from_samples(s_means, self.disc_transform,
+                                          params_nsamples)
+        frvecs = rvecs[None, :, :] + means_rvecs[:, None, :, :]
+        frvecs = frvecs.reshape(-1, *frvecs.shape[2:])
+        pdfvecs = _pdfvecs_from_rvecs(frvecs, self.model).mean(dim=1)
+        pdfvecs = pdfvecs.reshape(len(self), len(latent_posts), -1)
         llh = (pdfvecs * stats).sum(dim=-1)
 
-        # Update the models' expected value of their parameters if
-        # requrested.
-        if update_models:
-            self.update_models(self.cache['models'], pdfvecs)
+        if update_models: self.cache['pdfvecs'] = pdfvecs.detach()
 
-        return llh - local_kl_div
+        return (llh - local_kl_div).t()
 
-    def accumulate(self, stats):
-        return self.latent_prior.accumulate(self.cache['lp_stats'])
+    def accumulate(self, stats, resps):
+        try:
+            pdfvecs = self.cache['pdfvecs']
+            pdfvecs = (resps.t()[:, :, None] * pdfvecs).sum(dim=0)
+            _update_models(self.cache['models'], pdfvecs)
+        except KeyError:
+            pass
+        return {
+            **self.means.prior.accumulate(self.cache['dlp_stats']),
+            **self.latent_prior.accumulate(self.cache['lp_stats'])
+        }
+
+    ####################################################################
+    # ModelSet interface.
+
+    def __getitem__(self, key):
+        pass
+
+    def __len__(self):
+        return len(self.means.posterior)
 
 
