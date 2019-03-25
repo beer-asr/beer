@@ -7,10 +7,13 @@ from itertools import groupby
 import pickle
 import sys
 
+import numpy as np
 import beer
 
 
 def setup(parser):
+    parser.add_argument('-a', '--alis', help='alignment graphs in a "npz" '
+                                             'archive')
     parser.add_argument('--per-frame', action='store_true',
                         help='output the per-frame transcription')
     parser.add_argument('-s', '--acoustic-scale', default=1., type=float,
@@ -45,6 +48,11 @@ def main(args, logger):
     with open(args.dataset, 'rb') as f:
         dataset = pickle.load(f)
 
+    alis = None
+    if args.alis:
+        logger.debug('loading alignment graphs')
+        alis = np.load(args.alis)
+
     if args.utts:
         if args.utts == '-':
             utts = [line.strip().split()[0] for line in sys.stdin.readlines()]
@@ -57,10 +65,19 @@ def main(args, logger):
     count = 0
     for uttname in utts:
         utt = dataset[uttname]
+
+        aligraph = None
+        if alis:
+            try:
+                aligraph = alis[utt.id][0]
+            except KeyError:
+                logger.warning(f'no alignment graph for utterance "{utt.id}"')
+
         logger.debug(f'processing utterance: {utt.id}')
         path_ids = [
             int(unit)
-            for unit in model.decode(utt.features, scale=args.acoustic_scale)
+            for unit in model.decode(utt.features, inference_graph=aligraph,
+                                     scale=args.acoustic_scale)
         ]
         phones = state2phone(path_ids, model.start_pdf, args.per_frame)
         print(utt.id, ' '.join(phones))
