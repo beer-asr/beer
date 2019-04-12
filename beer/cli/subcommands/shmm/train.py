@@ -19,24 +19,26 @@ def iterate_units(modelset, nunits, nstates):
 
 
 def setup(parser):
-    parser.add_argument('-e', '--epochs', default=1, type=int,
-                       help='number of training epochs (default: 1)')
     parser.add_argument('-c', '--learning-rate-cjg', default=1., type=float,
                         help='learning rate for the conjugate parameters '\
                              '(default: 1.)')
-    parser.add_argument('-s', '--learning-rate-std', default=1e-1, type=float,
-                        help='learning rate for the standard parameters '\
-                             '(default: 1e-1)')
-    parser.add_argument('-o', '--optim-state', help='optimizer state')
-    parser.add_argument('-n', '--latent-nsamples', type=int, default=1,
-                        help='number of samples for the latent posterior ' \
-                             '(default: 1)')
+    parser.add_argument('-e', '--epochs', default=1, type=int,
+                       help='number of training epochs (default: 1)')
+    parser.add_argument('--gpu', action='store_true', help='use a GPU')
     parser.add_argument('-k', '--params-nsamples', type=int, default=1,
                         help='number of samples for the parameters posterior ' \
                              '(default: 1)')
-    parser.add_argument('--gpu', action='store_true', help='use a GPU')
-    parser.add_argument('-r', '--logging_rate', type=int, default=100,
-                        help='logging rate of the ELBO (default: 100)')
+    parser.add_argument('-n', '--latent-nsamples', type=int, default=1,
+                        help='number of samples for the latent posterior ' \
+                             '(default: 1)')
+    parser.add_argument('-o', '--optim-state', help='optimizer state')
+    parser.add_argument('-p', '--posteriors', action='store_true',
+                        help='train the latent posteriors only')
+    parser.add_argument('-r', '--logging_rate', type=int, default=1000,
+                        help='logging rate of the ELBO (default: 1000)')
+    parser.add_argument('-s', '--learning-rate-std', default=1e-1, type=float,
+                        help='learning rate for the standard parameters '\
+                             '(default: 1e-1)')
     parser.add_argument('gsm', help='input gsm')
     parser.add_argument('posts', help='input latent posteriors')
     parser.add_argument('sploop', help='input subspace phone-loop')
@@ -81,9 +83,15 @@ def main(args, logger):
     units = [unit for unit in iterate_units(units_emissions, nunits, nstates)]
 
     logger.debug('building the optimizer')
-    params = gsm.conjugate_bayesian_parameters(keepgroups=True)
+    if args.posteriors:
+        params = [[]]
+    else:
+        params = gsm.conjugate_bayesian_parameters(keepgroups=True)
     cjg_optim = beer.VBConjugateOptimizer(params, lrate=args.learning_rate_cjg)
-    params = list(latent_posts.parameters()) + list(gsm.parameters())
+    if args.posteriors:
+        params = list(latent_posts.parameters())
+    else:
+        params = list(latent_posts.parameters()) + list(gsm.parameters())
     std_optim = torch.optim.Adam(params, lr=args.learning_rate_std)
     optim = beer.VBOptimizer(cjg_optim, std_optim)
     if args.optim_state and os.path.isfile(args.optim_state):

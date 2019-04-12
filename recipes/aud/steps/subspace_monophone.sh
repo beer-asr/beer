@@ -91,7 +91,6 @@ if [ ! -f $outdir/0.mdl ]; then
         -o $outdir/gsm_optim_state.pth \
         --learning-rate-std $gsm_std_lrate \
         --epochs $gsm_init_epochs \
-        --logging_rate 10 \
         --latent-nsamples $gsm_latent_nsamples \
         --params-nsamples $gsm_params_nsamples \
         $outdir/gsm_init.mdl $outdir/units_posts_init.pkl \
@@ -165,7 +164,6 @@ if [ ! -f $outdir/final.mdl ]; then
             -o $outdir/gsm_optim_state.pth \
             --epochs $train_epochs \
             --learning-rate-std $gsm_std_lrate \
-            --logging_rate 10 \
             --latent-nsamples $gsm_latent_nsamples \
             --params-nsamples $gsm_params_nsamples \
             $gsm $posts $outdir/tmp.mdl \

@@ -3,6 +3,7 @@
 . path.sh
 
 acoustic_scale=1.
+per_frame=""
 parallel_env=sge
 parallel_opts=""
 parallel_njobs=4
@@ -13,6 +14,10 @@ while [[ $# -gt $nargs ]]; do
       --acoustic-scale)
       acoustic_scale=$2
       shift
+      shift
+      ;;
+      --per-frame)
+      per_frame="--per-frame"
       shift
       ;;
       --parallel-env)
@@ -43,6 +48,7 @@ if [ $# -ne $nargs ]; then
     echo ""
     echo "Options:"
     echo "  --acoustic-scale    acoustic model scaling factor (default: 1)"
+    echo "  --per-frame         output per frame label (default: false)"
     echo "  --parallel-env      parallel environment to use (default:sge)"
     echo "  --parallel-opts     options to pass to the parallel environment"
     echo "  --parallel-njobs    number of parallel jobs to use"
@@ -59,7 +65,7 @@ mkdir -p $outdir
 if [ ! -f $outdir/trans ]; then
     echo "decoding $dataset dataset..."
 
-    cmd="beer hmm decode -s $acoustic_scale --utts - \
+    cmd="beer hmm decode $per_frame -s $acoustic_scale --utts - \
          $model $dataset >$outdir/trans_JOBID"
     utils/parallel/submit_parallel.sh \
         "$parallel_env" \

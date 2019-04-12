@@ -10,6 +10,9 @@ import numpy as np
 import beer
 
 
+EPS = 1e-5
+
+
 def setup(parser):
     parser.add_argument('-S', '--state', action='store_true',
                         help='state level posteriors')
@@ -52,12 +55,18 @@ def main(args, logger):
 
     count = 0
     for uttname in utts:
-        utt = dataset[uttname]
+        try:
+            utt = dataset[uttname]
+        except KeyError as err:
+            logger.warning(f'no data for utterance {uttname}')
+            continue
         logger.debug(f'processing utterance: {utt.id}')
         posts = model.posteriors(utt.features, scale=args.acoustic_scale)
         posts = posts.detach().numpy()
         if not args.state:
             posts = state2phone(posts, model.start_pdf, model.end_pdf)
+        if args.log:
+            posts = np.log(EPS + posts)
         path = os.path.join(args.outdir, f'{uttname}.npy')
         np.save(path, posts)
         count += 1

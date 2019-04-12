@@ -12,15 +12,16 @@ feadir=features
 expdir=exp
 
 # Data
-db=timit
-dataset=train
+db=timitfull
+dataset=all
 
 # Features
-feaname=mbn_babel
+feaname=mfcc
 
 # AUD
+ngauss=4        # Number of Gaussian per state.
 nunits=100      # maximum number of discovered units
-epochs=10       # number of training epochs
+epochs=30       # number of training epochs
 
 #######################################################################
 
@@ -32,8 +33,8 @@ epochs=10       # number of training epochs
 mkdir -p $datadir $expdir $feadir
 
 
-echo "--> Preparing data for the $db database"
-local/$db/prepare_data.sh $datadir/$db
+#echo "--> Preparing data for the $db database"
+#local/$db/prepare_data.sh $datadir/$db
 
 echo "--> Preparing pseudo-phones \"language\" information"
 mkdir -p data/$db/lang_aud
@@ -69,9 +70,9 @@ steps/create_dataset.sh $datadir/$db/$dataset \
 steps/aud.sh \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
-    conf/hmm.yml \
+    conf/hmm_${ngauss}g.yml \
     data/$db/lang_aud \
     data/$db/$dataset/uttids \
     $expdir/$db/datasets/$feaname/${dataset}.pkl \
-    $epochs $expdir/$db/aud
+    $epochs $expdir/$db/aud_${feaname}_${ngauss}g
 

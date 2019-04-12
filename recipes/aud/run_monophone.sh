@@ -19,7 +19,7 @@ dataset=train
 feaname=mbn_babel
 
 # Model
-latent_dim=5
+latent_dim=45
 
 # Training
 epochs=30
@@ -74,6 +74,23 @@ steps/subspace_monophone.sh \
     $expdir/$db/datasets/$feaname/${dataset}.pkl \
     $epochs $expdir/$db/subspace_monophone_${feaname}_ldim${latent_dim}
 
+olddb=$db
+db=timit
+echo "--> Training the subspace Bayesian AUD system"
+steps/subspace_aud.sh \
+    --parallel-opts "-l mem_free=1G,ram_free=1G" \
+    --parallel-njobs 30 \
+    --latent-dim $latent_dim \
+    conf/hmm.yml \
+    $expdir/$olddb/subspace_monophone_${feaname}_ldim${latent_dim}/gsm_30.mdl \
+    $expdir/$db/aud \
+    data/$db/$dataset \
+    $expdir/$db/datasets/$feaname/${dataset}.pkl \
+    $epochs $expdir/$db/subspace_aud_${feaname}_ldim${latent_dim}_pdata${olddb}
+
+
+
+exit 0
 
 # Subspace HMM monophone training.
 steps/subspace_monophone.sh \
