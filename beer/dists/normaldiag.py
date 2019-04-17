@@ -66,12 +66,12 @@ class NormalDiagonalCovarianceStdParams(torch.nn.Module):
 
 
 class NormalDiagonalCovariance(ExponentialFamily):
-    'Normal pdf with diagonal covariance matrix.'
-
     _std_params_def = {
         'mean': 'Mean parameter.',
         'diag_cov': 'Diagonal of the covariance matrix.',
     }
+
+    _std_params_cls = NormalDiagonalCovarianceStdParams
 
     def __len__(self):
         paramshape = self.params.mean.shape
@@ -95,7 +95,7 @@ class NormalDiagonalCovariance(ExponentialFamily):
             nparams = nparams.view(1, -1)
         logdets = diag_cov.log().sum(dim=-1, keepdim=True)
         mSm = ((1. / diag_cov) * (mean**2)).sum(dim=-1, keepdim=True)
-        lnorm = .5 * (logdets + mSm)
+        lnorm = .5 * (logdets + mSm).reshape(-1)
         log_basemeasure = -.5 * self.dim * math.log(2 * math.pi)
 
         if pdfwise:

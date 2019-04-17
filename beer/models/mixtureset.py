@@ -1,10 +1,9 @@
 
 import torch
-from .parameters import BayesianParameterSet
 from .parameters import ConjugateBayesianParameter
 from .modelset import ModelSet
 from .mixture import Mixture
-from ..dists import Dirichlet, DirichletStdParams
+from ..dists import Dirichlet
 from ..utils import logsumexp
 
 __all__ = ['MixtureSet']
@@ -14,11 +13,9 @@ __all__ = ['MixtureSet']
 # Helper to build the default parameters.
 
 def _default_param(weights, prior_strength):
-    params = DirichletStdParams(prior_strength * weights)
-    prior_weights = Dirichlet(params)
-    params = DirichletStdParams(prior_strength * weights)
-    posterior_weights = Dirichlet(params)
-    return ConjugateBayesianParameter(prior_weights, posterior_weights)
+    prior = Dirichlet.from_std_parameters(prior_strength * weights)
+    posterior = Dirichlet.from_std_parameters(prior_strength * weights)
+    return ConjugateBayesianParameter(prior, posterior)
 
 ########################################################################
 
@@ -51,7 +48,7 @@ class MixtureSet(ModelSet):
 
         n_comp_per_mixture = len(modelset) // size
         if weights is None:
-            weights = torch.ones(size, n_comp_per_mixture, dtype=dtype, 
+            weights = torch.ones(size, n_comp_per_mixture, dtype=dtype,
                                  device=device)
             weights *= 1. / n_comp_per_mixture
         weights_param = _default_param(weights, prior_strength)
@@ -66,12 +63,12 @@ class MixtureSet(ModelSet):
     def n_comp_per_mixture(self):
         'Number of components per mixture'
         return len(self.modelset) // len(self)
-    
+
     # Log probability of each components.
     def _log_weights(self):
         lhf = self.weights.likelihood_fn
         nparams = self.weights.natural_form()
-        data = torch.eye(self.n_comp_per_mixture, dtype=nparams.dtype, 
+        data = torch.eye(self.n_comp_per_mixture, dtype=nparams.dtype,
                         device=nparams.device, requires_grad=False)
         stats = lhf.sufficient_statistics(data)
         return lhf(nparams, stats).t()
@@ -80,7 +77,7 @@ class MixtureSet(ModelSet):
     # Model interface.
 
     def mean_field_factorization(self):
-        retval = self.modelset.mean_field_factorization() 
+        retval = self.modelset.mean_field_factorization()
         retval[0] += [self.weights]
         return retval
 
@@ -120,15 +117,15 @@ class MixtureSet(ModelSet):
 
     def __getitem__(self, key):
         ncpm = self.n_comp_per_mixture
-        if isinstance(key, int):    
+        if isinstance(key, int):
             s = slice(key * ncpm, (key + 1) * ncpm)
             return Mixture(self.weights[key], self.modelset[s])
-        if isinstance(key, slice):   
+        if isinstance(key, slice):
             start = 0 if key.start is None else key.start * ncpm
             stop = len(self) if key.stop is None else key.stop * ncpm
             step = 1 if key.step is None else key.step * ncpm
-            new_s = slice(start, stop, step) 
+            new_s = slice(start, stop, step)
             return self.__class__(self.weights[key], self.modelset[new_s])
         raise IndexError(f'Unsupported index: {key}')
 
-    
+

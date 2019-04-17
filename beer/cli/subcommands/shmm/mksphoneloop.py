@@ -49,11 +49,15 @@ def init_means_precisions_stats(means_precisions, weights):
 
 
 def setup(parser):
+    parser.add_argument('-c', '--classes',
+                        help='assign a broad class to each unit')
     parser.add_argument('-g', '--unit-group', default='speech-unit',
                        help='group of unit to model with the subspace ' \
                             '(default:"speech-unit")')
-    parser.add_argument('-l', '--latent-dim', default=2,
+    parser.add_argument('-l', '--latent-dim', default=2, type=int,
                         help='dimension of the latent space (default:2)')
+    parser.add_argument('-d', '--dlatent-dim', default=2, type=int,
+                        help='dimension of the discriminant latent space (default:2)')
     parser.add_argument('conf', help='configuration file use to create ' \
                                      'the phone-loop')
     parser.add_argument('phoneloop', help='phone-loop to initialize the ' \
@@ -102,12 +106,28 @@ def main(args, logger):
     logger.debug('initializing the parameters\' sufficient statistics')
     for param in units_emissions.bayesian_parameters():
         param.stats = param_stats(param)
-    for unit in iterate_units(units_emissions, nunits, nstates):
-        weights = unit.weights
-        means_precisions = unit.modelset.means_precisions
-        weights.stats = init_weights_stats(weights)
-        means_precisions.stats = init_means_precisions_stats(means_precisions,
-                                                             weights)
+
+    labels = None
+    nclasses = 1
+    if args.classes:
+        logger.debug(f'extracting the units\' class from: {args.classes}')
+        with open(args.classes, 'r') as f:
+            unit2class = {}
+            class2unit = {}
+            for line in f:
+                unit, uclass = line.strip().split()
+                unit2class[unit] = uclass
+                class2unit[uclass] = unit
+        classnames = [classname for classname in class2unit]
+        class2idx = {uclass: i for i, uclass in enumerate(sorted(classnames))}
+        nclasses = len(classnames)
+        labels = torch.zeros(nunits).long()
+        unit_idx = 0
+        for unit in ploop.start_pdf:
+            if unit in unit2class:
+                labels[unit_idx] = class2idx[unit2class[unit]]
+                unit_idx += 1
+
 
     logger.debug('create the latent normal prior')
     latent_prior = beer.Normal.create(torch.zeros(args.latent_dim),
@@ -120,21 +140,35 @@ def main(args, logger):
         for param in units_emissions.bayesian_parameters()
     }
     units_emissions.replace_parameters(newparams)
-
+    for unit in iterate_units(units_emissions, nunits, nstates):
+        weights = unit.weights
+        means_precisions = unit.modelset.means_precisions
+        weights.stats = init_weights_stats(weights)
+        means_precisions.stats = init_means_precisions_stats(means_precisions,
+                                                             weights)
 
     logger.debug('creating the units model')
     units = [unit for unit in iterate_units(units_emissions, nunits, nstates)]
 
     logger.debug('creating the GSM')
     tpl = copy.deepcopy(units[0])
-    gsm = beer.GSM.create(tpl, args.latent_dim, latent_prior)
+    if labels is None:
+        gsm = beer.GSM.create(tpl, args.latent_dim, latent_prior)
+        latent_posts = gsm.new_latent_posteriors(len(units))
+        pdfvecs = gsm.expected_pdfvecs(latent_posts)
+        gsm.update_models(units, pdfvecs)
+    else:
+        dlatent_prior = beer.Normal.create(torch.zeros(args.dlatent_dim),
+                                           torch.ones(args.dlatent_dim),
+                                           cov_type = 'full')
 
-    logger.debug('creating the units posterior')
-    latent_posts = gsm.new_latent_posteriors(len(units))
-
-    logger.debug('initializing the subspace models')
-    pdfvecs = gsm.expected_pdfvecs(latent_posts)
-    gsm.update_models(units, pdfvecs)
+        gsmset = beer.GSMSet.create(tpl, nclasses, args.latent_dim,
+                                    args.dlatent_dim, latent_prior,
+                                    dlatent_prior)
+        latent_posts = gsmset.new_latent_posteriors(len(units))
+        pdfvecs = gsmset.expected_pdfvecs(latent_posts)
+        gsmset.update_models(units, pdfvecs)
+        gsm = beer.Mixture.create(gsmset)
 
     logger.debug('saving the GSM')
     with open(args.gsm, 'wb') as f:
@@ -142,13 +176,17 @@ def main(args, logger):
 
     logger.debug('saving the units posterior')
     with open(args.posts, 'wb') as f:
-        pickle.dump((latent_posts, nunits, nstates), f)
+        if labels is None:
+            pickle.dump((latent_posts, nunits, nstates, groupidx), f)
+        else:
+            pickle.dump((latent_posts, nunits, nstates, groupidx, labels), f)
 
     logger.debug('saving the subspace phoneloop')
     with open(args.sploop, 'wb') as f:
         pickle.dump(ploop, f)
 
-    logger.info(f'created {nunits} subspace HMMs')
+    logger.info(f'created {nunits} subspace HMMs (latent dim: {args.latent_dim})')
+    logger.info(f'latent prior: {latent_prior}')
 
 
 if __name__ == "__main__":

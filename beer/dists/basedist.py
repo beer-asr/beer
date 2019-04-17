@@ -5,17 +5,21 @@ from dataclasses import dataclass
 import torch
 
 
-__all__ = ['ConjugateLikelihood', 'ExponentialFamily', 
+__all__ = ['ConjugateLikelihood', 'ExponentialFamily',
            'ParametersView', 'kl_div']
 
 
-# Error raised when the user is providing parameters with missing 
+# Error raised when the user is providing parameters with missing
 # attribute.
 class MissingParameterAttribute(Exception): pass
 
-# Error raised when a "ExponentialFamily" subclass does not define the
+# Error raised when an "ExponentialFamily" subclass does not define the
 # parameters of the distribution.
 class UndefinedParameters(Exception): pass
+
+# Error raised when an "ExponentialFamily" subclass does not define the
+# standard parameter class of the distribution.
+class UndefinedStdParametersClass(Exception): pass
 
 # Error raised when trying to compute the KL-divergence between two
 # distribution of different type (i.e. Dirichlet and Normal).
@@ -51,7 +55,7 @@ class ParametersView(torch.nn.Module):
         self.names = names
 
     def __repr__(self):
-        paramstr = ', '.join([f'{name}={getattr(self, name)}' 
+        paramstr = ', '.join([f'{name}={getattr(self, name)}'
                               for name in self.names])
         clsname = self.ref.__class__.__qualname__
         return f'view<{clsname}({paramstr})>'
@@ -59,19 +63,21 @@ class ParametersView(torch.nn.Module):
 
 class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
     '''Base class to all distribution from the exponential family.
-    
+
     Note that one instance of the exponential family can represent one
-    or several distribution (of the same type). You can check how 
+    or several distribution (of the same type). You can check how
     many distributions are handled by one instance by using:
 
     >>> len(myinstance)
-    3 
+    3
 
     '''
 
     # Sucbclasses need to define the parameters of the distribution
     # in a dictionary stored in a class variable named
-    # "_std_params_def". For example:
+    # "_std_params_def" and the standard parameters class in the
+    # "_std_params_cls" variable. For example:
+    #_std_params_cls = NormalStdParams
     #_std_params_def = {
     #
     #      +---------------------------- Parameter's name which will be
@@ -88,26 +94,24 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
 
     def __init_subclass__(cls):
         if not hasattr(cls, '_std_params_def'):
-            raise UndefinedParameters('Parameters of the distribution are ' \
-                                      'undefined. You need to specify the ' \
-                                      'field "_std_params_def" in your ' \
-                                      'class definition.')
-
+            raise UndefinedParameters(
+                'Parameters of the distribution are undefined. ' \
+                'You need to specify the field "_std_params_def" in ' \
+                'your class definition.')
+        if not hasattr(cls, '_std_params_cls'):
+            raise UndefinedStdParametersClass(
+                'Class of the standard parameters is not defined. ' \
+                'You need to set the class variable "_std_params_cls" ' \
+                'in your class definition.')
 
     def __init__(self, params):
         super().__init__()
-        self.params = params        
+        self.params = params
 
-    def view(self, idx):
-        '''Create a new distribution which share its parameters with 
-        another distribution.
-
-        Args:
-            idx (int, slice): Index(ices) of the distribution to use 
-                to create the distribution.
-        '''
-        names = tuple(self._std_params_def.keys())
-        return self.__class__(ParametersView(self.params, names, idx))
+    @classmethod
+    def from_std_parameters(cls, *args, **kwargs):
+        params = cls._std_params_cls(*args, **kwargs)
+        return cls(params)
 
     ####################################################################
     ## Subclass interface
@@ -115,19 +119,22 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
     # definition.
 
     # The forward method is defined in the ``torch.nn.Module`` class.
-    # should compute the log-likelihood of the inputs (X) given
-    # the parameters.
+    # If definied, it should compute the log-likelihood of the inputs
+    # (X) given the parameters.
     #def forward(self, X):
     #    pass
 
     @abc.abstractmethod
     def __len__(self):
-        'Number of pdfs handled by the current parameterization.'
         pass
+
+    def __getitem__(self, idx):
+        names = tuple(self._std_params_def.keys())
+        return self.__class__(ParametersView(self.params, names, idx))
 
     @abc.abstractmethod
     def conjugate(self):
-        '''Returns a descriptor of the conjugate llh function object 
+        '''Returns a descriptor of the conjugate llh function object
         assiocated with the given pdf.
         '''
         pass
@@ -166,7 +173,7 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def update_from_natural_parameters(self):
         'Uptate the parameters given the new natural parameters.'
-        pass  
+        pass
 
 
 class ConjugateLikelihood(metaclass=abc.ABCMeta):
@@ -174,13 +181,13 @@ class ConjugateLikelihood(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def sufficient_statistics_dim(self, zero_stats=False):
-        '''Dimension of the sufficient statistics of lihekihood 
+        '''Dimension of the sufficient statistics of lihekihood
         function.
 
         Args:
-            zero_stats (boolean): Include the zero order statistics 
+            zero_stats (boolean): Include the zero order statistics
                 as well.
-        
+
         Returns:
             int: Dimension of the sufficient statistics.
         '''
@@ -193,7 +200,7 @@ class ConjugateLikelihood(metaclass=abc.ABCMeta):
 
         Args:
             data (``torch.Tensor[N, D]``): Input data.
-        
+
         Returns:
             stats (``torch.Tensor[N, Q]``): Sufficient statistics.
         '''
@@ -202,21 +209,21 @@ class ConjugateLikelihood(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def pdfvectors_from_rvectors(self, rvecs):
         '''Transform real value vectors into equivalent pdf vectors
-        using a default mapping (distribution dependent). For a pdf 
-        with natural parameters u and log-normalization function A(u) 
+        using a default mapping (distribution dependent). For a pdf
+        with natural parameters u and log-normalization function A(u)
         the pdf vector is defined as:
-                     
+
             pvec = (u, -A(u))^T
 
         Args:
-            rvecs (``torch.Tensor[N,D]``): Real value vectors of 
+            rvecs (``torch.Tensor[N,D]``): Real value vectors of
                 dimenion D = self.conjugate_stats_dim
-        
+
         Returns:
             pdfs (``torch.Tensor[N,Q]``): Equivalent pdf vectors.
 
         '''
-        pass  
+        pass
 
     @abc.abstractmethod
     def parameters_from_pdfvector(self, pdfvec):
@@ -227,7 +234,7 @@ class ConjugateLikelihood(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def __call__(self, natural_parameters, stats):
-        '''Compute the log likelihood of the data (represented as 
+        '''Compute the log likelihood of the data (represented as
         sufficient statistics) given the natural parameters.
         '''
         pass
@@ -254,3 +261,4 @@ def kl_div(pdf1, pdf2):
     lnorm1 = pdf1.log_norm()
     lnorm2 = pdf2.log_norm()
     return lnorm2 - lnorm1 - torch.sum(exp_stats * (nparams2 - nparams1), dim=-1)
+

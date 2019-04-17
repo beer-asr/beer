@@ -5,7 +5,6 @@ import torch
 from .basemodel import DiscreteLatentModel
 from .parameters import ConjugateBayesianParameter
 from ..dists import Dirichlet
-from ..dists import DirichletStdParams
 from ..utils import onehot
 
 
@@ -16,11 +15,9 @@ __all__ = ['Mixture']
 # Helper to build the default parameters.
 
 def _default_param(weights, prior_strength):
-    params = DirichletStdParams(prior_strength * weights)
-    prior_weights = Dirichlet(params)
-    params = DirichletStdParams(prior_strength * weights)
-    posterior_weights = Dirichlet(params)
-    return ConjugateBayesianParameter(prior_weights, posterior_weights)
+    prior = Dirichlet.from_std_parameters(prior_strength * weights)
+    posterior = Dirichlet.from_std_parameters(prior_strength * weights)
+    return ConjugateBayesianParameter(prior, posterior)
 
 ########################################################################
 
@@ -99,6 +96,7 @@ class Mixture(DiscreteLatentModel):
         else:
             resps = onehot(labels, len(self.modelset),
                             dtype=log_weights.dtype, device=log_weights.device)
+            local_kl_div = 0.
 
         # Store the responsibilites to accumulate the statistics.
         self.cache['resps'] = resps

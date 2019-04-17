@@ -8,7 +8,7 @@ __all__ = ['evidence_lower_bound']
 
 
 def add_acc_stats(acc_stats1, acc_stats2):
-    '''Add two ditionary of accumulated statistics. Both dictionaries
+    '''Add two dictionary of accumulated statistics. Both dictionaries
     may have different set of keys. The elements in the dictionary
     should implement the sum operation.
 
@@ -106,18 +106,18 @@ class EvidenceLowerBoundInstance:
             except KeyError:
                 pass
 
-    def sync(self, vboptimizer):
+    def sync(self, model):
         '''If the ELBO was stored on disk and loaded again, it will lose
         its handle on the parameters being optimized (backward() will be
         effect less). This method re-connect the ELBO instance and the
         parameters to optimize.
 
         '''
-        self._model_parameters = set(vboptimizer._parameters)
+        self._model_parameters = set(model.bayesian_parameters())
 
 
 def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
-                         fast_eval=False, **kwargs):
+                         **kwargs):
     '''Evidence Lower Bound objective function of Variational Bayes
     Inference.
 
@@ -180,10 +180,7 @@ def evidence_lower_bound(model=None, minibatch_data=None, datasize=-1,
     scale = datasize / float(mb_datasize)
     stats = model.sufficient_statistics(minibatch_data)
     exp_llh = model.expected_log_likelihood(stats, **kwargs)
-    if not fast_eval:
-        kl_div = model.kl_div_posterior_prior().sum()
-    else:
-        kl_div = 0.
+    kl_div = model.kl_div_posterior_prior().sum()
     elbo_value = float(scale) * exp_llh.sum() - kl_div
     acc_stats = model.accumulate(stats)
     model.clear_cache()

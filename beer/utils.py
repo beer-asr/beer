@@ -1,9 +1,84 @@
 '''Utility functions.'''
 
+import subprocess
+import io
+import os
 import torch
 import torch.autograd as autograd
 
 
+__all__ = ['reserve_gpu', 'onehot', 'logsumexp', 'symmetrize_matrix',
+           'make_symposdef', 'sample_from_normals', 'jacobians',
+           'approximate_hessian']
+
+
+def get_gpus():
+    'Return a dict uuid -> index for all the GPUs on the local matchine.'
+    cmd = 'nvidia-smi --query-gpu=gpu_uuid,index --format=csv,noheader'
+    outproc = subprocess.run(cmd, shell=True, text=True,
+                             capture_output=True, check=True)
+    output = io.StringIO(outproc.stdout)
+    retval = {}
+    for line in output:
+        tokens = line.strip().split(',')
+        uuid, idx = tokens[0], int(tokens[1])
+        retval[uuid] = idx
+    return retval
+
+def get_active_gpus():
+    'Return a set of uuids corresponding to all the GPUs being used.'
+    cmd = 'nvidia-smi --query-compute-apps=gpu_uuid --format=csv,noheader'
+    outproc = subprocess.run(cmd, shell=True, text=True,
+                             capture_output=True, check=True)
+    output = io.StringIO(outproc.stdout)
+    return set([line.strip() for line in output])
+
+# Error raised when the "reserve_gpu" fails.
+class NoGPUAvailable(Exception): pass
+
+def reserve_gpu(max_retry=12, logger=None, wait_time=10):
+    '''Reserve a GPU in adversarial environment.
+
+    This function assumes CUDA is installed and the `nvidia-smi` tool
+    is available in the PATH.
+
+    Args:
+        max_retry (int): Number of attemps before failing.
+        logger (logger): Logger which will log (debug messages) the
+            failed attempt to reserve the GPUs.
+
+    Returns:
+        (int): index of the GPU reserved.
+
+    '''
+    import time
+    cmd = "nvidia-smi --query-gpu=index,utilization.gpu --format='csv'"
+    count = 0
+    gpu_reserved = False
+    gpus = get_gpus()
+    while count < max_retry and not gpu_reserved:
+        active_gpus = get_active_gpus()
+        for gpu, gpu_idx in gpus.items():
+            if gpu not in active_gpus:
+                logger.debug(f'trying to reserve gpu {gpu_idx}')
+                os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
+                # Reserve the GPU by allocating some dummy data.
+                try:
+                    dummy = torch.zeros(1, device=torch.device('cuda'))
+                    gpu_reserved = True
+                except Exception as err:
+                    if logger is not None:
+                        logger.debug(f'attempt to reserve a GPU failed: {err}')
+            if gpu_reserved:
+                break
+        else:
+            logger.debug(f'waiting {wait_time} seconds...')
+            time.sleep(wait_time)
+        count += 1
+
+    if not gpu_reserved:
+        raise NoGPUAvailable('Couldn\'t reserve a GPU')
+    return  gpu_idx
 
 
 def onehot(labels, max_label, dtype, device):
@@ -147,6 +222,3 @@ def approximate_hessian(list_grads):
         hessians.append(torch.sum(grads[:, :, None] * grads[:, None, :], dim=0))
     return hessians
 
-
-__all__ = ['onehot', 'logsumexp', 'symmetrize_matrix', 'make_symposdef',
-           'sample_from_normals', 'jacobians', 'approximate_hessian']

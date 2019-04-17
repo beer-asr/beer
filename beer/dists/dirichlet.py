@@ -87,6 +87,8 @@ class Dirichlet(ExponentialFamily):
         'concentrations': 'Concentrations parameter.'
     }
 
+    _std_params_cls = DirichletStdParams
+
     def __len__(self):
         paramshape = self.params.concentrations.shape
         return 1 if len(paramshape) <= 1 else paramshape[0]

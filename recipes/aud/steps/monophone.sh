@@ -4,7 +4,7 @@
 
 parallel_env=sge
 parallel_opts=""
-parallel_njobs=4
+parallel_njobs=20
 nargs=6
 
 while [[ $# -gt $nargs ]]; do
@@ -110,13 +110,7 @@ if [ ! -f $outdir/final.mdl ]; then
         echo "found existing model, starting training from epoch $((epoch + 1))"
     else
         echo "starting training..."
-
-        # Create the optimizer of the training.
-        beer hmm optimizer $outdir/0.mdl $outdir/optim.pkl || exit 1
     fi
-
-    # ...and the optimizer.
-    optim=optim.pkl
 
     while [ $((++epoch)) -le $epochs ]; do
         echo "epoch: $epoch"
@@ -134,11 +128,10 @@ if [ ! -f $outdir/final.mdl ]; then
             $outdir/epoch${epoch}|| exit 1
 
         # Update the model' parameters.
-        # Note: We don't keep track of the optimizer over time to save
-        # space.
         find $outdir/epoch${epoch} -name '*pkl' | \
-            beer hmm update $outdir/$mdl $outdir/optim.pkl \
-                $outdir/${epoch}.mdl $outdir/optim.pkl || exit 1
+            beer hmm update -o $outdir/optim_state.pth $outdir/$mdl \
+                $outdir/${epoch}.mdl 2>&1 | \
+                tee -a $outdir/training.log || exit 1
 
         mdl=${epoch}.mdl
     done

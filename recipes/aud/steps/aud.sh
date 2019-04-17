@@ -69,9 +69,6 @@ if [ ! -f $outdir/0.mdl ]; then
         $outdir/decode_graph.pkl || exit 1
     beer hmm mkphoneloop $outdir/decode_graph.pkl $outdir/hmms.mdl \
         $outdir/0.mdl || exit 1
-
-    # Create the optimizer of the training.
-    beer hmm optimizer $outdir/0.mdl $outdir/optim.pkl || exit 1
 else
     echo "Phone Loop model already created. Skipping."
 fi
@@ -89,9 +86,6 @@ if [ ! -f $outdir/final.mdl ]; then
         echo "starting training..."
     fi
 
-    # ...and the optimizer.
-    optim=optim.pkl
-
     while [ $((++epoch)) -le $epochs ]; do
         echo "epoch: $epoch"
 
@@ -108,11 +102,9 @@ if [ ! -f $outdir/final.mdl ]; then
             $outdir/epoch${epoch}|| exit 1
 
         # Update the model' parameters.
-        # Note: We don't keep track of the optimizer over time to save
-        # space.
         find $outdir/epoch${epoch} -name '*pkl' | \
-            beer hmm update $outdir/$mdl $outdir/optim.pkl \
-                $outdir/${epoch}.mdl $outdir/optim.pkl || exit 1
+            beer hmm update -o $outdir/optim_state.pth $outdir/$mdl \
+                $outdir/${epoch}.mdl || exit 1
 
         mdl=${epoch}.mdl
     done
@@ -121,14 +113,4 @@ if [ ! -f $outdir/final.mdl ]; then
 else
     echo "Model already trained. Skipping."
 fi
-
-# Generating labels.
-#if [ ! -f $outdir/trans.txt ]; then
-#    # Creating the most likely transcription.
-#    echo "generating transcription for the $dataset dataset..."
-#    beer hmm decode --per-frame $outdir/final.mdl \
-#        $dataset > $outdir/trans.txt || exit 1
-#else
-#    echo "transcription already generated. Skipping."
-#fi
 

@@ -3,9 +3,9 @@ import torch
 
 from .basemodel import Model
 from .parameters import ConjugateBayesianParameter
-from ..dists import NormalWishart, NormalWishartStdParams
-from ..dists import NormalGamma, NormalGammaStdParams
-from ..dists import IsotropicNormalGamma, IsotropicNormalGammaStdParams
+from ..dists import NormalWishart
+from ..dists import NormalGamma
+from ..dists import IsotropicNormalGamma
 
 
 __all__ = ['Normal']
@@ -18,7 +18,7 @@ class UnknownCovarianceType(Exception): pass
 ########################################################################
 # Helper to build the default parameters.
 
-# Return a full covariance matrix whether the user has specified a 
+# Return a full covariance matrix whether the user has specified a
 # scalar, a diagonal or a full matrix.
 def _full_cov(cov, dim, tensorconf):
     if len(cov.shape) == 1 and cov.shape[0] == 1:
@@ -32,10 +32,9 @@ def _default_fullcov_param(mean, cov, prior_strength, tensorconf):
     scale = torch.tensor(prior_strength, **tensorconf)
     dof = torch.tensor(prior_strength + len(mean) - 1, **tensorconf)
     scale_matrix = cov.inverse() / dof
-    params = NormalWishartStdParams(mean, scale, scale_matrix, dof)
-    prior = NormalWishart(params)
-    params = NormalWishartStdParams(mean, scale, scale_matrix, dof)
-    posterior = NormalWishart(params)
+    prior = NormalWishart.from_std_parameters(mean, scale, scale_matrix, dof)
+    posterior = NormalWishart.from_std_parameters(mean, scale, scale_matrix,
+                                                  dof)
     return ConjugateBayesianParameter(prior, posterior)
 
 def _default_diagcov_param(mean, cov, prior_strength, tensorconf):
@@ -44,10 +43,8 @@ def _default_diagcov_param(mean, cov, prior_strength, tensorconf):
     scale = torch.tensor(prior_strength, **tensorconf)
     shape = torch.tensor(prior_strength, **tensorconf)
     rates = prior_strength * variance
-    params = NormalGammaStdParams(mean, scale, shape, rates)
-    prior = NormalGamma(params)
-    params = NormalGammaStdParams(mean, scale, shape, rates)
-    posterior = NormalGamma(params)
+    prior = NormalGamma.from_std_parameters(mean, scale, shape, rates)
+    posterior = NormalGamma.from_std_parameters(mean, scale, shape, rates)
     return ConjugateBayesianParameter(prior, posterior)
 
 def _default_isocov_param(mean, cov, prior_strength, tensorconf):
@@ -56,10 +53,9 @@ def _default_isocov_param(mean, cov, prior_strength, tensorconf):
     scale = torch.tensor(prior_strength, **tensorconf)
     shape = torch.tensor(prior_strength, **tensorconf)
     rate =  prior_strength * variance
-    params = IsotropicNormalGammaStdParams(mean, scale, shape, rate)
-    prior = IsotropicNormalGamma(params)
-    params = IsotropicNormalGammaStdParams(mean, scale, shape, rate)
-    posterior = IsotropicNormalGamma(params)
+    prior = IsotropicNormalGamma.from_std_parameters(mean, scale, shape, rate)
+    posterior = IsotropicNormalGamma.from_std_parameters(mean, scale, shape,
+                                                         rate)
     return ConjugateBayesianParameter(prior, posterior)
 
 _default_param = {
@@ -99,7 +95,7 @@ class Normal(Model):
             raise UnknownCovarianceType('Unknown covariance type: ' \
                                         f'"{cov_type}"')
 
-        tensorconf = {'dtype': mean.dtype, 'device': mean.device, 
+        tensorconf = {'dtype': mean.dtype, 'device': mean.device,
                       'requires_grad': False}
         mean = mean.detach()
         cov = cov.detach()

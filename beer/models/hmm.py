@@ -72,10 +72,10 @@ class HMM(DiscreteLatentModel):
     def expected_log_likelihood(self, stats, inference_graph=None,
                                 viterbi=True, state_path=None,
                                 scale=1.):
+        trans_posts = True if inference_graph is None else False
         if inference_graph is None:
             inference_graph = self.graph
         pc_llhs = scale * self._pc_llhs(stats, inference_graph)
-        trans_posts = True if inference_graph is None else False
         all_resps = self._inference(pc_llhs, inference_graph, viterbi=viterbi,
                                     state_path=state_path,
                                     trans_posteriors=trans_posts)
@@ -113,10 +113,10 @@ class HMM(DiscreteLatentModel):
         best_path = torch.LongTensor(best_path)
         return best_path
 
-    def posteriors(self, data, inference_graph=None):
+    def posteriors(self, data, inference_graph=None, scale=1.0):
         if inference_graph is None:
             inference_graph = self.graph
-        stats = self.modelset.sufficient_statistics(data)
+        stats = self.modelset.sufficient_statistics(data) * scale
         pc_llhs = self._pc_llhs(stats, inference_graph)
         return self._inference(pc_llhs, inference_graph)
 

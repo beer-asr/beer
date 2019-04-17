@@ -149,6 +149,8 @@ class NormalWishart(ExponentialFamily):
         'dof': 'Number degree of freedom of the Wishart pdf.',
     }
 
+    _std_params_cls = NormalWishartStdParams
+
     def __len__(self):
         paramshape = self.params.mean.shape
         return 1 if len(paramshape) <= 1 else paramshape[0]
@@ -196,7 +198,7 @@ class NormalWishart(ExponentialFamily):
         mean_quad = mean[:, :, None] * mean[:, None, :]
         exp_prec = dof[:, :, None] * scale_matrix
         retval = torch.cat([
-            torch.matmul(exp_prec, mean[:, :, None]).view(-1, dim),
+            torch.matmul(exp_prec, mean[:, :, None]).reshape(-1, dim),
             exp_prec.reshape(-1, dim ** 2),
             (dim / scale) + _batch_trace(exp_prec, mean_quad, keepdim=True),
             (torch.digamma(.5 * (dof + 1 - idxs)).sum(dim=-1, keepdim=True) \

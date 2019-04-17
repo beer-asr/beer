@@ -34,7 +34,7 @@ class NormalDiagonalLikelihood(ConjugateLikelihood):
         precision = pdfvec[:, dim: 2 * dim]
         mean = pdfvec[:, :dim] / precision
         if len(size) == 1:
-            return mean.view(1), precision.view(1)
+            return mean.view(-1), precision.view(-1)
         return mean.view(-1, dim), precision.view(-1, dim)
 
 
@@ -43,6 +43,7 @@ class NormalDiagonalLikelihood(ConjugateLikelihood):
         mean = rvecs[:, :dim]
         log_precision = rvecs[:, dim: 2 * dim]
         precision = torch.exp(log_precision)
+        log_basemeasure = self.dim * math.log(2 * math.pi)
         retval =  torch.cat([
             precision * mean,
             precision,
@@ -100,6 +101,8 @@ class NormalGamma(ExponentialFamily):
         'shape': 'Shape parameter of the Gamma (shared across dimension).',
         'rates': 'Rate parameters of the Gamma.'
     }
+
+    _std_params_cls = NormalGammaStdParams
 
     def __len__(self):
         paramshape = self.params.mean.shape

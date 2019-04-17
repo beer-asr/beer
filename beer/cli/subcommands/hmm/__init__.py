@@ -8,12 +8,15 @@ from . import mkphoneloop
 from . import mkphoneloopgraph
 from . import mkphones
 from . import optimizer
+from . import posteriors
 from . import phonelist
 from . import train
 from . import update
 
+
 cmds = [accumulate, decode, mkaligraph, mkdecodegraph, mkphoneloop,
-        mkphoneloopgraph, mkphones, optimizer, phonelist, train, update]
+        mkphoneloopgraph, mkphones, optimizer, posteriors,
+        phonelist, train, update]
 
 def setup(parser):
     subparsers = parser.add_subparsers(title='possible commands', metavar='<cmd>')
