@@ -6,7 +6,8 @@ from .basemodel import *
 from .modelset import *
 from .parameters import *
 
-## Concrete model.
+# Concrete model.
+from .categorical import *
 from .normal import *
 from .mixture import *
 from .hmm import *

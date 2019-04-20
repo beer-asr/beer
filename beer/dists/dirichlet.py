@@ -154,7 +154,7 @@ class Dirichlet(ExponentialFamily):
         if size == 1:
             concentrations = concentrations.view(1, -1)
         retval = concentrations - 1
-        retval[:, -1] = concentrations.sum(dim=-1) - 1
+        retval[:, -1] = (concentrations - 1).sum(dim=-1)
         if size == 1:
             return retval.view(-1)
         return retval
