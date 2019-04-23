@@ -86,7 +86,7 @@ class SBCategorical(Model):
 
     def __init__(self, stickbreaking):
         super().__init__()
-        self.stickbreaking= stickbreaking
+        self.stickbreaking = stickbreaking
 
     ####################################################################
 

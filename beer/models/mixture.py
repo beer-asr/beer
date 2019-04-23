@@ -4,12 +4,9 @@ from operator import mul
 import torch
 from .basemodel import DiscreteLatentModel
 from .parameters import ConjugateBayesianParameter
+from .categorical import Categorical
 from ..dists import Dirichlet
 from ..utils import onehot
-
-
-__all__ = ['Mixture']
-
 
 ########################################################################
 # Helper to build the default parameters.
@@ -20,6 +17,8 @@ def _default_param(weights, prior_strength):
     return ConjugateBayesianParameter(prior, posterior)
 
 ########################################################################
+
+__all__ = ['Mixture']
 
 
 class Mixture(DiscreteLatentModel):
@@ -49,21 +48,18 @@ class Mixture(DiscreteLatentModel):
             weights /= len(modelset)
         else:
             weights = torch.tensor(weights, **tensorconf)
-        weights_param = _default_param(weights, prior_strength)
-        return cls(weights_param, modelset)
+        cat = Categorical.create(weights, prior_strength)
+        return cls(cat, modelset)
 
-    def __init__(self, weights, modelset):
+    def __init__(self, categorical, modelset):
         super().__init__(modelset)
-        self.weights = weights
+        self.categorical = categorical
 
     # Log probability of each components.
-    def _log_weights(self):
-        lhf = self.weights.likelihood_fn
-        nparams = self.weights.natural_form()
-        data = torch.eye(len(self.modelset), dtype=nparams.dtype,
-                        device=nparams.device, requires_grad=False)
-        stats = lhf.sufficient_statistics(data)
-        return lhf(nparams, stats)
+    def _log_weights(self, tensorconf):
+        data = torch.eye(len(self.modelset), **tensorconf)
+        stats = self.categorical.sufficient_statistics(data)
+        return self.categorical.expected_log_likelihood(stats)
 
     def _local_kl_divergence(self, log_resps, log_weights):
         retval = torch.sum(log_resps.exp() * (log_resps - log_weights), dim=-1)
@@ -73,16 +69,22 @@ class Mixture(DiscreteLatentModel):
     # Model interface.
 
     def mean_field_factorization(self):
-        mf_groups = self.modelset.mean_field_factorization()
-        mf_groups[0].append(self.weights)
-        return mf_groups
+        l1 = self.modelset.mean_field_factorization()
+        l2 = self.categorical.mean_field_factorization()
+        diff = len(l1) - len(l2)
+        if diff > 0:
+            l2 += [[] for _ in range(abs(diff))]
+        else:
+            l1 += [[] for _ in range(abs(diff))]
+        return [u + v for u, v in zip(l1, l2)]
 
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats, labels=None, **kwargs):
         # Per-components weighted log-likelihood.
-        log_weights = self._log_weights()[None]
+        tensorconf = {'dtype': stats.dtype, 'device': stats.device}
+        log_weights = self._log_weights(tensorconf)[None]
         per_component_exp_llh = self.modelset.expected_log_likelihood(stats,
                                                                       **kwargs)
 
@@ -106,9 +108,9 @@ class Mixture(DiscreteLatentModel):
 
     def accumulate(self, stats):
         resps = self.cache['resps']
-        resps_stats = self.weights.likelihood_fn.sufficient_statistics(resps)
+        resps_stats = self.categorical.sufficient_statistics(resps)
         retval = {
-            self.weights: resps_stats.sum(dim=0),
+            **self.categorical.accumulate(resps_stats),
             **self.modelset.accumulate(stats, resps)
         }
         return retval
