@@ -6,7 +6,7 @@ from .parameters import ConjugateBayesianParameter
 from ..dists import Dirichlet
 
 
-__all__ = ['Categorical']
+__all__ = ['Categorical', 'SBCategorical']
 
 
 ########################################################################
@@ -18,7 +18,7 @@ def _default_param(weights, prior_strength, tensorconf):
     return ConjugateBayesianParameter(prior, posterior)
 
 
-def _default_sb_param(weights, truncation, prior_strength, tensorconf):
+def _default_sb_param(truncation, prior_strength):
     params = torch.ones(truncation, 2)
     params[:, 1] = prior_strength
     prior = Dirichlet.from_std_parameters(params)
@@ -62,13 +62,12 @@ class Categorical(Model):
         nparams = self.weights.natural_form()
         return self.weights.likelihood_fn(nparams, stats)
 
-    def accumulate(self, stats, parent_msg=None):
+    def accumulate(self, stats):
         return {self.weights: stats.sum(dim=0)}
 
 
-
 class SBCategorical(Model):
-    'Categorical with a stick breaking prior.'
+    'Categorical with a truncated stick breaking prior.'
 
     @classmethod
     def create(cls, truncation, prior_strength=1.):
@@ -83,7 +82,7 @@ class SBCategorical(Model):
             :any:`SBCategorical`
 
         '''
-        return cls(_default_sb_param(prior_strength))
+        return cls(_default_sb_param(truncation, prior_strength))
 
     def __init__(self, stickbreaking):
         super().__init__()
@@ -105,8 +104,16 @@ class SBCategorical(Model):
         log_1_v = torch.digamma(c[:, 1]) - s_dig
         log_prob = log_v
         log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
-        return log_prob
+        return stats @ log_prob
 
     def accumulate(self, stats, parent_msg=None):
-        return {self.stickbreaking: stats.sum(dim=0)}
-
+        s2 = stats.clone()
+        s2 = torch.zeros_like(stats)
+        s2[:, :-1] = stats[:, 1:]
+        s2 = torch.flip(torch.flip(s2, dims=(1,)).cumsum(dim=1), dims=(1,))
+        new_stats = torch.cat([stats[:, :, None], s2[:, :, None]], dim=-1)
+        shape = new_stats.shape
+        new_stats = new_stats.reshape(-1, 2)
+        new_stats[:, -1] += new_stats[:, :-1].sum(dim=-1)
+        new_stats = new_stats.reshape(*shape)
+        return {self.stickbreaking: new_stats.sum(dim=0)}

@@ -75,7 +75,7 @@ class DirichletStdParams(torch.nn.Module):
             natural_params = natural_params.view(1, -1)
         concentrations = natural_params + 1
         concentrations[:, -1] = natural_params[:, -1] \
-                                - concentrations[:, :-1].sum(dim=-1) + 1
+                                - (concentrations - 1)[:, :-1].sum(dim=-1) + 1
 
         if len(npsize) == 1:
             return cls(concentrations.view(-1))
