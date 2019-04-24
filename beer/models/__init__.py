@@ -17,6 +17,7 @@ from .phoneloop import *
 from .gsm import *
 
 ## Concrete model set.
+from .categoricalset import *
 from .mixtureset import *
 from .normalset import *
 

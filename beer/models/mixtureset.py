@@ -3,7 +3,7 @@ import torch
 from .parameters import ConjugateBayesianParameter
 from .modelset import ModelSet
 from .mixture import Mixture
-from ..dists import Dirichlet
+from .categoricalset import CategoricalSet
 from ..utils import logsumexp
 
 __all__ = ['MixtureSet']
@@ -27,36 +27,23 @@ class MixtureSet(ModelSet):
     '''
 
     @classmethod
-    def create(cls, size, modelset, weights=None, prior_strength=1.):
+    def create(cls, categoricalset, modelset):
         '''Create a :any:`MixtureSet' model.
 
         Args:
-            size (int): Number of mixtures.
+            categoricalset (:any:`CategoricalSet`): Set of model of the
+                latent variables.
             modelset (:any:`BayesianModelSet`): Set of models for all
                 the mixtures. The order of the model in the set defines
                 to which mixture they belong. The total size of the
                 model set should be: :any:`size` * `n_comp` where
                 `n_comp` is the number of component per mixture.
-            prior_strength (float): Strength the prior over the
-                weights.
-
         '''
-        # We look at one parameter to check the type of the model.
-        bayes_param = modelset.mean_field_factorization()[0][0]
-        tensor = bayes_param.prior.natural_parameters()
-        dtype, device = tensor.dtype, tensor.device
+        return cls(categoricalset, modelset)
 
-        n_comp_per_mixture = len(modelset) // size
-        if weights is None:
-            weights = torch.ones(size, n_comp_per_mixture, dtype=dtype,
-                                 device=device)
-            weights *= 1. / n_comp_per_mixture
-        weights_param = _default_param(weights, prior_strength)
-        return cls(weights_param, modelset)
-
-    def __init__(self, weights, modelset):
+    def __init__(self, categoricalset, modelset):
         super().__init__()
-        self.weights = weights
+        self.categoricalset = categoricalset
         self.modelset = modelset
 
     @property
@@ -65,27 +52,30 @@ class MixtureSet(ModelSet):
         return len(self.modelset) // len(self)
 
     # Log probability of each components.
-    def _log_weights(self):
-        lhf = self.weights.likelihood_fn
-        nparams = self.weights.natural_form()
-        data = torch.eye(self.n_comp_per_mixture, dtype=nparams.dtype,
-                        device=nparams.device, requires_grad=False)
-        stats = lhf.sufficient_statistics(data)
-        return lhf(nparams, stats).t()
+    def _log_weights(self, tensorconf):
+        data = torch.eye(self.n_comp_per_mixture, **tensorconf)
+        stats = self.categoricalset.sufficient_statistics(data)
+        return self.categoricalset.expected_log_likelihood(stats).t()
 
     ####################################################################
     # Model interface.
 
     def mean_field_factorization(self):
-        retval = self.modelset.mean_field_factorization()
-        retval[0] += [self.weights]
-        return retval
+        l1 = self.modelset.mean_field_factorization()
+        l2 = self.categoricalset.mean_field_factorization()
+        diff = len(l1) - len(l2)
+        if diff > 0:
+            l2 += [[] for _ in range(abs(diff))]
+        else:
+            l1 += [[] for _ in range(abs(diff))]
+        return [u + v for u, v in zip(l1, l2)]
 
     def sufficient_statistics(self, data):
         return self.modelset.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats):
-        log_weights = self._log_weights()
+        tensorconf = {'dtype': stats.dtype, 'device': stats.device}
+        log_weights = self._log_weights(tensorconf)
         pc_exp_llhs = self.modelset.expected_log_likelihood(stats)
         pc_exp_llhs = pc_exp_llhs.reshape(-1, len(self), self.n_comp_per_mixture)
         w_pc_exp_llhs = pc_exp_llhs + log_weights[None]
@@ -99,12 +89,15 @@ class MixtureSet(ModelSet):
         return log_norm
 
     def accumulate(self, stats, resps):
-        jointresps = self.cache['resps'] * resps[:,:, None]
-        lhf = self.weights.likelihood_fn
-        jointresps_stats = lhf.sufficient_statistics(jointresps.sum(dim=0))
+        m_resps = self.cache['resps']
+        jointresps = m_resps * resps[:,:, None]
         totalresps = jointresps.reshape(-1, len(self) * self.n_comp_per_mixture)
+        shape = jointresps.shape
+        jointresps = jointresps.reshape(-1, shape[-1])
+        jointresps = self.categoricalset.sufficient_statistics(jointresps)
+        jointresps = jointresps.reshape(shape)
         retval = {
-            self.weights: jointresps_stats,
+            **self.categoricalset.accumulate_from_jointresps(jointresps),
             **self.modelset.accumulate(stats, totalresps)
         }
         return retval
@@ -113,17 +106,19 @@ class MixtureSet(ModelSet):
     # ModelSet interface.
 
     def __len__(self):
-        return len(self.weights)
+        return len(self.categoricalset)
 
     def __getitem__(self, key):
         ncpm = self.n_comp_per_mixture
         if isinstance(key, int):
             s = slice(key * ncpm, (key + 1) * ncpm)
-            return Mixture(self.weights[key], self.modelset[s])
+            return Mixture(self.categoricalset[key], self.modelset[s])
         if isinstance(key, slice):
             start = 0 if key.start is None else key.start * ncpm
             stop = len(self) if key.stop is None else key.stop * ncpm
             step = 1 if key.step is None else key.step * ncpm
             new_s = slice(start, stop, step)
-            return self.__class__(self.weights[key], self.modelset[new_s])
+            return self.__class__(self.categoricalset[key],
+                                  self.modelset[new_s])
         raise IndexError(f'Unsupported index: {key}')
+
