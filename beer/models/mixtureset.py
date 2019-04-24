@@ -27,18 +27,27 @@ class MixtureSet(ModelSet):
     '''
 
     @classmethod
-    def create(cls, categoricalset, modelset):
+    def create(cls, size, modelset, prior_strength=1.):
         '''Create a :any:`MixtureSet' model.
 
         Args:
-            categoricalset (:any:`CategoricalSet`): Set of model of the
-                latent variables.
+            size (int): Number of mixtures.
             modelset (:any:`BayesianModelSet`): Set of models for all
                 the mixtures. The order of the model in the set defines
                 to which mixture they belong. The total size of the
                 model set should be: :any:`size` * `n_comp` where
                 `n_comp` is the number of component per mixture.
+            strength (float): Strength of the prior over the mixtures'
+                weights.
         '''
+        # We look at one parameter to check the type of the model.
+        bayes_param = modelset.mean_field_factorization()[0][0]
+        tensor = bayes_param.prior.natural_parameters()
+        dtype, device = tensor.dtype, tensor.device
+
+        ncomp_per_mixture = len(modelset) // size
+        weights = torch.ones(size, ncomp_per_mixture) / ncomp_per_mixture
+        categoricalset = CategoricalSet.create(weights, prior_strength)
         return cls(categoricalset, modelset)
 
     def __init__(self, categoricalset, modelset):
