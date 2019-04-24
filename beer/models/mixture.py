@@ -25,15 +25,14 @@ class Mixture(DiscreteLatentModel):
     '''Bayesian Mixture Model.'''
 
     @classmethod
-    def create(cls, modelset, weights=None, prior_strength=1.):
+    def create(cls, modelset, categorical=None, prior_strength=1.):
         '''Create a mixture model.
 
         Args:
             modelset (:any:`BayesianModelSet`): Component of the
                 mixture.
-            weights (``torch.Tensor[k]``): Prior probabilities of
-                the components of the mixture. If not provided, assume
-                flat prior.
+            categorical (``Categorical``): Categorical model of the
+                mixing weights.
             prior_strength (float): Strength of the prior over the
                 weights.
 
@@ -43,13 +42,11 @@ class Mixture(DiscreteLatentModel):
         tensorconf = {'dtype': tensor.dtype, 'device': tensor.device,
                       'requires_grad': False}
 
-        if weights is None:
+        if categorical is None:
             weights = torch.ones(len(modelset), **tensorconf)
             weights /= len(modelset)
-        else:
-            weights = torch.tensor(weights, **tensorconf)
-        cat = Categorical.create(weights, prior_strength)
-        return cls(cat, modelset)
+            categorical = Categorical.create(weights, prior_strength)
+        return cls(categorical, modelset)
 
     def __init__(self, categorical, modelset):
         super().__init__(modelset)

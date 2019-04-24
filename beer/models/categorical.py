@@ -51,6 +51,14 @@ class Categorical(Model):
         self.weights = weights
 
     ####################################################################
+    # The following property is exposed only for plotting/debugging
+    # purposes.
+
+    @property
+    def mean(self):
+        return self.weights.value()
+
+    ####################################################################
 
     def sufficient_statistics(self, data):
         return self.weights.likelihood_fn.sufficient_statistics(data)
@@ -87,6 +95,31 @@ class SBCategorical(Model):
     def __init__(self, stickbreaking):
         super().__init__()
         self.stickbreaking = stickbreaking
+        device = self.stickbreaking.posterior.params.concentrations.device
+        self.ordering = torch.arange(stickbreaking.posterior.dim[0], 
+                                     device=device)
+        #self.stickbreaking.register_callback(self._on_sticbreaking_update)
+
+    def _on_sticbreaking_update(self):
+        counts = self.stickbreaking.posterior.params.concentrations[:, 0]
+        self.ordering = counts.sort(descending=True)[1]
+
+    @property
+    def reverse_ordering(self):
+        reverse_ordering = torch.zeros_like(self.ordering)
+        for i, j in enumerate(self.ordering):
+            reverse_ordering[j] = i
+        return reverse_ordering
+
+    @property
+    def mean(self):
+        c = self.stickbreaking.posterior.params.concentrations
+        s_dig =  torch.digamma(c.sum(dim=-1))
+        log_v = torch.digamma(c[:, 0]) - s_dig
+        log_1_v = torch.digamma(c[:, 1]) - s_dig
+        log_prob = log_v
+        log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
+        return log_prob.exp()[self.reverse_ordering]
 
     ####################################################################
 
@@ -104,14 +137,17 @@ class SBCategorical(Model):
         log_1_v = torch.digamma(c[:, 1]) - s_dig
         log_prob = log_v
         log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
-        return stats @ log_prob
+        return stats[:, self.ordering] @ log_prob
 
     def accumulate(self, stats, parent_msg=None):
-        s2 = stats.clone()
-        s2 = torch.zeros_like(stats)
-        s2[:, :-1] = stats[:, 1:]
+        self.ordering = stats.sum(dim=0).sort(descending=True)[1]
+        ordered_stats = stats[:, self.ordering]
+        s2 = ordered_stats.clone()
+        s2 = torch.zeros_like(ordered_stats)
+        s2[:, :-1] = ordered_stats[:, 1:]
         s2 = torch.flip(torch.flip(s2, dims=(1,)).cumsum(dim=1), dims=(1,))
-        new_stats = torch.cat([stats[:, :, None], s2[:, :, None]], dim=-1)
+        new_stats = torch.cat([ordered_stats[:, :, None], s2[:, :, None]], 
+                              dim=-1)
         shape = new_stats.shape
         new_stats = new_stats.reshape(-1, 2)
         new_stats[:, -1] += new_stats[:, :-1].sum(dim=-1)
