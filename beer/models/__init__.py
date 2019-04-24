@@ -8,6 +8,7 @@ from .parameters import *
 
 # Concrete model.
 from .categorical import *
+from .gamma import *
 from .normal import *
 from .mixture import *
 from .hmm import *
