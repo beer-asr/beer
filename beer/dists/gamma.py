@@ -117,7 +117,7 @@ class Gamma(ExponentialFamily):
                          dim=-1)
 
     def expected_value(self):
-        return self.params.rate / self.params.rate
+        return self.params.shape / self.params.rate
 
     def log_norm(self):
         shape, rate = self.params.shape, self.params.rate
@@ -136,11 +136,8 @@ class Gamma(ExponentialFamily):
             a - .5
         )
         '''
-        shape, rate = self.params.mean, self.params.scale
-        return torch.cat([
-            -rate,
-            shape - 1
-        ], dim=-1)
+        shape, rate = self.params.shape, self.params.rate
+        return torch.cat([-rate, shape - 1], dim=-1)
 
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)

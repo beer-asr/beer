@@ -4,9 +4,10 @@ import torch
 from .basemodel import Model
 from .parameters import ConjugateBayesianParameter
 from ..dists import Dirichlet
+from ..dists import Gamma
 
 
-__all__ = ['Categorical', 'SBCategorical']
+__all__ = ['Categorical', 'SBCategorical', 'SBCategoricalHyperPrior']
 
 
 ########################################################################
@@ -23,6 +24,14 @@ def _default_sb_param(truncation, prior_strength):
     params[:, 1] = prior_strength
     prior = Dirichlet.from_std_parameters(params)
     posterior = Dirichlet.from_std_parameters(params.clone())
+    return ConjugateBayesianParameter(prior, posterior)
+
+
+def _default_concentration_param(mean, prior_strength):
+    shape = torch.ones_like(mean) * prior_strength
+    rate = prior_strength / mean
+    prior = Gamma.from_std_parameters(shape, rate) 
+    posterior = Gamma.from_std_parameters(shape.clone(), rate.clone())
     return ConjugateBayesianParameter(prior, posterior)
 
 ########################################################################
@@ -98,11 +107,6 @@ class SBCategorical(Model):
         device = self.stickbreaking.posterior.params.concentrations.device
         self.ordering = torch.arange(stickbreaking.posterior.dim[0], 
                                      device=device)
-        #self.stickbreaking.register_callback(self._on_sticbreaking_update)
-
-    def _on_sticbreaking_update(self):
-        counts = self.stickbreaking.posterior.params.concentrations[:, 0]
-        self.ordering = counts.sort(descending=True)[1]
 
     @property
     def reverse_ordering(self):
@@ -137,9 +141,14 @@ class SBCategorical(Model):
         log_1_v = torch.digamma(c[:, 1]) - s_dig
         log_prob = log_v
         log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
+
+        pad = torch.ones_like(log_1_v)
+        self.cache['sb_stats'] = torch.cat([log_1_v[:, None], 
+                                            pad[:, None]], dim=-1)
+
         return stats[:, self.ordering] @ log_prob
 
-    def accumulate(self, stats, parent_msg=None):
+    def accumulate(self, stats):
         self.ordering = stats.sum(dim=0).sort(descending=True)[1]
         ordered_stats = stats[:, self.ordering]
         s2 = ordered_stats.clone()
@@ -153,3 +162,50 @@ class SBCategorical(Model):
         new_stats[:, -1] += new_stats[:, :-1].sum(dim=-1)
         new_stats = new_stats.reshape(*shape)
         return {self.stickbreaking: new_stats.sum(dim=0)}
+
+
+class SBCategoricalHyperPrior(SBCategorical):
+    '''Categorical with a truncated stick breaking prior and a hyper-prior
+    over the concentration parameter of the stick breaking process.
+    
+    '''
+
+    @classmethod
+    def create(cls, truncation, prior_strength=1., hyper_prior_strength=1.):
+        '''Create a Categorical model.
+
+        Args:
+            truncation (int): Truncation of the stick breaking process.
+            prior_strength (float): Strength (i.e. concentration) of
+                the stick breaking prior.
+            hyper_rior_strength (float): Strength of hyper-prior over the
+                concentration parameter of the stick-breaking process.
+
+        Returns:
+            :any:`SBCategoricalHyperPrior`
+
+        '''
+        concentration = _default_concentration_param(
+            torch.ones(1) * prior_strength / 2,
+            hyper_prior_strength)
+        sb = _default_sb_param(truncation, prior_strength)
+        return cls(sb, concentration)
+
+    def __init__(self, stickbreaking, concentration):
+        super().__init__(stickbreaking)
+        self.concentration = concentration
+        self.concentration.register_callback(self._on_concentration_update)
+        self._on_concentration_update()
+
+    def _on_concentration_update(self):
+        self.stickbreaking.prior.params.concentrations[:, 1] = \
+                self.concentration.value()
+
+    def mean_field_factorization(self):
+        return [[self.concentration, self.stickbreaking]]
+
+    def accumulate(self, stats):
+        return {
+            **super().accumulate(stats),
+            self.concentration: self.cache['sb_stats'].sum(dim=0)
+        }

@@ -127,5 +127,3 @@ class MixtureSet(ModelSet):
             new_s = slice(start, stop, step)
             return self.__class__(self.weights[key], self.modelset[new_s])
         raise IndexError(f'Unsupported index: {key}')
-
-
