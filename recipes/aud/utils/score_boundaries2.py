@@ -64,7 +64,7 @@ def map_trans(trans, mapfile):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--delta', default=2, type=int,
+    parser.add_argument('-d', '--delta', default=1, type=int,
                         help='acceptance threshold (in frame) to consider a ' \
                              'boundary a "hit"')
     parser.add_argument('--mapping', help='mapping')

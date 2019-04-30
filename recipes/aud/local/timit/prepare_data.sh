@@ -111,7 +111,12 @@ for x in train dev test; do
     # Make the utt2spk and spk2utt files.
     cut -f1 -d'_'  $dir/${x}.uttids | paste -d' ' $dir/$x.uttids - > $dir/$x.utt2spk
 
+    # Extract the human alignments.
+    python $conf/phone_ali.py $tmpdir/${x}_phn.flist \
+        > $dir/${x}.human_alignments || exit
+
     mkdir -p $outdir/${x}
+    cp $dir/${x}.human_alignments $outdir/$x/ali
     cp $dir/$x.uttids $outdir/$x/uttids
     cp $dir/${x}_wav.scp $outdir/$x/wavs.scp
     cp $dir/${x}.text $outdir/$x/trans
@@ -120,8 +125,11 @@ done
 
 mkdir -p $outdir/lang
 python $conf/timit_lang_prep.py $outdir/lang "$conf/phones.60-48-39.map"
+cat local/timit/phones.60-48-39.map | awk '{print $1" "$3}' \
+    > $outdir/lang/phones_61_to_39.txt || exit 1
 
 
 date > $outdir/.done
 echo "Data preparation succeeded"
+
 

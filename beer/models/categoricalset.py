@@ -24,9 +24,7 @@ class CategoricalSet(ModelSet):
             :any:`Categorical`
 
         '''
-        tensorconf = {'dtype': weights.dtype, 'device': weights.device,
-                      'requires_grad': False}
-        return cls(_default_param(weights.detach(), prior_strength, tensorconf))
+        return cls(_default_param(weights.detach(), prior_strength))
 
     def __init__(self, weights):
         super().__init__()

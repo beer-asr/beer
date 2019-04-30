@@ -5,18 +5,8 @@ import torch
 from .basemodel import DiscreteLatentModel
 from .parameters import ConjugateBayesianParameter
 from .categorical import Categorical
-from ..dists import Dirichlet
 from ..utils import onehot
 
-########################################################################
-# Helper to build the default parameters.
-
-def _default_param(weights, prior_strength):
-    prior = Dirichlet.from_std_parameters(prior_strength * weights)
-    posterior = Dirichlet.from_std_parameters(prior_strength * weights)
-    return ConjugateBayesianParameter(prior, posterior)
-
-########################################################################
 
 __all__ = ['Mixture']
 
@@ -35,7 +25,6 @@ class Mixture(DiscreteLatentModel):
                 mixing weights.
             prior_strength (float): Strength of the prior over the
                 weights.
-
         '''
         mf_groups = modelset.mean_field_factorization()
         tensor = mf_groups[0][0].prior.natural_parameters()

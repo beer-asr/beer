@@ -13,7 +13,7 @@ __all__ = ['Categorical', 'SBCategorical', 'SBCategoricalHyperPrior']
 ########################################################################
 # Helper to build the default parameters.
 
-def _default_param(weights, prior_strength, tensorconf):
+def _default_param(weights, prior_strength):
     prior = Dirichlet.from_std_parameters(weights * prior_strength)
     posterior = Dirichlet.from_std_parameters(weights * prior_strength)
     return ConjugateBayesianParameter(prior, posterior)
@@ -30,7 +30,7 @@ def _default_sb_param(truncation, prior_strength):
 def _default_concentration_param(mean, prior_strength):
     shape = torch.ones_like(mean) * prior_strength
     rate = prior_strength / mean
-    prior = Gamma.from_std_parameters(shape, rate) 
+    prior = Gamma.from_std_parameters(shape, rate)
     posterior = Gamma.from_std_parameters(shape.clone(), rate.clone())
     return ConjugateBayesianParameter(prior, posterior)
 
@@ -51,9 +51,7 @@ class Categorical(Model):
             :any:`Categorical`
 
         '''
-        tensorconf = {'dtype': weights.dtype, 'device': weights.device,
-                      'requires_grad': False}
-        return cls(_default_param(weights.detach(), prior_strength, tensorconf))
+        return cls(_default_param(weights.detach(), prior_strength))
 
     def __init__(self, weights):
         super().__init__()
@@ -105,7 +103,7 @@ class SBCategorical(Model):
         super().__init__()
         self.stickbreaking = stickbreaking
         device = self.stickbreaking.posterior.params.concentrations.device
-        self.ordering = torch.arange(stickbreaking.posterior.dim[0], 
+        self.ordering = torch.arange(stickbreaking.posterior.dim[0],
                                      device=device)
 
     @property
@@ -143,7 +141,7 @@ class SBCategorical(Model):
         log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
 
         pad = torch.ones_like(log_1_v)
-        self.cache['sb_stats'] = torch.cat([log_1_v[:, None], 
+        self.cache['sb_stats'] = torch.cat([log_1_v[:, None],
                                             pad[:, None]], dim=-1)
 
         return stats[:, self.ordering] @ log_prob
@@ -155,7 +153,7 @@ class SBCategorical(Model):
         s2 = torch.zeros_like(ordered_stats)
         s2[:, :-1] = ordered_stats[:, 1:]
         s2 = torch.flip(torch.flip(s2, dims=(1,)).cumsum(dim=1), dims=(1,))
-        new_stats = torch.cat([ordered_stats[:, :, None], s2[:, :, None]], 
+        new_stats = torch.cat([ordered_stats[:, :, None], s2[:, :, None]],
                               dim=-1)
         shape = new_stats.shape
         new_stats = new_stats.reshape(-1, 2)
@@ -167,7 +165,7 @@ class SBCategorical(Model):
 class SBCategoricalHyperPrior(SBCategorical):
     '''Categorical with a truncated stick breaking prior and a hyper-prior
     over the concentration parameter of the stick breaking process.
-    
+
     '''
 
     @classmethod
@@ -186,7 +184,7 @@ class SBCategoricalHyperPrior(SBCategorical):
 
         '''
         concentration = _default_concentration_param(
-            torch.ones(1) * prior_strength / 2,
+            torch.ones(1) * prior_strength,
             hyper_prior_strength)
         sb = _default_sb_param(truncation, prior_strength)
         return cls(sb, concentration)
@@ -202,7 +200,7 @@ class SBCategoricalHyperPrior(SBCategorical):
                 self.concentration.value()
 
     def mean_field_factorization(self):
-        return [[self.concentration, self.stickbreaking]]
+        return [[self.stickbreaking, self.concentration]]
 
     def accumulate(self, stats):
         return {
