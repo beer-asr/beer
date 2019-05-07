@@ -23,7 +23,7 @@ def main():
 
     error_rate = (1 - args.precision) / 3
     phones = read_phone(args.phonelist)
-
+    np.random.seed(1000000)
     with open(args.input_trans, 'r') as f, open(args.output_trans, 'w') as o:
         for line in f:
             tokens = line.strip().split()

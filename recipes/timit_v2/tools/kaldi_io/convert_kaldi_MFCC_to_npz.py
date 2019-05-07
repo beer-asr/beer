@@ -19,7 +19,7 @@ def main():
     for nk, k in enumerate(uttList):
         perFrame = list(map(float, k.split()))
         arr.append(perFrame)
-    arrNp = np.asarray(arr)
+    arrNp = np.array(arr)
     np.save(outdir + uttName + '.npy', arrNp)
 
 if __name__ == '__main__':
