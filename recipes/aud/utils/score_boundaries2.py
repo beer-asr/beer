@@ -32,6 +32,7 @@ def get_hits(ref_bounds, hyp_bounds, delta=1):
         min_dist = np.abs(b - hyp_bounds).min()
         if min_dist <= delta:
             hits += 1
+            ref_bounds[np.abs(b-hyp_bounds).argmin()] = 1000000
     return hits
 
 
@@ -64,7 +65,7 @@ def map_trans(trans, mapfile):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--delta', default=1, type=int,
+    parser.add_argument('-d', '--delta', default=2, type=int,
                         help='acceptance threshold (in frame) to consider a ' \
                              'boundary a "hit"')
     parser.add_argument('--mapping', help='mapping')

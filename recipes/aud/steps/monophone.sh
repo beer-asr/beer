@@ -2,6 +2,7 @@
 
 . path.sh
 
+prior=gamma_dirichlet_process
 parallel_env=sge
 parallel_opts=""
 parallel_njobs=20
@@ -9,6 +10,11 @@ nargs=6
 
 while [[ $# -gt $nargs ]]; do
     case $1 in
+      --prior)
+      prior=$2
+      shift
+      shift
+      ;;
       --parallel-env)
       parallel_env=$2
       shift
@@ -36,6 +42,9 @@ if [ $# -ne $nargs ]; then
     echo "Train a HMM based monophone phone recognizer system."
     echo ""
     echo "Options:"
+    echo "  --prior             type of prior [gamma_dirichlet_process|"
+    echo "                      dirichlet_process|dirichlet] for the"
+    echo "                      units weights (default:gamma_dirichlet_process)"
     echo "  --parallel-env      parallel environment to use (default:sge)"
     echo "  --parallel-opts     options to pass to the parallel environmenti (default: "")"
     echo "  --parallel-njobs    number of parallel jobs to use (default: 4)"
@@ -67,8 +76,8 @@ if [ ! -f $outdir/0.mdl ]; then
         $langdir/units $outdir/ploop_graph.pkl || exit 1
     beer hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
         $outdir/decode_graph.pkl || exit 1
-    beer hmm mkphoneloop $outdir/decode_graph.pkl $outdir/hmms.mdl \
-        $outdir/0.mdl || exit 1
+    beer hmm mkphoneloop --weights-prior $prior $outdir/decode_graph.pkl \
+        $outdir/hmms.mdl $outdir/0.mdl || exit 1
 else
     echo "Phone Loop model already created. Skipping."
 fi

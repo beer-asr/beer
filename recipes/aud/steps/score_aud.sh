@@ -30,6 +30,7 @@ if [ $# -ne $nargs ]; then
     echo "Score the data-driven acoustic unit transcription"
     echo ""
     echo "Options:"
+    echo "  --au-mapping        generate a au->phone mapping"
     echo "  --mapping           phone mapping"
     echo ""
     exit 1
@@ -55,12 +56,19 @@ if [ ! -f $outdir/.done_per ]; then
         > $outdir/au_phone_trans
 
     echo "computing the equivalent Phone Error Rate"
-    python utils/ter.py $mapping --no-repeat $ref_ali \
+    python utils/ter.py --no-repeat $mapping $ref_ali \
         $outdir/au_phone_trans > $outdir/eq_per || exit 1
 
     touch $outdir/.done_per
 fi
 echo "eq. PER: $(tail -n 1 $outdir/eq_per)"
+
+if [ ! -f $outdir/.done_enr ]; then
+    echo "evaluating the entropy rate"
+    python utils/entropy_rate.py $hyp_ali > $outdir/entropy_rate || exit 1
+    touch $outdir/.done_enr
+fi
+echo "enrtropy rate, perplexity: $(tail -n 1 $outdir/entropy_rate)"
 
 if [ ! -f $outdir/.done_pb ]; then
     echo "evaluating the segmentation"

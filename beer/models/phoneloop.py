@@ -93,8 +93,7 @@ class PhoneLoop(HMM):
                             phone_resps.view(1, -1))
             retval.update(self.categorical.accumulate(resps_stats))
         else:
-            nparams = self.weights.posterior.natural_parameters()
-            fake_stats = torch.zeros_like(nparams, requires_grad=False)
-            retval.update(self.categorical.accumulate(resps_stats))
+            fake_stats = torch.zeros_like(self.categorical.mean, requires_grad=False)
+            retval.update(self.categorical.accumulate(fake_stats[None, :]))
         return retval
 

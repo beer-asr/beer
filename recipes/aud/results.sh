@@ -31,7 +31,7 @@ fi
 
 db=$1
 
-header="$(printf "| %-50s | %-10s | %-10s | %-10s | %-10s | %-10s |" model dataset precision recall f-score "eq. PER")"
+header="$(printf "| %-50s | %-10s | %-10s | %-10s | %-10s | %-10s | %-10s |" model dataset precision recall f-score perplexity "eq. PER")"
 len=$(($(echo "$header" | wc -c) -1 ))
 printf '=%.0s' $(eval echo "{1..$len}")
 printf '\n'
@@ -46,7 +46,8 @@ for path in "$expdir/$db"/*/decode_perframe/*/score; do
     prec=$(tail -n1 $path/phone_boundaries | cut -d, -f1)
     rec=$(tail -n1 $path/phone_boundaries | cut -d, -f2)
     fscore=$(tail -n1 $path/phone_boundaries | cut -d, -f3)
-    printf "| %-50s | %-10s | %-10s | %-10s | %-10s | %-10s |\n" $model $dataset $prec $rec $fscore $eq_per
+    perplexity=$(tail -n1 $path/entropy_rate| cut -d, -f2)
+    printf "| %-50s | %-10s | %-10s | %-10s | %-10s | %-10s | %-10s |\n" $model $dataset $prec $rec $fscore $perplexity $eq_per
 done
 printf '=%.0s' $(eval echo "{1..$len}")
 printf '\n'

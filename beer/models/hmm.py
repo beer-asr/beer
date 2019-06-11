@@ -70,7 +70,7 @@ class HMM(DiscreteLatentModel):
         return self.modelset.sufficient_statistics(data)
 
     def expected_log_likelihood(self, stats, inference_graph=None,
-                                viterbi=True, state_path=None,
+                                viterbi=False, state_path=None,
                                 scale=1.):
         trans_posts = True if inference_graph is None else False
         if inference_graph is None:
