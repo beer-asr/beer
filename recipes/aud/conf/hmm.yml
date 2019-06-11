@@ -29,7 +29,7 @@
 
 
 - group_name: speech-unit
-  n_normal_per_state: 8
+  n_normal_per_state: 4
   prior_strength: 1.
   noise_std: 0.1
   cov_type: diagonal

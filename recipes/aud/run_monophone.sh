@@ -16,9 +16,10 @@ db=timit
 dataset=train
 
 # Features
-feaname=mbn_babel
+feaname=mfcc
 
 # Model
+ngauss=4
 latent_dim=45
 
 # Training
@@ -56,12 +57,13 @@ steps/create_dataset.sh $datadir/$db/$dataset \
 steps/monophone.sh \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
-    conf/hmm.yml \
+    conf/hmm_${ngauss}g.yml \
     data/$db/lang \
     data/$db/$dataset \
     $expdir/$db/datasets/$feaname/${dataset}.pkl \
-    $epochs $expdir/$db/monophone_${feaname}
+    $epochs $expdir/$db/monophone_${feaname}_${ngauss}g
 
+exit 0
 
 # Subspace HMM monophone training.
 steps/subspace_monophone.sh \

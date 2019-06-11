@@ -1,9 +1,8 @@
 
 import torch
 from .hmm import HMM
-from .mixture import _default_param
+from .categorical import _default_param, Categorical
 from .parameters import ConjugateBayesianParameter
-from ..dists import Dirichlet, DirichletStdParams
 from ..utils import logsumexp
 
 
@@ -14,7 +13,7 @@ class PhoneLoop(HMM):
     'Phone Loop HMM.'
 
     @classmethod
-    def create(cls, graph, start_pdf, end_pdf, modelset, weights=None,
+    def create(cls, graph, start_pdf, end_pdf, modelset, categorical=None,
                prior_strength=1.0):
         '''Create a PhoneLoop model.
 
@@ -25,8 +24,8 @@ class PhoneLoop(HMM):
                 corresponding sub-HMM.
             end_pdf (dict): Mapping symbol/end state of the
                 corresponding sub-HMM.
-            weights (:any:`BayesianParameter`): Initial unigram
-                probability of each phone.
+            categorical (``Categorical``): Categorical model of the
+                mixing weights.
             prior_strength (float): Strength of the prior over the
                 weights.
         '''
@@ -35,30 +34,28 @@ class PhoneLoop(HMM):
         tensor = bayes_param.prior.natural_parameters()
         dtype, device = tensor.dtype, tensor.device
 
-        if weights is None:
+        if categorical is None:
             weights = torch.ones(len(start_pdf), dtype=dtype, device=device)
             weights /= len(start_pdf)
-        else:
-            weights = torch.tensor(weights, dtype=dtype, device=device,
-                                   requires_grad=False)
-        weights_param = _default_param(weights, prior_strength)
-        return cls(graph, modelset, start_pdf, end_pdf, weights_param)
+            categorical = Categorical.create(weights, prior_strength)
+        return cls(graph, modelset, start_pdf, end_pdf, categorical)
 
-    def __init__(self, graph, modelset, start_pdf, end_pdf, weights):
+    def __init__(self, graph, modelset, start_pdf, end_pdf, categorical):
         super().__init__(graph, modelset)
         self.start_pdf = start_pdf
         self.end_pdf = end_pdf
-        self.weights = weights
-        self.weights.register_callback(self._on_weights_update)
-        self._on_weights_update()
+        self.categorical = categorical
+        #param = self.categorical.mean_field_factorization()[0][0]
+        #param.register_callback(self._on_weights_update)
+        #self._on_weights_update()
 
     def _on_weights_update(self):
-        lhf = self.weights.likelihood_fn
-        nparams = self.weights.natural_form()
-        data = torch.eye(len(self.start_pdf), dtype=nparams.dtype,
-                         device=nparams.device, requires_grad=False)
-        stats = lhf.sufficient_statistics(data)
-        log_weights = lhf(nparams, stats)
+        mean = self.categorical.mean
+        tensorconf = {'dtype': mean.dtype, 'device': mean.device,
+                      'requires_grad': False}
+        data = torch.eye(len(self.start_pdf), **tensorconf)
+        stats = self.categorical.sufficient_statistics(data)
+        log_weights = self.categorical.expected_log_likelihood(stats)
         start_idxs = [value for value in self.start_pdf.values()]
         for end_idx in self.end_pdf.values():
             self.graph.trans_log_probs[end_idx, start_idxs] = log_weights
@@ -67,9 +64,18 @@ class PhoneLoop(HMM):
     # Model interface.
 
     def mean_field_factorization(self):
-        params = super().mean_field_factorization()
-        params[0] += [self.weights]
-        return params
+        l1 = self.modelset.mean_field_factorization()
+        l2 = self.categorical.mean_field_factorization()
+        diff = len(l1) - len(l2)
+        if diff > 0:
+            l2 += [[] for _ in range(abs(diff))]
+        else:
+            l1 += [[] for _ in range(abs(diff))]
+        return [u + v for u, v in zip(l1, l2)]
+
+    def expected_log_likelihood(self, *args, **kwargs):
+        self._on_weights_update()
+        return super().expected_log_likelihood(*args, **kwargs)
 
     def accumulate(self, stats, parent_msg=None):
         retval = super().accumulate(stats, parent_msg)
@@ -83,12 +89,11 @@ class PhoneLoop(HMM):
             phone_resps = trans_resps[:, start_idxs]
             phone_resps = phone_resps[end_idxs, :].sum(dim=0)
             phone_resps += self.cache['resps'][0][start_idxs]
-            lhf = self.weights.likelihood_fn
-            resps_stats = lhf.sufficient_statistics(phone_resps.view(1, -1))
-            retval.update({self.weights: resps_stats.view(-1)})
+            resps_stats = self.categorical.sufficient_statistics(
+                            phone_resps.view(1, -1))
+            retval.update(self.categorical.accumulate(resps_stats))
         else:
-            nparams = self.weights.posterior.natural_parameters()
-            fake_stats = torch.zeros_like(nparams, requires_grad=False)
-            retval.update({self.weights: fake_stats})
+            fake_stats = torch.zeros_like(self.categorical.mean, requires_grad=False)
+            retval.update(self.categorical.accumulate(fake_stats[None, :]))
         return retval
 

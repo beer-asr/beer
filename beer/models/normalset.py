@@ -29,7 +29,8 @@ def _default_fullcov_param(mean, cov, size, prior_strength, noise_std,
                            tensorconf):
     cov = _full_cov(cov, mean.shape[-1], tensorconf).repeat(size, 1, 1)
     means = mean.repeat(size, 1)
-    noise = torch.randn(size, len(mean), **tensorconf) * noise_std
+    noise = torch.randn(size, len(mean), **tensorconf) * noise_std \
+                                        * cov.diag().sqrt()[None, :]
     scale = torch.tensor(prior_strength, **tensorconf).repeat(size, 1)
     dof = torch.tensor(prior_strength + len(mean) - 1, **tensorconf).repeat(size, 1)
     scale_matrix = (cov.inverse() / dof[:, :, None])
@@ -42,7 +43,8 @@ def _default_diagcov_param(mean, cov, size, prior_strength, noise_std,
                            tensorconf):
     cov = _full_cov(cov, mean.shape[-1], tensorconf)
     means = mean.repeat(size, 1)
-    noise = torch.randn(size, len(mean), **tensorconf) * noise_std
+    noise = torch.randn(size, len(mean), **tensorconf) * noise_std \
+                                        * cov.diag().sqrt()[None, :]
     scale = torch.tensor(prior_strength, **tensorconf).repeat(size, 1)
     shape = torch.tensor(prior_strength, **tensorconf).repeat(size, 1)
     rates = prior_strength * cov.diag().repeat(size, 1)
@@ -56,7 +58,8 @@ def _default_isocov_param(mean, cov, size, prior_strength, noise_std,
     cov = _full_cov(cov, mean.shape[-1], tensorconf)
     variance = cov.diag().max()
     means = mean.repeat(size, 1)
-    noise = torch.randn(size, len(mean), **tensorconf) * noise_std
+    noise = torch.randn(size, len(mean), **tensorconf) * noise_std \
+                                        * cov.diag().sqrt()[None, :]
     scale = torch.tensor(prior_strength, **tensorconf).repeat(size, 1)
     shape = torch.tensor(prior_strength, **tensorconf).repeat(size, 1)
     rate =  prior_strength * variance.repeat(size, 1)

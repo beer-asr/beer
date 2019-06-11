@@ -7,7 +7,6 @@ from . import mkdecodegraph
 from . import mkphoneloop
 from . import mkphoneloopgraph
 from . import mkphones
-from . import optimizer
 from . import posteriors
 from . import phonelist
 from . import train
@@ -15,7 +14,7 @@ from . import update
 
 
 cmds = [accumulate, decode, mkaligraph, mkdecodegraph, mkphoneloop,
-        mkphoneloopgraph, mkphones, optimizer, posteriors,
+        mkphoneloopgraph, mkphones, posteriors,
         phonelist, train, update]
 
 def setup(parser):

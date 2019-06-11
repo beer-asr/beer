@@ -6,6 +6,7 @@
 
 from .basedist import *
 from .dirichlet import *
+from .gamma import * 
 from .isonormalgamma import *
 from .normalgamma import *
 from .normalwishart import *

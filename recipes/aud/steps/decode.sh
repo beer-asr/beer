@@ -48,7 +48,7 @@ if [ $# -ne $nargs ]; then
     echo ""
     echo "Options:"
     echo "  --acoustic-scale    acoustic model scaling factor (default: 1)"
-    echo "  --per-frame         output per frame label (default: false)"
+    echo "  --per-frame         output per frame label"
     echo "  --parallel-env      parallel environment to use (default:sge)"
     echo "  --parallel-opts     options to pass to the parallel environment"
     echo "  --parallel-njobs    number of parallel jobs to use"
