@@ -28,6 +28,7 @@ def main():
             except KeyError as err:
                 print(f'skipping utterance: {uttid} because of missing word: {err}',
                       file=sys.stderr)
+                continue
             if not args.add_sil:
                 print(uttid, phone_trans)
             else:

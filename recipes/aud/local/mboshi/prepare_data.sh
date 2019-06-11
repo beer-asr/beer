@@ -31,7 +31,7 @@ function scp_line {
 export -f scp_line
 
 
-# Create the uttids/wavs.scp files for each data set.
+# Create the uttids/wav.scp files for each data set.
 chmod +x $datadir/local/mboshi/script/fix_wav.sh
 for x in train dev; do
     if [ ! -f $datadir/$x/uttids ]; then
@@ -42,12 +42,12 @@ for x in train dev; do
             $datadir/local/mboshi/full_corpus_newsplit/${x}.fixed \;
 
 
-        echo "Creating wavs.scp/uttids files for the $x data set..."
+        echo "Creating wav.scp/uttids files for the $x data set..."
         mkdir -p $datadir/$x
         find $datadir/local/mboshi/full_corpus_newsplit/${x}.fixed -name '*wav' \
             -exec bash -c 'scp_line "$0"' {} {} \; \
-            | sort | uniq > $datadir/$x/wavs.scp
-        cat $datadir/$x/wavs.scp | awk '{print $1}' >$datadir/$x/uttids
+            | sort | uniq > $datadir/$x/wav.scp
+        cat $datadir/$x/wav.scp | awk '{print $1}' >$datadir/$x/uttids
     else
         echo "Dataset \"${x}\" already prepared. Skipping."
     fi

@@ -3,29 +3,34 @@
 # Exit if one command fails.
 set -e
 
-#######################################################################
+########################################################################
 ## SETUP
 
-# Directory structure
+## DIRECTORY STRUCTURE
 datadir=data
 feadir=features
 expdir=exp
 
-# Data
-db=timit
+## DATA
+db=globalphone
 dataset=train
+eval_dataset=FR/test
 
-# Features
+## FEATURES
 feaname=mfcc
 
-# Model
-ngauss=4
-latent_dim=45
+## MONOPHONE MODEL
+prior=gamma_dirichlet_process # Type of prior over the weights.
+ngauss=4        # number of Gaussian per state.
+latent_dim=100  # latent dimension of the subspace model
+epochs=40       # number of training epochs
 
-# Training
-epochs=30
+## SCORING
+# This option is mostly for TIMIT.
+mapping="--mapping data/timit/lang/phones_61_to_39.txt"
 
-#######################################################################
+########################################################################
+
 
 # Load the BEER anaconda environment.
 . path.sh
@@ -39,18 +44,19 @@ echo "--> Preparing data for the $db database"
 local/$db/prepare_data.sh $datadir/$db
 
 
-echo "--> Extracting features for the $db database"
-steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$dataset \
-     $feadir/$db/$dataset
+for x in $train_dataset $eval_dataset; do
+    echo "--> Extracting features for the $db/$x database"
+    steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$x \
+         $feadir/$db/$x
 
-
-# Create a "dataset". This "dataset" is just an object
-# associating the features with their utterance id and some
-# other meta-data (e.g. global mean, variance, ...).
-echo "--> Creating dataset(s) for $db database"
-steps/create_dataset.sh $datadir/$db/$dataset \
-    $feadir/$db/$dataset/${feaname}.npz \
-    $expdir/$db/datasets/$feaname/${dataset}.pkl
+    # Create a "dataset". This "dataset" is just an object
+    # associating the features with their utterance id and some
+    # other meta-data (e.g. global mean, variance, ...).
+    echo "--> Creating dataset(s) for $db database"
+    steps/create_dataset.sh $datadir/$db/$x \
+        $feadir/$db/$x/${feaname}.npz \
+        $expdir/$db/datasets/$feaname/${x}.pkl
+done
 
 
 # Monophone system training.

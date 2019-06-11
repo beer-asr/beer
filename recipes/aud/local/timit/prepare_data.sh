@@ -118,7 +118,7 @@ for x in train dev test; do
     mkdir -p $outdir/${x}
     cp $dir/${x}.human_alignments $outdir/$x/ali
     cp $dir/$x.uttids $outdir/$x/uttids
-    cp $dir/${x}_wav.scp $outdir/$x/wavs.scp
+    cp $dir/${x}_wav.scp $outdir/$x/wav.scp
     cp $dir/${x}.text $outdir/$x/trans
 done
 

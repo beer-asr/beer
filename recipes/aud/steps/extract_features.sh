@@ -20,7 +20,7 @@ if [ ! -f $feadir/${feaname}.npz ]; then
     mkdir -p $feadir/${feaname}_tmp
 
     # Extract the features.
-    beer features extract $conf $datadir/wavs.scp \
+    beer features extract $conf $datadir/wav.scp \
         $feadir/${feaname}_tmp || exit 1
 
     # Put all the features files into a single archive.

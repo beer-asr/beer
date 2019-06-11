@@ -4,23 +4,24 @@
 set -e
 
 ########################################################################
+## SETUP
 
 ## DIRECTORY STRUCTURE
 datadir=data
 feadir=features
-expdir=exp_bw
+expdir=exp
 
 ## DATA
 db=timit
-train_dataset=train
-eval_dataset=test
+train_dataset=FR/train
+eval_dataset=FR/test
 
 ## FEATURES
 feaname=mfcc
 
-## AUD
-prior=dirichlet # Type of prior over the weights.
-ngauss=4        # Number of Gaussian per state.
+## AUD MODEL
+prior=gamma_dirichlet_process # Type of prior over the weights.
+ngauss=4        # number of Gaussian per state.
 nunits=100      # maximum number of discovered units
 epochs=30       # number of training epochs
 
@@ -29,6 +30,7 @@ epochs=30       # number of training epochs
 mapping="--mapping data/timit/lang/phones_61_to_39.txt"
 
 ########################################################################
+
 
 # Load the BEER anaconda environment.
 . path.sh
@@ -40,6 +42,7 @@ mkdir -p $datadir $expdir $feadir
 
 echo "--> Preparing data for the $db database"
 local/$db/prepare_data.sh $datadir/$db
+
 
 echo "--> Preparing pseudo-phones \"language\" information"
 mkdir -p data/$db/lang_aud
