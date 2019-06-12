@@ -14,7 +14,7 @@ model and the features.
 corpora.
 * `steps`: Directory containing scripts dedicated to one step of the
 AUD pipe (features extraction, decoding, ...)
-* `utils`: Directory contain miscellaneous scripts.
+* `utils`: Directory containing miscellaneous scripts.
 
 
 Combining Corpora
