@@ -1,11 +1,15 @@
 #!/bin/bash
 
-if [ $# -ne 1 ]; then
-    echo "$0 <out-dir>"
+set -e
+
+if [ $# -ne 2 ]; then
+    echo "$0 <out-dir> <lang>"
     exit 1;
 fi
 
+
 outdir=$1
+languages=$2
 mkdir -p $outdir
 
 if [ -f $outdir/.done ]; then
@@ -13,15 +17,12 @@ if [ -f $outdir/.done ]; then
     exit 0
 fi
 
-# BUT
-rootdir=/mnt/matylda2/data/GLOBALPHONE
-
-# Default languages
-languages="PO GE SP FR"
-echo "Extracting languages: $languages"
 
 # Assume script is being called in the recipe directory.
 dir=$(dirname $0)
+
+# BUT
+rootdir=/mnt/matylda2/data/GLOBALPHONE
 
 ## Kaldi data preparation.
 # 1) Extract the audio
@@ -46,12 +47,47 @@ done
 
 for lang in $languages; do
     mkdir -p $outdir/$lang
+
+    # Prepare the list of language specific units.
+    mkdir -p $outdir/$lang/lang
+    cat $dir/data/$lang/local/dict/silence_phones.txt | \
+        awk '{print $1" non-speech-unit"}' \
+        > $outdir/$lang/lang/units
+    cat $dir/data/$lang/local/dict/nonsilence_phones.txt | \
+        awk -v lang=$lang '{print lang"_"$1" speech-unit"}' \
+        >> $outdir/$lang/lang/units
+
+    # Mapping name -> language specific name.
+    cat $dir/data/$lang/local/dict/silence_phones.txt | \
+        awk '{print $1" "$1}' \
+        > $dir/data/$lang/local/dict/mapping.txt
+    cat $dir/data/$lang/local/dict/nonsilence_phones.txt | \
+        awk -v lang=$lang '{print $1" "lang"_"$1}' \
+        >> $dir/data/$lang/local/dict/mapping.txt
+
     for x in dev eval train; do
-        mv -f $dir/data/$lang/$x $outdir/$lang
-        cat $outdir/$lang/$x/wav.scp | awk '{print $1}' \
-            > $outdir/$lang/$x/uttids || exit 1
+        mkdir -p $outdir/$lang/$x
+
+        # Make language specific transcription.
+        python utils/maptrans.py \
+            $dir/data/$lang/local/dict/mapping.txt \
+            $dir/data/$lang/$x/trans \
+            > $outdir/$lang/$x/trans
+
+
+        cat $dir/data/$lang/$x/trans | awk '{print $1}' \
+            > $outdir/$lang/$x/uttids
+
+        # Keep only the utterances for which there is a proper
+        # transcription.
+        cat $dir/data/$lang/$x/wav.scp | \
+            grep -f $outdir/$lang/$x/uttids > $outdir/$lang/$x/wav.scp
     done
-    mv -f $outdir/$lang/eval $outdir/$lang/test
+
+    # Rename "eval" to "test" for consistency with other corpora.
+    if [ -d $outdir/$lang/eval ]; then
+        mv -f $outdir/$lang/eval $outdir/$lang/test
+    fi
 done
 
 date > $outdir/.done

@@ -82,7 +82,7 @@ steps/aud.sh \
     --parallel-njobs 30 \
     conf/hmm_${ngauss}g.yml \
     data/$db/lang_aud \
-    data/$db/$train_dataset/uttids \
+    data/$db/$train_dataset \
     $expdir/$db/datasets/$feaname/${train_dataset}.pkl \
     $epochs $expdir/$db/aud_${feaname}_${ngauss}g_${prior}
 
