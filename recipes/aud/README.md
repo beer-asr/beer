@@ -23,7 +23,7 @@ Combining Corpora
 It is possible to combine several corpora together. This is useful, for
 instance, when one wants to train a multi-lingual phone recognizer
 system which can be used to build stronger AUD system. Let's assume
-we have a corpora composed of an german and french parts stored in
+we have a corpus composed of a german and a french parts stored in
 `data/corpora/GE` and `data/corpora/FR` respectively. We can create
 a new corpora combining both of them in the following way:
 
