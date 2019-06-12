@@ -17,8 +17,8 @@ AUD pipe (features extraction, decoding, ...)
 * `utils`: Directory contain miscellaneous scripts.
 
 
-Combining Corpus
-----------------
+Combining Corpora
+-----------------
 
 It is possible to combine several corpora together. This is useful, for
 instance, when one wants to train a multi-lingual phone recognizer
