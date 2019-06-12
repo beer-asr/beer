@@ -81,7 +81,7 @@ for lang in $languages; do
         # Keep only the utterances for which there is a proper
         # transcription.
         cat $dir/data/$lang/$x/wav.scp | \
-            grep -f $outdir/$lang/$x/uttids > $outdir/$lang/$x/wav.scp
+            grep -w -f $outdir/$lang/$x/uttids > $outdir/$lang/$x/wav.scp
     done
 
     # Rename "eval" to "test" for consistency with other corpora.
