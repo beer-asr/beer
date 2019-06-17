@@ -141,7 +141,7 @@ def main(args, logger):
     }
     units_emissions.replace_parameters(newparams)
     for unit in iterate_units(units_emissions, nunits, nstates):
-        weights = unit.weights
+        weights = unit.categoricalset.weights
         means_precisions = unit.modelset.means_precisions
         weights.stats = init_weights_stats(weights)
         means_precisions.stats = init_means_precisions_stats(means_precisions,
