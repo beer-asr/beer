@@ -84,31 +84,31 @@ steps/aud.sh \
     data/$db/lang_aud \
     data/$db/$train_dataset \
     $expdir/$db/datasets/$feaname/${train_dataset}.pkl \
-    $epochs $expdir/$db/aud_${feaname}_${ngauss}g_${prior}
+    $epochs $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}
 
 
 for x in $train_dataset $eval_dataset; do
-    outdir=$expdir/$db/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$x
+    outdir=$expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$x
 
     echo "--> Decoding $db/$x dataset"
     steps/decode.sh \
         --per-frame \
         --parallel-opts "-l mem_free=1G,ram_free=1G" \
         --parallel-njobs 30 \
-        $expdir/$db/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
-        data/$db/$x \
-        $expdir/$db/datasets/$feaname/${x}.pkl \
+        $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
+        data/$db/$subset/$x \
+        $expdir/$db/$subset/datasets/$feaname/${x}.pkl \
         $outdir
 
     if [ ! $x == "$train_dataset" ]; then
-        au_mapping="--au-mapping $expdir/$db/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$train_dataset/score/au_phone"
+        au_mapping="--au-mapping $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$train/score/au_phone"
     fi
 
     echo "--> Scoring $db/$x dataset"
     steps/score_aud.sh \
         $au_mapping \
         $mapping \
-        data/$db/$x/ali \
+        data/$db/$subset/$x/ali \
         $outdir/trans \
         $outdir/score
 done

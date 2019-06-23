@@ -8,7 +8,7 @@ set -e
 ## DIRECTORY STRUCTURE
 datadir=data
 feadir=features
-expdir=exp_newinit
+expdir=exp
 
 ## DATA
 db=timit
@@ -33,10 +33,12 @@ mapping="--mapping data/timit/lang/phones_61_to_39.txt"
 # Load the BEER anaconda environment.
 . path.sh
 
+modeldir=$1
+
 
 for epoch in $(seq 0 1 40); do
     for x in $train_dataset $eval_dataset; do
-        modeldir=$expdir/$db/aud_${feaname}_${ngauss}g_${prior}
+        #modeldir=$expdir/$db/aud_${feaname}_${ngauss}g_${prior}
         outdir=$modeldir/decode_perframe_e${epoch}/$x
 
         echo "--> Decoding $db/$x dataset"
@@ -44,7 +46,7 @@ for epoch in $(seq 0 1 40); do
             --per-frame \
             --parallel-opts "-l mem_free=1G,ram_free=1G" \
             --parallel-njobs 30 \
-            $expdir/$db/aud_${feaname}_${ngauss}g_${prior}/${epoch}.mdl \
+            $modeldir/${epoch}.mdl \
             data/$db/$x \
             $expdir/$db/datasets/$feaname/${x}.pkl \
             $outdir

@@ -79,7 +79,7 @@ def main(args, logger):
 
     logger.debug(f'load the acoustic units name and group')
     with open(args.units, 'r') as f:
-        grouped_unitnames = defaultdict(list)
+        grouped_unitnames = {group_name: [] for group_name in groups_conf}
         for line in f:
             name, group = line.strip().split()
             grouped_unitnames[group].append(name)

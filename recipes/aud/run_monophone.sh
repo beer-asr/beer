@@ -3,6 +3,18 @@
 # Exit if one command fails.
 set -e
 
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+    echo "usage: $0 <corpus> [<subset>]"
+    echo ""
+    echo "Build a monophone HMM based phone-recognizer"
+    echo ""
+    echo "Examples:"
+    echo "  $ $0 timit"
+    echo "  $ $0 globalphone FR"
+    echo ""
+    exit 1
+fi
+
 ########################################################################
 ## SETUP
 
@@ -12,8 +24,8 @@ feadir=features     # where will be stored the features
 expdir=exp          # experiment directory where will be stored the models and the results
 
 ## DATA
-db=globalphone      # name of the corpus (timit, mboshi, globalphone)
-subset=FR           # subset of the corpus (mostly used for globalphone: FR, GE, ...)
+db=$1               # name of the corpus (timit, mboshi, globalphone)
+subset=$2           # subset of the corpus (mostly used for globalphone: FR, GE, ...)
 train=train         # name of the train set (usually "train")
 test=test           # name of the test set (usuall "test")
 
@@ -28,7 +40,7 @@ epochs=40           # number of training epochs
 
 ## SCORING
 # This option is mostly for TIMIT.
-mapping="--mapping data/timit/lang/phones_61_to_39.txt"
+mapping="--mapping data/timit/lang/phones_48_to_39.txt"
 
 ########################################################################
 
@@ -71,48 +83,41 @@ steps/monophone.sh \
     data/$db/$subset/lang \
     data/$db/$subset/$train \
     $expdir/$db/$subset/datasets/$feaname/${train}.pkl \
-    $epochs $expdir/$db/$subset/monophone_${feaname}_${ngauss}g_${prior}
+    $epochs \
+    $expdir/$db/$subset/monophone_${feaname}_${ngauss}g_${prior}
 
-exit 0
 
 # Subspace HMM monophone training.
 steps/subspace_monophone.sh \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
     --latent-dim $latent_dim \
-    conf/hmm.yml \
-    $expdir/$db/monophone_${feaname} \
-    data/$db/$dataset \
-    $expdir/$db/datasets/$feaname/${dataset}.pkl \
-    $epochs $expdir/$db/subspace_monophone_${feaname}_ldim${latent_dim}
+    conf/hmm_${ngauss}g.yml \
+    $expdir/$db/$subset/monophone_${feaname}_${ngauss}g_${prior} \
+    data/$db/$subset/$train \
+    $expdir/$db/$subset/datasets/$feaname/${train}.pkl \
+    $epochs \
+    $expdir/$db/$subset/subspace_monophone_${feaname}_${ngauss}g_${prior}_ldim${latent_dim}
 
-olddb=$db
-db=timit
-echo "--> Training the subspace Bayesian AUD system"
-steps/subspace_aud.sh \
-    --parallel-opts "-l mem_free=1G,ram_free=1G" \
-    --parallel-njobs 30 \
-    --latent-dim $latent_dim \
-    conf/hmm.yml \
-    $expdir/$olddb/subspace_monophone_${feaname}_ldim${latent_dim}/gsm_30.mdl \
-    $expdir/$db/aud \
-    data/$db/$dataset \
-    $expdir/$db/datasets/$feaname/${dataset}.pkl \
-    $epochs $expdir/$db/subspace_aud_${feaname}_ldim${latent_dim}_pdata${olddb}
+for x in $test; do
+    outdir=$expdir/$db/$subset/subspace_monophone_${feaname}_${ngauss}g_${prior}/decode_perframe/$x
 
+    echo "--> Decoding $db/$x dataset"
+    steps/decode.sh \
+        --per-frame \
+        --parallel-opts "-l mem_free=1G,ram_free=1G" \
+        --parallel-njobs 30 \
+        $expdir/$db/$subset/subspace_monophone_${feaname}_${ngauss}g_${prior}/final.mdl \
+        data/$db/$subset/$x \
+        $expdir/$db/$subset/datasets/$feaname/${x}.pkl \
+        $outdir
 
-
-exit 0
-
-# Subspace HMM monophone training.
-steps/subspace_monophone.sh \
-    --parallel-opts "-l mem_free=1G,ram_free=1G" \
-    --parallel-njobs 30 \
-    --latent-dim $latent_dim \
-    --classes data/$db/lang/classes \
-    conf/hmm.yml \
-    $expdir/$db/monophone_${feaname} \
-    data/$db/$dataset \
-    $expdir/$db/datasets/$feaname/${dataset}.pkl \
-    $epochs $expdir/$db/dsubspace_monophone_${feaname}_ldim${latent_dim}
+    echo "--> Scoring $db/$x dataset"
+    steps/score_aud.sh \
+        $au_mapping \
+        $mapping \
+        data/$db/$subset/$x/ali \
+        $outdir/trans \
+        $outdir/score
+done
 

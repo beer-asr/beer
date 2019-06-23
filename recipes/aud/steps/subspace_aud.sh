@@ -4,14 +4,15 @@ set -e
 
 . path.sh
 
-gsm_latent_dim=10
+prior=gamma_dirichlet_process
+
+gsm_init_var=1
 gsm_init_epochs=1000
 gsm_epochs=1000
 gsm_smoothing_epochs=5000
-gsm_std_lrate=1e-2
+gsm_std_lrate=1e-3
 gsm_latent_nsamples=10
 gsm_params_nsamples=5
-gsm_classes=""
 
 parallel_env=sge
 parallel_opts=""
@@ -20,13 +21,13 @@ nargs=7
 
 while [[ $# -gt $nargs ]]; do
     case $1 in
-      --classes)
-      gsm_classes="-c $2"
+      --prior)
+      prior=$2
       shift
       shift
       ;;
-      --latent-dim)
-      gsm_latent_dim=$2
+      --gsm-prior-var)
+      gsm_init_var=$2
       shift
       shift
       ;;
@@ -52,14 +53,19 @@ while [[ $# -gt $nargs ]]; do
 done
 
 if [ $# -ne $nargs ]; then
-    echo "usage: $0 [OPTS] <hmm-conf> <gsm> <hmmdir> <datadir> <dataset> <epochs> <out-dir>"
+    echo "usage: $0 [OPTS] <hmm-conf> <gsm-init-dir> <langdir> <datadir> <dataset> <epochs> <out-dir>"
     echo ""
     echo "Train a SHMM based AUD system."
     echo ""
     echo "Options:"
+    echo "  Phone Loop Model:"
+    echo "  --prior             type of prior [gamma_dirichlet_process|"
+    echo "                      dirichlet_process|dirichlet] for the"
+    echo "                      units weights (default:gamma_dirichlet_process)"
+    echo ""
     echo "  Generalized Subspace Model:"
-    echo "  --classes           units broad classes file (default: none)"
     echo "  --latent-dim        dimension of the subspace (default: 10)"
+    echo "  --gsm-init-var      variance of the GSM prior (default: 1)"
     echo ""
     echo "  Parallel environment:"
     echo "  --parallel-env      parallel environment to use (default:sge)"
@@ -70,55 +76,72 @@ if [ $# -ne $nargs ]; then
 fi
 
 modelconf=$1
-gsm=$2
-hmmdir=$3
+gsm_init_dir=$2
+langdir=$3
 datadir=$4
 dataset=$5
 epochs=$6
 outdir=$7
 mkdir -p $outdir
 
+gsm_init=$gsm_init_dir/gsm_final.mdl
+units_init=$gsm_init_dir/units_posts_final.pkl
+
+
+# Get the latent dimension from the GSM for initialization.
+cmd="import pickle
+with open(\"${gsm_init}\", \"rb\") as f:
+    gsm = pickle.load(f)
+print(gsm.transform.in_dim)
+"
+gsm_latent_dim=$(python -c "$cmd")
+echo "subspace latent dimension: $gsm_latent_dim"
+
+
+# Create the units' HMM.
+if [ ! -f $outdir/hmms.mdl ]; then
+    beer hmm mkphones -d $dataset $modelconf $langdir/units \
+        $outdir/hmms.mdl || exit 1
+else
+    echo "units' HMM already created. Skipping."
+fi
+
+
+# Create the phone-loop model.
+if [ ! -f $outdir/0.mdl ]; then
+    beer hmm mkphoneloopgraph --start-end-group "non-speech-unit" \
+        $langdir/units $outdir/ploop_graph.pkl || exit 1
+    beer hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
+        $outdir/decode_graph.pkl || exit 1
+    beer hmm mkphoneloop --weights-prior $prior $outdir/decode_graph.pkl \
+        $outdir/hmms.mdl $outdir/hmm_init.mdl || exit 1
+else
+    echo "Phone Loop model already created. Skipping."
+fi
+
 
 # Create the subspace phone-loop model.
 if [ ! -f $outdir/0.mdl ]; then
-    cp $gsm $outdir/gsm_init.mdl || exit 1
-
     beer shmm mksphoneloop \
-        $gsm_classes -g "speech-unit" -l $gsm_latent_dim \
-        $modelconf $hmmdir/final.mdl \
-        /dev/null $outdir/units_posts_init.pkl $outdir/init.mdl
+        -g "speech-unit" -l $gsm_latent_dim \
+        $modelconf $outdir/hmm_init.mdl \
+        $outdir/gsm_init.mdl $outdir/units_posts_init.pkl $outdir/init.mdl
 
-    # Train the GSM and the posteriors.
-    cmd="beer -d shmm train \
-        --gpu \
-        -o $outdir/gsm_optim_state.pth \
-        --posteriors \
-        --learning-rate-std $gsm_std_lrate \
-        --epochs $gsm_init_epochs \
-        --latent-nsamples $gsm_latent_nsamples \
-        --params-nsamples $gsm_params_nsamples \
-        $outdir/gsm_init.mdl $outdir/units_posts_init.pkl \
-        $outdir/init.mdl $outdir/gsm_0.mdl $outdir/units_posts_0.pkl \
-        $outdir/0.mdl"
-
-    utils/parallel/submit_single.sh \
-        "$parallel_env" \
-        "gsm-pretraining" \
-        "-l gpu=1,gpu_ram=2G" \
-        "$cmd" \
-        $outdir/pretraining || exit 1
-
+    echo "using GSM ($gsm_init) for initialization"
+    beer shmm setprior \
+        -v $gsm_init_var \
+        $outdir/gsm_init.mdl \
+        $outdir/units_posts_init.pkl \
+        $outdir/init.mdl \
+        $gsm_init \
+        $units_init \
+        $outdir/gsm_0.mdl \
+        $outdir/units_posts_0.pkl \
+        $outdir/0.mdl
 else
     echo "subspace phone Loop model already created"
 fi
 
-
-# Check if the hmmdir has alignment graphs.
-alis=""
-if [ -f $hmmdir/alis.npz ]; then
-    alis="--alis $hmmdir/alis.npz"
-    echo "using alignments: $hmmdir/alis.npz"
-fi
 
 # Training.
 if [ ! -f $outdir/final.mdl ]; then
@@ -127,8 +150,8 @@ if [ ! -f $outdir/final.mdl ]; then
         sort -t '.' -k 1 -g | tail -1)
     echo "mdl: $mdl"
     epoch="${mdl%.*}"
-    gsm=$outdir/gsm_${epoch}.mdl
-    posts=$outdir/units_posts_${epoch}.pkl
+    gsm=gsm_${epoch}.mdl
+    posts=units_posts_${epoch}.pkl
 
     if [ $epoch -ge 1 ]; then
         echo "found existing model, starting training from epoch $((epoch + 1))"
@@ -166,12 +189,11 @@ if [ ! -f $outdir/final.mdl ]; then
         cmd="beer -d shmm train \
             --gpu \
             -o $outdir/gsm_optim_state.pth \
-            --posteriors \
             --epochs $train_epochs \
             --learning-rate-std $gsm_std_lrate \
             --latent-nsamples $gsm_latent_nsamples \
             --params-nsamples $gsm_params_nsamples \
-            $gsm $posts $outdir/tmp.mdl \
+            $outdir/$gsm $outdir/$posts $outdir/tmp.mdl \
             $outdir/gsm_${epoch}.mdl $outdir/units_posts_${epoch}.pkl \
             $outdir/${epoch}.mdl"
 
@@ -184,9 +206,13 @@ if [ ! -f $outdir/final.mdl ]; then
 
 
         mdl=${epoch}.mdl
+        gsm=gsm_${epoch}.mdl
+        posts=units_posts_${epoch}.pkl
     done
 
     cp $outdir/$mdl $outdir/final.mdl
+    cp $outdir/$gsm $outdir/gsm_final.mdl
+    cp $outdir/$posts $outdir/units_posts_final.pkl
 else
     echo "subspace phone-loop already trained"
 fi

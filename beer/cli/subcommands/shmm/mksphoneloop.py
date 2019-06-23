@@ -54,6 +54,8 @@ def setup(parser):
     parser.add_argument('-g', '--unit-group', default='speech-unit',
                        help='group of unit to model with the subspace ' \
                             '(default:"speech-unit")')
+    parser.add_argument('-p', '--posteriors',
+                        help='posteriors to use for initialization')
     parser.add_argument('-l', '--latent-dim', default=2, type=int,
                         help='dimension of the latent space (default:2)')
     parser.add_argument('-d', '--dlatent-dim', default=2, type=int,
@@ -155,6 +157,9 @@ def main(args, logger):
     if labels is None:
         gsm = beer.GSM.create(tpl, args.latent_dim, latent_prior)
         latent_posts = gsm.new_latent_posteriors(len(units))
+        if args.posteriors:
+            with open(args.posteriors, 'wb') as f:
+                init_posts = pickle.load(f)[0]
         pdfvecs = gsm.expected_pdfvecs(latent_posts)
         gsm.update_models(units, pdfvecs)
     else:
