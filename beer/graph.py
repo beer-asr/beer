@@ -303,8 +303,8 @@ class CompiledGraph(torch.nn.Module):
         '''
         log_alphas = self._baum_welch_forward(llhs)
         log_betas = self._baum_welch_backward(llhs)
-        lognorm = torch.logsumexp((log_alphas + log_betas)[0], dim=0)
-        state_posts = (log_alphas + log_betas - lognorm).exp()
+        lognorm = torch.logsumexp(log_alphas + log_betas, dim=1)
+        state_posts = (log_alphas + log_betas - lognorm[:, None]).exp()
         if trans_posteriors:
             log_A = self.trans_log_probs
             log_xi = log_alphas[:-1, :, None] + log_A[None] + \
@@ -319,7 +319,7 @@ class CompiledGraph(torch.nn.Module):
             retval = state_posts, trans_posts
         else:
             retval = state_posts
-        return retval
+        return retval, lognorm.mean()
 
 
     def best_path(self, llhs):

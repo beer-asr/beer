@@ -27,7 +27,7 @@ __all__ = ['NormalSet']
 
 def _default_fullcov_param(mean, cov, size, prior_strength, noise_std,
                            tensorconf):
-    cov = _full_cov(cov, mean.shape[-1], tensorconf).repeat(size, 1, 1)
+    cov = _full_cov(cov, mean.shape[-1], tensorconf)
     means = mean.repeat(size, 1)
     noise = torch.randn(size, len(mean), **tensorconf) * noise_std \
                                         * cov.diag().sqrt()[None, :]

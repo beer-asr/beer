@@ -51,6 +51,7 @@ def main(args, logger):
                                           inference_graph=aligraph,
                                           datasize=dataset.size,
                                           scale=args.acoustic_scale)
+        logger.debug(f'ELBO: {float(elbo)}')
         count += 1
 
     logger.debug('saving the accumulated ELBO...')

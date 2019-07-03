@@ -8,7 +8,7 @@ gsm_latent_dim=10
 gsm_init_epochs=15000
 gsm_epochs=1000
 gsm_smoothing_epochs=5000
-gsm_std_lrate=1e-2
+gsm_std_lrate=1e-3
 gsm_latent_nsamples=10
 gsm_params_nsamples=5
 gsm_classes=""
@@ -123,8 +123,8 @@ if [ ! -f $outdir/final.mdl ]; then
         sort -t '.' -k 1 -g | tail -1)
     echo "mdl: $mdl"
     epoch="${mdl%.*}"
-    gsm=$outdir/gsm_${epoch}.mdl
-    posts=$outdir/units_posts_${epoch}.pkl
+    gsm=gsm_${epoch}.mdl
+    posts=units_posts_${epoch}.pkl
 
     if [ $epoch -ge 1 ]; then
         echo "found existing model, starting training from epoch $((epoch + 1))"
@@ -166,7 +166,7 @@ if [ ! -f $outdir/final.mdl ]; then
             --learning-rate-std $gsm_std_lrate \
             --latent-nsamples $gsm_latent_nsamples \
             --params-nsamples $gsm_params_nsamples \
-            $gsm $posts $outdir/tmp.mdl \
+            $outdir/$gsm $outdir/$posts $outdir/tmp.mdl \
             $outdir/gsm_${epoch}.mdl $outdir/units_posts_${epoch}.pkl \
             $outdir/${epoch}.mdl"
 
@@ -179,9 +179,13 @@ if [ ! -f $outdir/final.mdl ]; then
 
 
         mdl=${epoch}.mdl
+        gsm=gsm_${epoch}.mdl
+        posts=units_posts_${epoch}.pkl
     done
 
     cp $outdir/$mdl $outdir/final.mdl
+    cp $outdir/$gsm $outdir/gsm_final.mdl
+    cp $outdir/$posts $outdir/units_posts_final.pkl
 else
     echo "subspace phone-loop already trained"
 fi

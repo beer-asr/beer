@@ -55,10 +55,11 @@ class HMM(DiscreteLatentModel):
                 retval = posts, trans_posts
             else:
                 retval = posts
+            llh = pc_llhs[path].sum()
         else:
-            retval = inference_graph.posteriors(pc_llhs,
+            retval, llh = inference_graph.posteriors(pc_llhs,
                                                 trans_posteriors=trans_posteriors)
-        return retval
+        return retval, llh
 
     ####################################################################
     # Model interface.
@@ -76,20 +77,17 @@ class HMM(DiscreteLatentModel):
         if inference_graph is None:
             inference_graph = self.graph
         pc_llhs = scale * self._pc_llhs(stats, inference_graph)
-        all_resps = self._inference(pc_llhs, inference_graph, viterbi=viterbi,
-                                    state_path=state_path,
-                                    trans_posteriors=trans_posts)
+        all_resps, llh = self._inference(pc_llhs, inference_graph, viterbi=viterbi,
+                                         state_path=state_path,
+                                         trans_posteriors=trans_posts)
         if trans_posts:
             self.cache['resps'], self.cache['trans_resps'] = all_resps
         else:
             self.cache['resps'] = all_resps
-        exp_llh = (pc_llhs * self.cache['resps']).sum(dim=-1)
+        #exp_llh = (pc_llhs * self.cache['resps']).sum(dim=-1)
         self.cache['scale'] = scale
 
-        # We ignore the KL divergence term. It biases the
-        # lower-bound (it may decrease) a little bit but will not affect
-        # the value of the parameters.
-        return exp_llh #- kl_div
+        return llh
 
     def accumulate(self, stats, parent_msg=None):
         scaled_resps = self.cache['scale'] * self.cache['resps']
@@ -118,5 +116,5 @@ class HMM(DiscreteLatentModel):
             inference_graph = self.graph
         stats = self.modelset.sufficient_statistics(data) * scale
         pc_llhs = self._pc_llhs(stats, inference_graph)
-        return self._inference(pc_llhs, inference_graph)
+        return self._inference(pc_llhs, inference_graph)[0]
 

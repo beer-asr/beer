@@ -9,19 +9,19 @@ set -e
 ## DIRECTORY STRUCTURE
 datadir=data
 feadir=features
-expdir=exp
+expdir=exp_ch1
 
 ## DATA
 db=timit
-train_dataset=FR/train
-eval_dataset=FR/test
+train=train
+test=test
 
 ## FEATURES
 feaname=mfcc
 
 ## AUD MODEL
-prior=gamma_dirichlet_process # Type of prior over the weights.
-ngauss=4        # number of Gaussian per state.
+prior=dirichlet_process # Type of prior over the weights.
+ngauss=16        # number of Gaussian per state.
 nunits=100      # maximum number of discovered units
 epochs=30       # number of training epochs
 
@@ -57,7 +57,7 @@ python utils/prepare_lang_aud.py \
     $nunits > data/$db/lang_aud/units
 
 
-for x in $train_dataset $eval_dataset; do
+for x in $train $test; do
     echo "--> Extracting features for the $db/$x database"
     steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$x \
          $feadir/$db/$x
@@ -82,33 +82,33 @@ steps/aud.sh \
     --parallel-njobs 30 \
     conf/hmm_${ngauss}g.yml \
     data/$db/lang_aud \
-    data/$db/$train_dataset/uttids \
-    $expdir/$db/datasets/$feaname/${train_dataset}.pkl \
-    $epochs $expdir/$db/aud_${feaname}_${ngauss}g_${prior}
+    data/$db/$train \
+    $expdir/$db/datasets/$feaname/${train}.pkl \
+    $epochs $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}
 
 
-for x in $train_dataset $eval_dataset; do
-    outdir=$expdir/$db/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$x
+for x in $train $test; do
+    outdir=$expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$x
 
     echo "--> Decoding $db/$x dataset"
     steps/decode.sh \
         --per-frame \
         --parallel-opts "-l mem_free=1G,ram_free=1G" \
         --parallel-njobs 30 \
-        $expdir/$db/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
-        data/$db/$x \
-        $expdir/$db/datasets/$feaname/${x}.pkl \
+        $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
+        data/$db/$subset/$x \
+        $expdir/$db/$subset/datasets/$feaname/${x}.pkl \
         $outdir
 
-    if [ ! $x == "$train_dataset" ]; then
-        au_mapping="--au-mapping $expdir/$db/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$train_dataset/score/au_phone"
+    if [ ! $x == "$train" ]; then
+        au_mapping="--au-mapping $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$train/score/au_phone"
     fi
 
     echo "--> Scoring $db/$x dataset"
     steps/score_aud.sh \
         $au_mapping \
         $mapping \
-        data/$db/$x/ali \
+        data/$db/$subset/$x/ali \
         $outdir/trans \
         $outdir/score
 done

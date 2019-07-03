@@ -109,7 +109,7 @@ fi
 
 
 # Training.
-if [ ! -f $outdir/final.mdl ]; then
+if [ ! -f $outdir/final.mdl ] || [ ! -f $outdir/${epochs}.mdl ]; then
     # Retrieve the last model.
     mdl=$(find $outdir -name "[0-9]*mdl" -exec basename {} \; | \
         sort -t '.' -k 1 -g | tail -1)

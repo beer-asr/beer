@@ -37,7 +37,7 @@ while [[ $# -gt $nargs ]]; do
 done
 
 if [ $# -ne $nargs ]; then
-    echo "usage: $0 [OPTS] <hmm-conf> <langdir> <uttids> <dataset> <epochs> <out-dir>"
+    echo "usage: $0 [OPTS] <hmm-conf> <langdir> <datadir> <dataset> <epochs> <out-dir>"
     echo ""
     echo "Train a HMM based Acoustic Unit Discovery (AUD) system."
     echo ""
@@ -54,7 +54,7 @@ fi
 
 modelconf=$1
 langdir=$2
-uttids=$3
+datadir=$3
 dataset=$4
 epochs=$5
 outdir=$6
@@ -106,7 +106,7 @@ if [ ! -f $outdir/final.mdl ] || [ ! -f $outdir/${epochs}.mdl ]; then
             "hmm-acc" \
             "$parallel_opts" \
             "$parallel_njobs" \
-            "$uttids" \
+            "$datadir/uttids" \
             "$cmd" \
             $outdir/epoch${epoch}|| exit 1
 
