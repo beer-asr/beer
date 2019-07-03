@@ -38,8 +38,7 @@ ngauss=4            # number of Gaussian per state.
 nunits=100          # maximum number of discovered units
 epochs=40           # number of training epochs
 gsm_init=$2         # GSM for initialization
-gsm_init_var=0.0001    # Pior varirance of the GSM.
-outdir=$expdir/$db/$subset/subspace_aud_${feaname}_${ngauss}g_${prior}_iv${gsm_init_var}
+outdir=$expdir/$db/$subset/subspace_aud_${feaname}_${ngauss}g_${prior}
 
 ## SCORING
 # This option is mostly for TIMIT.
@@ -94,7 +93,6 @@ echo "--> Training the subspace Bayesian AUD system"
 steps/subspace_aud.sh \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
-    --gsm-prior-var $gsm_init_var \
     conf/hmm_${ngauss}g.yml \
     $gsm_init \
     data/$db/$subset/lang_aud \

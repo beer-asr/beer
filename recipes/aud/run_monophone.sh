@@ -35,7 +35,7 @@ feaname=mfcc
 ## MONOPHONE MODEL
 prior=gamma_dirichlet_process # Type of prior over the weights.
 ngauss=4            # number of Gaussian per state.
-latent_dim=100      # latent dimension of the subspace model
+latent_dim=40       # latent dimension of the subspace model
 epochs=40           # number of training epochs
 
 ## SCORING
@@ -98,6 +98,9 @@ steps/subspace_monophone.sh \
     $expdir/$db/$subset/datasets/$feaname/${train}.pkl \
     $epochs \
     $expdir/$db/$subset/subspace_monophone_${feaname}_${ngauss}g_${prior}_ldim${latent_dim}
+
+
+exit 0
 
 for x in $test; do
     outdir=$expdir/$db/$subset/subspace_monophone_${feaname}_${ngauss}g_${prior}/decode_perframe/$x

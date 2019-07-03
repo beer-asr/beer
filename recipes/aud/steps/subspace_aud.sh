@@ -6,7 +6,6 @@ set -e
 
 prior=gamma_dirichlet_process
 
-gsm_init_var=1
 gsm_init_epochs=1000
 gsm_epochs=1000
 gsm_smoothing_epochs=5000
@@ -23,11 +22,6 @@ while [[ $# -gt $nargs ]]; do
     case $1 in
       --prior)
       prior=$2
-      shift
-      shift
-      ;;
-      --gsm-prior-var)
-      gsm_init_var=$2
       shift
       shift
       ;;
@@ -62,10 +56,6 @@ if [ $# -ne $nargs ]; then
     echo "  --prior             type of prior [gamma_dirichlet_process|"
     echo "                      dirichlet_process|dirichlet] for the"
     echo "                      units weights (default:gamma_dirichlet_process)"
-    echo ""
-    echo "  Generalized Subspace Model:"
-    echo "  --latent-dim        dimension of the subspace (default: 10)"
-    echo "  --gsm-init-var      variance of the GSM prior (default: 1)"
     echo ""
     echo "  Parallel environment:"
     echo "  --parallel-env      parallel environment to use (default:sge)"
@@ -125,19 +115,15 @@ if [ ! -f $outdir/0.mdl ]; then
     beer shmm mksphoneloop \
         -g "speech-unit" -l $gsm_latent_dim \
         $modelconf $outdir/hmm_init.mdl \
-        $outdir/gsm_init.mdl $outdir/units_posts_init.pkl $outdir/init.mdl
+        /dev/null $outdir/units_posts_0.pkl $outdir/init.mdl
 
-    echo "using GSM ($gsm_init) for initialization"
-    beer shmm setprior \
-        -v $gsm_init_var \
-        $outdir/gsm_init.mdl \
-        $outdir/units_posts_init.pkl \
-        $outdir/init.mdl \
-        $gsm_init \
-        $units_init \
-        $outdir/gsm_0.mdl \
-        $outdir/units_posts_0.pkl \
-        $outdir/0.mdl
+    echo "using GSM ($gsm_init)"
+    cp $gsm_init $outdir/gsm_0.mdl || exit 1
+
+    echo "initializing the phone-loop"
+    beer shmm init \
+        $outdir/gsm_0.mdl  $outdir/units_posts_0.pkl $outdir/init.mdl \
+        $outdir/0.mdl || exit 1
 else
     echo "subspace phone Loop model already created"
 fi
@@ -189,6 +175,7 @@ if [ ! -f $outdir/final.mdl ]; then
         cmd="beer -d shmm train \
             --gpu \
             -o $outdir/gsm_optim_state.pth \
+            --posteriors \
             --epochs $train_epochs \
             --learning-rate-std $gsm_std_lrate \
             --latent-nsamples $gsm_latent_nsamples \
