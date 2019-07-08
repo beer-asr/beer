@@ -8,7 +8,7 @@ set -e
 ## DIRECTORY STRUCTURE
 datadir=data
 feadir=features
-expdir=exp
+expdir=exp_ch1_v2
 
 ## DATA
 db=timit
@@ -19,10 +19,10 @@ eval_dataset=test
 feaname=mfcc
 
 ## AUD
-prior=dirichlet_process # Type of prior over the weights.
+prior=gamma_dirichlet_process # Type of prior over the weights.
 ngauss=4        # Number of Gaussian per state.
 nunits=100      # maximum number of discovered units
-epochs=40       # number of training epochs
+epochs=30       # number of training epochs
 
 ## SCORING
 # This option is mostly for TIMIT.

@@ -5,6 +5,9 @@
 
 import argparse
 import logging
+import random
+import numpy as np
+import torch
 
 import beer.cli.subcommands as subcommands
 
@@ -18,6 +21,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('-d', '--debug', action='store_true',
                         help='show debug messages')
+    parser.add_argument('-s', '--seed', type=int, default=-1,
+                        help='seed the RNG')
 
     subparsers = parser.add_subparsers(title='possible commands', metavar='<cmd>')
     subparsers.required = True
@@ -27,6 +32,11 @@ def main():
         cmd.setup(subparser)
         subparser.set_defaults(func=cmd.main)
     args = parser.parse_args()
+
+    if args.seed >= 0 :
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
+        random.seed(args.seed)
 
     if args.debug:
         logger.setLevel(logging.DEBUG)

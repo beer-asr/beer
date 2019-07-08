@@ -8,8 +8,8 @@ set -e
 
 ## DIRECTORY STRUCTURE
 datadir=data
-feadir=features
-expdir=exp_ch1
+feadir=/mnt/scratch04/tmp/iondel/features
+expdir=/mnt/scratch04/tmp/iondel/exp_ch1_v3
 
 ## DATA
 db=timit
@@ -20,8 +20,8 @@ test=test
 feaname=mfcc
 
 ## AUD MODEL
-prior=dirichlet_process # Type of prior over the weights.
-ngauss=16        # number of Gaussian per state.
+prior=gamma_dirichlet_process # Type of prior over the weights.
+ngauss=4        # number of Gaussian per state.
 nunits=100      # maximum number of discovered units
 epochs=30       # number of training epochs
 

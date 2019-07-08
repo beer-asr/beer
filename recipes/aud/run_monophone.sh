@@ -34,7 +34,7 @@ feaname=mfcc
 
 ## MONOPHONE MODEL
 prior=gamma_dirichlet_process # Type of prior over the weights.
-ngauss=4            # number of Gaussian per state.
+ngauss=8            # number of Gaussian per state.
 latent_dim=40       # latent dimension of the subspace model
 epochs=40           # number of training epochs
 

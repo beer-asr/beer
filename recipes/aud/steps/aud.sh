@@ -2,6 +2,7 @@
 
 . path.sh
 
+seed=12
 prior=gamma_dirichlet_process
 parallel_env=sge
 parallel_opts=""
@@ -63,7 +64,7 @@ mkdir -p $outdir
 
 # Create the units' HMM.
 if [ ! -f $outdir/hmms.mdl ]; then
-    beer hmm mkphones -d $dataset $modelconf $langdir/units \
+    beer -s $seed hmm mkphones -d $dataset $modelconf $langdir/units \
         $outdir/hmms.mdl || exit 1
 else
     echo "units' HMM already created. Skipping."
@@ -72,11 +73,11 @@ fi
 
 # Create the phone-loop model.
 if [ ! -f $outdir/0.mdl ]; then
-    beer hmm mkphoneloopgraph --start-end-group "non-speech-unit" \
+    beer -s $seed hmm mkphoneloopgraph --start-end-group "non-speech-unit" \
         $langdir/units $outdir/ploop_graph.pkl || exit 1
-    beer hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
+    beer -s $seed hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
         $outdir/decode_graph.pkl || exit 1
-    beer hmm mkphoneloop --weights-prior $prior $outdir/decode_graph.pkl \
+    beer -s $seed hmm mkphoneloop --weights-prior $prior $outdir/decode_graph.pkl \
         $outdir/hmms.mdl $outdir/0.mdl || exit 1
 else
     echo "Phone Loop model already created. Skipping."
@@ -99,7 +100,7 @@ if [ ! -f $outdir/final.mdl ] || [ ! -f $outdir/${epochs}.mdl ]; then
         echo "epoch: $epoch"
 
         # Accumulate the statistics in parallel.
-        cmd="beer hmm accumulate $outdir/$mdl $dataset \
+        cmd="beer -s $seed  hmm accumulate $outdir/$mdl $dataset \
              $outdir/epoch${epoch}/elbo_JOBID.pkl"
         utils/parallel/submit_parallel.sh \
             "$parallel_env" \
@@ -112,7 +113,7 @@ if [ ! -f $outdir/final.mdl ] || [ ! -f $outdir/${epochs}.mdl ]; then
 
         # Update the model' parameters.
         find $outdir/epoch${epoch} -name '*pkl' | \
-            beer hmm update -o $outdir/optim_state.pth $outdir/$mdl \
+            beer -s $seed hmm update -o $outdir/optim_state.pth $outdir/$mdl \
                 $outdir/${epoch}.mdl 2>&1 | \
                 tee -a $outdir/training.log || exit 1
 

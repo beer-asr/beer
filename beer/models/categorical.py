@@ -192,6 +192,7 @@ class SBCategoricalHyperPrior(SBCategorical):
     def __init__(self, stickbreaking, concentration):
         super().__init__(stickbreaking)
         self.concentration = concentration
+        self.stickbreaking.register_callback(self._on_stickbreaking_update)
         self.concentration.register_callback(self._on_concentration_update)
         self._on_concentration_update()
 
@@ -199,11 +200,23 @@ class SBCategoricalHyperPrior(SBCategorical):
         self.stickbreaking.prior.params.concentrations[:, 1] = \
                 self.concentration.value()
 
-    def mean_field_factorization(self):
-        return [[self.stickbreaking, self.concentration]]
+    def _on_stickbreaking_update(self):
+        sb = self.stickbreaking
+        concentration = self.concentration
+        c = sb.posterior.params.concentrations
+        s_dig =  torch.digamma(c.sum(dim=-1))
+        log_v = torch.digamma(c[:, 0]) - s_dig
+        log_1_v = torch.digamma(c[:, 1]) - s_dig
+        log_prob = log_v
+        log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
+        pad = torch.ones_like(log_1_v)
+        sb_stats = torch.cat([log_1_v[:, None], pad[:, None]], dim=-1)
+        self.concentration.stats = sb_stats.sum(dim=0)
+        self.concentration.natural_grad_update(lrate=1.)
 
     def accumulate(self, stats):
         return {
             **super().accumulate(stats),
             self.concentration: self.cache['sb_stats'].sum(dim=0)
         }
+
