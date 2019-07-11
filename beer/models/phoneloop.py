@@ -96,4 +96,3 @@ class PhoneLoop(HMM):
             fake_stats = torch.zeros_like(self.categorical.mean, requires_grad=False)
             retval.update(self.categorical.accumulate(fake_stats[None, :]))
         return retval
-
