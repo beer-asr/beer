@@ -2,7 +2,7 @@
 
 . path.sh
 
-seed=12
+seed=1
 prior=gamma_dirichlet_process
 parallel_env=sge
 parallel_opts=""

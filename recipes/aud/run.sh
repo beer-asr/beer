@@ -9,7 +9,7 @@ set -e
 ## DIRECTORY STRUCTURE
 datadir=data
 feadir=/mnt/scratch04/tmp/iondel/features
-expdir=/mnt/scratch04/tmp/iondel/exp_ch1_v3
+expdir=exp_ch1_v5
 
 ## DATA
 db=timit
