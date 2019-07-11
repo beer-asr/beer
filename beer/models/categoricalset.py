@@ -48,7 +48,9 @@ class CategoricalSet(ModelSet):
         super().__init__()
         self.weights = weights
 
-    ####################################################################
+    @property
+    def mean(self):
+        return self.weights.value()
 
     def sufficient_statistics(self, data):
         return self.weights.likelihood_fn.sufficient_statistics(data)
@@ -96,11 +98,11 @@ class SBCategoricalSet(Model):
         Returns:
             :any:`SBCategoricalSet`
         '''
-        return cls(_default_set_sb_param(n_components, root_sb_categorical, 
-                                         prior_strength),
-                   n_components)
+        return cls(n_components,
+                   _default_set_sb_param(n_components, root_sb_categorical, 
+                                         prior_strength))
 
-    def __init__(self, stickbreaking, n_components):
+    def __init__(self, n_components, stickbreaking):
         super().__init__()
         self.n_components = n_components
         self.stickbreaking = stickbreaking
@@ -136,7 +138,6 @@ class SBCategoricalSet(Model):
         pad = torch.ones_like(log_1_v)
         self.cache['sb_stats'] = torch.cat([log_1_v[:, :, None],
                                             pad[:, :, None]], dim=-1)
-        print(stats.shape, log_prob.shape)
         return log_prob @ stats
 
     def accumulate(self, stats):

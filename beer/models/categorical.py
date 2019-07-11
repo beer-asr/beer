@@ -57,15 +57,9 @@ class Categorical(Model):
         super().__init__()
         self.weights = weights
 
-    ####################################################################
-    # The following property is exposed only for plotting/debugging
-    # purposes.
-
     @property
     def mean(self):
         return self.weights.value()
-
-    ####################################################################
 
     def sufficient_statistics(self, data):
         return self.weights.likelihood_fn.sufficient_statistics(data)
