@@ -113,3 +113,43 @@ for x in $train $test; do
         $outdir/score
 done
 
+
+# Now train a 2-gram based AUD system.
+steps/aud_bigram.sh \
+    --prior $prior \
+    --parallel-opts "-l mem_free=1G,ram_free=1G" \
+    --parallel-njobs 30 \
+    conf/hmm_${ngauss}g.yml \
+    data/$db/lang_aud \
+    data/$db/$train \
+    $expdir/$db/datasets/$feaname/${train}.pkl \
+    $epochs $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${prior}
+
+
+for x in $train $test; do
+    outdir=$expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${prior}/decode_perframe/$x
+
+    echo "--> Decoding $db/$x dataset"
+    steps/decode.sh \
+        --per-frame \
+        --parallel-opts "-l mem_free=1G,ram_free=1G" \
+        --parallel-njobs 30 \
+        $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
+        data/$db/$subset/$x \
+        $expdir/$db/$subset/datasets/$feaname/${x}.pkl \
+        $outdir
+
+    if [ ! $x == "$train" ]; then
+        au_mapping="--au-mapping $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${prior}/decode_perframe/$train/score/au_phone"
+    fi
+
+    echo "--> Scoring $db/$x dataset"
+    steps/score_aud.sh \
+        $au_mapping \
+        $mapping \
+        data/$db/$subset/$x/ali \
+        $outdir/trans \
+        $outdir/score
+done
+
+
