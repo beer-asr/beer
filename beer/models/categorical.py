@@ -96,16 +96,6 @@ class SBCategorical(Model):
     def __init__(self, stickbreaking):
         super().__init__()
         self.stickbreaking = stickbreaking
-        device = self.stickbreaking.posterior.params.concentrations.device
-        self.ordering = torch.arange(stickbreaking.posterior.dim[0],
-                                     device=device)
-
-    @property
-    def reverse_ordering(self):
-        reverse_ordering = torch.zeros_like(self.ordering)
-        for i, j in enumerate(self.ordering):
-            reverse_ordering[j] = i
-        return reverse_ordering
 
     @property
     def mean(self):
@@ -115,7 +105,7 @@ class SBCategorical(Model):
         log_1_v = torch.digamma(c[:, 1]) - s_dig
         log_prob = log_v
         log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
-        return log_prob.exp()[self.reverse_ordering]
+        return log_prob.exp()
 
     ####################################################################
 
@@ -133,21 +123,18 @@ class SBCategorical(Model):
         log_1_v = torch.digamma(c[:, 1]) - s_dig
         log_prob = log_v
         log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
-
         pad = torch.ones_like(log_1_v)
         self.cache['sb_stats'] = torch.cat([log_1_v[:, None],
                                             pad[:, None]], dim=-1)
 
-        return stats[:, self.ordering] @ log_prob
+        return stats @ log_prob
 
     def accumulate(self, stats):
-        self.ordering = stats.sum(dim=0).sort(descending=True)[1]
-        ordered_stats = stats[:, self.ordering]
-        s2 = ordered_stats.clone()
-        s2 = torch.zeros_like(ordered_stats)
-        s2[:, :-1] = ordered_stats[:, 1:]
+        s2 = stats
+        s2 = torch.zeros_like(stats)
+        s2[:, :-1] = stats[:, 1:]
         s2 = torch.flip(torch.flip(s2, dims=(1,)).cumsum(dim=1), dims=(1,))
-        new_stats = torch.cat([ordered_stats[:, :, None], s2[:, :, None]],
+        new_stats = torch.cat([stats[:, :, None], s2[:, :, None]],
                               dim=-1)
         shape = new_stats.shape
         new_stats = new_stats.reshape(-1, 2)
