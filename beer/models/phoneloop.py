@@ -46,9 +46,9 @@ class PhoneLoop(HMM):
         self.start_pdf = start_pdf
         self.end_pdf = end_pdf
         self.categorical = categorical
-        #param = self.categorical.mean_field_factorization()[0][0]
-        #param.register_callback(self._on_weights_update)
-        #self._on_weights_update()
+        param = self.categorical.mean_field_factorization()[0][0]
+        param.register_callback(self._on_weights_update)
+        self._on_weights_update()
 
     def _on_weights_update(self):
         mean = self.categorical.mean
@@ -75,7 +75,7 @@ class PhoneLoop(HMM):
         return [u + v for u, v in zip(l1, l2)]
 
     def expected_log_likelihood(self, *args, **kwargs):
-        self._on_weights_update()
+        #self._on_weights_update()
         return super().expected_log_likelihood(*args, **kwargs)
 
     def accumulate(self, stats, parent_msg=None):

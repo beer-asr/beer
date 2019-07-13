@@ -21,6 +21,7 @@ def _default_set_sb_param(n_components, root_sb_categorical, prior_strength):
     params[:, :, 1] = prior_strength * (1 - mean.cumsum(dim=0))
     params = params.reshape(-1, 2)
     prior = Dirichlet.from_std_parameters(params)
+    params = root_sb_categorical.stickbreaking.posterior.params.concentrations.repeat(n_components, 1)
     posterior = Dirichlet.from_std_parameters(params.clone())
     return ConjugateBayesianParameter(prior, posterior)
 
@@ -111,7 +112,7 @@ class SBCategoricalSet(Model):
     def mean(self):
         c = self.stickbreaking.posterior.params.concentrations
         c = c.reshape(self.n_components, -1, 2)
-        s_dig =  torch.digamma(c.sum(dim=-1))
+        s_dig = torch.digamma(c.sum(dim=-1))
         log_v = torch.digamma(c[:, :, 0]) - s_dig
         log_1_v = torch.digamma(c[:, :, 1]) - s_dig
         log_prob = log_v
@@ -148,9 +149,7 @@ class SBCategoricalSet(Model):
         s2[:, :, :-1] = stats[:, :,  1:]
         s2 = torch.flip(torch.flip(s2, dims=(2,)).cumsum(dim=2), dims=(2,))
         new_stats = torch.cat([stats[:, :, :, None], s2[:, :, :, None]],
-                              dim=-1)
-        shape = new_stats.shape
-        new_stats = new_stats.reshape(self.n_components, -1, 2)
+                               dim=-1).sum(dim=0)
+        new_stats = new_stats.reshape(self.n_components, -1,  2)
         new_stats[:, :, -1] += new_stats[:, :, :-1].sum(dim=-1)
-        new_stats = new_stats.reshape(*shape).sum(dim=0)
         return {self.stickbreaking: new_stats.reshape(-1, 2)}
