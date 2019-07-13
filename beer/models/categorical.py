@@ -110,7 +110,7 @@ class SBCategorical(Model):
     @property
     def mean(self):
         c = self.stickbreaking.posterior.params.concentrations
-        s_dig =  torch.digamma(c.sum(dim=-1))
+        s_dig = torch.digamma(c.sum(dim=-1))
         log_v = torch.digamma(c[:, 0]) - s_dig
         log_1_v = torch.digamma(c[:, 1]) - s_dig
         log_prob = log_v

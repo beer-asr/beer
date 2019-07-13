@@ -9,7 +9,7 @@ set -e
 ## DIRECTORY STRUCTURE
 datadir=data
 feadir=/mnt/scratch04/tmp/iondel/features
-expdir=exp_ch1_v5
+expdir=exp_ch1_bugfix
 
 ## DATA
 db=timit
@@ -20,7 +20,7 @@ test=test
 feaname=mfcc
 
 ## AUD MODEL
-prior=gamma_dirichlet_process # Type of prior over the weights.
+prior=dirichlet # Type of prior over the weights.
 ngauss=4        # number of Gaussian per state.
 nunits=100      # maximum number of discovered units
 epochs=30       # number of training epochs
@@ -114,18 +114,18 @@ for x in $train $test; do
 done
 
 
-# Now train a 2-gram based AUD system.
+echo "--> Train the bigram AUD system"
 steps/aud_bigram.sh \
     --prior $prior \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
-    conf/hmm_${ngauss}g.yml \
-    data/$db/lang_aud \
+    $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
     data/$db/$train \
     $expdir/$db/datasets/$feaname/${train}.pkl \
     $epochs $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${prior}
 
 
+au_mapping=
 for x in $train $test; do
     outdir=$expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${prior}/decode_perframe/$x
 
@@ -134,7 +134,7 @@ for x in $train $test; do
         --per-frame \
         --parallel-opts "-l mem_free=1G,ram_free=1G" \
         --parallel-njobs 30 \
-        $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
+        $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${prior}/final.mdl \
         data/$db/$subset/$x \
         $expdir/$db/$subset/datasets/$feaname/${x}.pkl \
         $outdir

@@ -15,7 +15,7 @@ def build_categorical(size, unigram):
 
 
 def build_sb(size, unigram):
-    return beer.SBCategoricalSet.create(truncation=size, prior_strength=size / 2)
+    return beer.SBCategoricalSet.create(size, unigram, prior_strength=size / 2)
 
 def build_sbhp(size, unigram):
     return beer.SBCategoricalHyperPrior.create(truncation=size,
@@ -43,10 +43,10 @@ def main(args, logger):
     with open(args.phoneloop, 'rb') as f:
         ploop = pickle.load(f)
 
-    categoricalset = priors[args.weights_prior](len(ploop.start_pdf), 
+    categoricalset = priors[args.weights_prior](len(ploop.start_pdf),
                                                 ploop.categorical)
     logger.debug('create the bigram phone-loop model...')
-    ploop2 = beer.BigramPhoneLoop.create(ploop.graph, ploop.start_pdf, 
+    ploop2 = beer.BigramPhoneLoop.create(ploop.graph, ploop.start_pdf,
                                          ploop.end_pdf, ploop.modelset,
                                          categoricalset)
 
