@@ -99,25 +99,38 @@ class SBCategoricalSet(Model):
         Returns:
             :any:`SBCategoricalSet`
         '''
-        return cls(n_components,
-                   _default_set_sb_param(n_components, root_sb_categorical, 
-                                         prior_strength))
+        param = _default_set_sb_param(n_components, root_sb_categorical, 
+                                      prior_strength)
+        return cls(n_components, param, root_sb_categorical)
 
-    def __init__(self, n_components, stickbreaking):
+    def __init__(self, n_components, stickbreaking, root_sb_categorical):
         super().__init__()
         self.n_components = n_components
         self.stickbreaking = stickbreaking
+        self.root_sb_categorical = root_sb_categorical
 
     @property
-    def mean(self):
+    def ordering(self):
+        return self.root_sb_categorical.ordering
+    
+    @property
+    def reverse_ordering(self):
+        return self.root_sb_categorical.reverse_ordering
+
+    def _log_prob(self):
         c = self.stickbreaking.posterior.params.concentrations
-        c = c.reshape(self.n_components, -1, 2)
+        c = c.reshape(self.n_components, -1, 2)[:, self.ordering, :]
         s_dig = torch.digamma(c.sum(dim=-1))
         log_v = torch.digamma(c[:, :, 0]) - s_dig
         log_1_v = torch.digamma(c[:, :, 1]) - s_dig
         log_prob = log_v
         log_prob[:, 1:] += log_1_v[:, :-1].cumsum(dim=1)
-        return log_prob.exp()
+        return log_prob, log_1_v
+
+    @property
+    def mean(self):
+        log_prob, _ = self._log_prob()
+        return log_prob.exp()[:, self.reverse_ordering]
 
     ####################################################################
 
@@ -129,22 +142,14 @@ class SBCategoricalSet(Model):
         return [[self.stickbreaking]]
 
     def expected_log_likelihood(self, stats):
-        c = self.stickbreaking.posterior.params.concentrations
-        c = c.reshape(self.n_components, -1, 2)
-        s_dig = torch.digamma(c.sum(dim=-1))
-        log_v = torch.digamma(c[:, :, 0]) - s_dig
-        log_1_v = torch.digamma(c[:, :, 1]) - s_dig
-        log_prob = log_v
-        log_prob[:, 1:] += log_1_v[:, :-1].cumsum(dim=1)
-        pad = torch.ones_like(log_1_v)
-        self.cache['sb_stats'] = torch.cat([log_1_v[:, :, None],
-                                            pad[:, :, None]], dim=-1)
-        return log_prob @ stats
+        log_prob, _ = self._log_prob()
+        return stats @ log_prob[:, self.reverse_ordering]
 
     def accumulate(self, stats):
         raise NotImplementedError 
 
     def accumulate_from_jointresps(self, stats):
+        stats = stats[:, :, self.ordering]
         s2 = torch.zeros_like(stats)
         s2[:, :, :-1] = stats[:, :,  1:]
         s2 = torch.flip(torch.flip(s2, dims=(2,)).cumsum(dim=2), dims=(2,))
@@ -152,4 +157,5 @@ class SBCategoricalSet(Model):
                                dim=-1).sum(dim=0)
         new_stats = new_stats.reshape(self.n_components, -1,  2)
         new_stats[:, :, -1] += new_stats[:, :, :-1].sum(dim=-1)
+        new_stats = new_stats[:, self.reverse_ordering]
         return {self.stickbreaking: new_stats.reshape(-1, 2)}
