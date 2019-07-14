@@ -96,16 +96,35 @@ class SBCategorical(Model):
     def __init__(self, stickbreaking):
         super().__init__()
         self.stickbreaking = stickbreaking
+        device = self.stickbreaking.posterior.params.concentrations.device
+        self.ordering = torch.arange(stickbreaking.posterior.dim[0],
+                                     device=device)
+        self.stickbreaking.register_callback(self._update_ordering)
 
-    @property
-    def mean(self):
-        c = self.stickbreaking.posterior.params.concentrations
+    def _log_prob(self):
+        c = self.stickbreaking.posterior.params.concentrations[self.ordering]
         s_dig = torch.digamma(c.sum(dim=-1))
         log_v = torch.digamma(c[:, 0]) - s_dig
         log_1_v = torch.digamma(c[:, 1]) - s_dig
         log_prob = log_v
         log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
-        return log_prob.exp()
+        return log_prob, log_1_v
+
+    def _update_ordering(self):
+        log_prob, _ = self._log_prob()
+        self.ordering = log_prob[self.reverse_ordering].sort(descending=True)[1]
+        
+    @property
+    def reverse_ordering(self):
+        reverse_ordering = torch.zeros_like(self.ordering)
+        for i, j in enumerate(self.ordering):
+            reverse_ordering[j] = i
+        return reverse_ordering
+
+    @property
+    def mean(self):
+        log_prob, _ = self._log_prob()
+        return log_prob.exp()[self.reverse_ordering]
 
     ####################################################################
 
@@ -117,20 +136,20 @@ class SBCategorical(Model):
         return [[self.stickbreaking]]
 
     def expected_log_likelihood(self, stats):
-        c = self.stickbreaking.posterior.params.concentrations
-        s_dig =  torch.digamma(c.sum(dim=-1))
-        log_v = torch.digamma(c[:, 0]) - s_dig
-        log_1_v = torch.digamma(c[:, 1]) - s_dig
-        log_prob = log_v
-        log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
+        log_prob, log_1_v = self._log_prob()
         pad = torch.ones_like(log_1_v)
         self.cache['sb_stats'] = torch.cat([log_1_v[:, None],
                                             pad[:, None]], dim=-1)
 
-        return stats @ log_prob
+        return stats @ log_prob[self.reverse_ordering]
 
     def accumulate(self, stats):
-        s2 = stats
+        # This is the place to re-order the stick-breaking. 
+        # Unfortunately, the ordering will not be persitent in the 
+        # commnand line tools.
+        #self.ordering = stats.sum(dim=0).sort(descending=True)[1]
+
+        stats = stats[:, self.ordering]
         s2 = torch.zeros_like(stats)
         s2[:, :-1] = stats[:, 1:]
         s2 = torch.flip(torch.flip(s2, dims=(1,)).cumsum(dim=1), dims=(1,))
@@ -139,8 +158,8 @@ class SBCategorical(Model):
         shape = new_stats.shape
         new_stats = new_stats.reshape(-1, 2)
         new_stats[:, -1] += new_stats[:, :-1].sum(dim=-1)
-        new_stats = new_stats.reshape(*shape)
-        return {self.stickbreaking: new_stats.sum(dim=0)}
+        new_stats = new_stats.reshape(*shape).sum(dim=0)
+        return {self.stickbreaking: new_stats[self.reverse_ordering, :]}
 
 
 class SBCategoricalHyperPrior(SBCategorical):
