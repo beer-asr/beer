@@ -137,10 +137,6 @@ class SBCategorical(Model):
 
     def expected_log_likelihood(self, stats):
         log_prob, log_1_v = self._log_prob()
-        pad = torch.ones_like(log_1_v)
-        self.cache['sb_stats'] = torch.cat([log_1_v[:, None],
-                                            pad[:, None]], dim=-1)
-
         return stats @ log_prob[self.reverse_ordering]
 
     def accumulate(self, stats):
@@ -201,22 +197,8 @@ class SBCategoricalHyperPrior(SBCategorical):
                 self.concentration.value()
 
     def _on_stickbreaking_update(self):
-        sb = self.stickbreaking
-        concentration = self.concentration
-        c = sb.posterior.params.concentrations
-        s_dig =  torch.digamma(c.sum(dim=-1))
-        log_v = torch.digamma(c[:, 0]) - s_dig
-        log_1_v = torch.digamma(c[:, 1]) - s_dig
-        log_prob = log_v
-        log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
+        _, log_1_v = self._log_prob()
         pad = torch.ones_like(log_1_v)
         sb_stats = torch.cat([log_1_v[:, None], pad[:, None]], dim=-1)
         self.concentration.stats = sb_stats.sum(dim=0)
         self.concentration.natural_grad_update(lrate=1.)
-
-    def accumulate(self, stats):
-        return {
-            **super().accumulate(stats),
-            self.concentration: self.cache['sb_stats'].sum(dim=0)
-        }
-
