@@ -113,4 +113,3 @@ class Mixture(DiscreteLatentModel):
         per_component_exp_llh += log_weights
         lognorm = torch.logsumexp(per_component_exp_llh, dim=1).view(-1)
         return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
-

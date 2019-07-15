@@ -101,18 +101,27 @@ class SBCategorical(Model):
                                      device=device)
         self.stickbreaking.register_callback(self._update_ordering)
 
-    def _log_prob(self):
+    def _log_v(self):
         c = self.stickbreaking.posterior.params.concentrations[self.ordering]
         s_dig = torch.digamma(c.sum(dim=-1))
         log_v = torch.digamma(c[:, 0]) - s_dig
         log_1_v = torch.digamma(c[:, 1]) - s_dig
+        return log_v, log_1_v
+
+    def _log_prob(self):
+        log_v, log_1_v = self._log_v()
         log_prob = log_v
         log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
         return log_prob, log_1_v
 
     def _update_ordering(self):
-        log_prob, _ = self._log_prob()
-        self.ordering = log_prob[self.reverse_ordering].sort(descending=True)[1]
+        # Find the optimal order of the stick-breaking process.
+        # Note that we iterate sorting as the weights (i.e. the mean)
+        # depends on the order itself. Therefore, sorting only once does
+        # not guarantee optimal ordering.
+        for i in range(50):
+            mean = self.mean
+            self.ordering = mean.sort(descending=True)[1]
         
     @property
     def reverse_ordering(self):
@@ -123,8 +132,12 @@ class SBCategorical(Model):
 
     @property
     def mean(self):
-        log_prob, _ = self._log_prob()
-        return log_prob.exp()[self.reverse_ordering]
+        c = self.stickbreaking.posterior.params.concentrations[self.ordering]
+        norm = c.sum(dim=-1) + torch.finfo(c.dtype).eps
+        weights = c[:, 0] / norm
+        residual = (c[:, 1] / norm).cumprod(dim=0)
+        weights[1:] *= residual[:-1]
+        return weights[self.reverse_ordering]
 
     ####################################################################
 
@@ -136,7 +149,7 @@ class SBCategorical(Model):
         return [[self.stickbreaking]]
 
     def expected_log_likelihood(self, stats):
-        log_prob, log_1_v = self._log_prob()
+        log_prob, _ = self._log_prob()
         return stats @ log_prob[self.reverse_ordering]
 
     def accumulate(self, stats):

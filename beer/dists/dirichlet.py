@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import math
 import torch
 from .basedist import ExponentialFamily
 from .basedist import ConjugateLikelihood
