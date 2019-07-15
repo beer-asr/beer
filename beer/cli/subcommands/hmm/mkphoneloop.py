@@ -13,9 +13,19 @@ def build_categorical(size):
     mean = torch.ones(size) / size
     return beer.Categorical.create(mean, prior_strength=1)
 
+def build_categorical_2g(size):
+    mean = torch.ones(size, size) / size
+    return beer.CategoricalSet.create(mean, prior_strength=1)
 
 def build_sb(size):
     return beer.SBCategorical.create(truncation=size, prior_strength=size / 2)
+
+def build_hsb(size):
+    root_sb = beer.SBCategorical.create(truncation=size, 
+                                        prior_strength=size / 2)
+    return beer.SBCategoricalSet.create(size, root_sb, 
+                                        prior_strength=size / 2)
+    
 
 def build_sbhp(size):
     return beer.SBCategoricalHyperPrior.create(truncation=size,
@@ -23,10 +33,14 @@ def build_sbhp(size):
                                                hyper_prior_strength=1.)
 
 
+bigram_prior = ['hierarchical_dirichlet_process', 'dirichlet2']
+
 priors = {
     'dirichlet': build_categorical,
+    'dirichlet2': build_categorical_2g,
     'dirichlet_process': build_sb,
-    'gamma_dirichlet_process': build_sbhp
+    'gamma_dirichlet_process': build_sbhp,
+    'hierarchical_dirichlet_process': build_hsb,
 }
 
 
@@ -53,8 +67,9 @@ def main(args, logger):
 
     categorical = priors[args.weights_prior](len(start_pdf))
     logger.debug('create the phone-loop model...')
-    ploop = beer.PhoneLoop.create(cgraph, start_pdf, end_pdf, emissions,
-                                  categorical)
+
+    model_cls = beer.BigramPhoneLoop if args.weights_prior in bigram_prior else beer.PhoneLoop
+    ploop = model_cls.create(cgraph, start_pdf, end_pdf, emissions, categorical)
 
     logger.debug('saving the model on disk...')
     with open(args.out, 'wb') as f:
@@ -62,6 +77,7 @@ def main(args, logger):
 
     logger.info('successfully created a phone-loop model with ' \
                 f'{len(start_pdf)} phones')
+
 
 if __name__ == "__main__":
     main()

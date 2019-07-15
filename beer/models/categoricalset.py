@@ -209,7 +209,7 @@ class SBCategoricalSet(Model):
             :any:`SBCategoricalSet`
         '''
         if optim_args is None:
-            optim_args = {'lr': 1e-6}
+            optim_args = {'lr': 1e-3}
         param = _default_set_sb_param(n_components, root_sb_categorical, 
                                       prior_strength)
         return cls(n_components, param, root_sb_categorical, prior_strength,
