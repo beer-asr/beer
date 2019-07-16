@@ -99,7 +99,35 @@ class SBCategorical(Model):
         device = self.stickbreaking.posterior.params.concentrations.device
         self.ordering = torch.arange(stickbreaking.posterior.dim[0],
                                      device=device)
-        self.stickbreaking.register_callback(self._update_ordering)
+        self.stickbreaking.register_callback(self._transform_stats, 
+                                             notify_before_update=True)
+
+    def _transform_stats(self):
+        stats = self.stickbreaking.stats
+        self.ordering = stats.sort(descending=True)[1]
+        stats = stats[self.ordering]
+        s2 = torch.zeros_like(stats)
+        s2[:-1] = stats[1:]
+        s2 = torch.flip(torch.flip(s2, dims=(0,)).cumsum(dim=0), dims=(0,))
+        new_stats = torch.cat([stats[:, None], s2[:, None]], dim=-1)
+        new_stats[:, -1] += new_stats[:, :-1].sum(dim=-1)
+        self.stickbreaking.stats = new_stats[self.reverse_ordering, :]
+        return
+
+        shape = new_stats.shape
+        new_stats = new_stats.reshape(-1, 2)
+        new_stats[:, -1] += new_stats[:, :-1].sum(dim=-1)
+        new_stats = new_stats.reshape(*shape).sum(dim=0)
+        return {self.stickbreaking: new_stats[self.reverse_ordering, :]}
+
+
+        # Find the optimal order of the stick-breaking process.
+        # Note that we iterate sorting as the weights (i.e. the mean)
+        # depends on the order itself. Therefore, sorting only once does
+        # not guarantee optimal ordering.
+        for i in range(50):
+            mean = self.mean
+            self.ordering = mean.sort(descending=True)[1]
 
     def _log_v(self):
         c = self.stickbreaking.posterior.params.concentrations[self.ordering]
@@ -113,15 +141,6 @@ class SBCategorical(Model):
         log_prob = log_v
         log_prob[1:] += log_1_v[:-1].cumsum(dim=0)
         return log_prob, log_1_v
-
-    def _update_ordering(self):
-        # Find the optimal order of the stick-breaking process.
-        # Note that we iterate sorting as the weights (i.e. the mean)
-        # depends on the order itself. Therefore, sorting only once does
-        # not guarantee optimal ordering.
-        for i in range(50):
-            mean = self.mean
-            self.ordering = mean.sort(descending=True)[1]
         
     @property
     def reverse_ordering(self):
@@ -157,6 +176,7 @@ class SBCategorical(Model):
         # Unfortunately, the ordering will not be persitent in the 
         # commnand line tools.
         #self.ordering = stats.sum(dim=0).sort(descending=True)[1]
+        return {self.stickbreaking: stats.sum(dim=0)}
 
         stats = stats[:, self.ordering]
         s2 = torch.zeros_like(stats)
