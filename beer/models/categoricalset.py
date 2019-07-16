@@ -6,10 +6,8 @@ from dataclasses import dataclass
 from .basemodel import Model
 from .parameters import ConjugateBayesianParameter
 from .modelset import ModelSet
-from .parameters import ConjugateBayesianParameter
 from .categorical import Categorical, _default_param
 from ..dists import Dirichlet, DirichletStdParams
-from ..dists import entropy
 
 __all__ = ['CategoricalSet', 'SBCategoricalSet']
 
@@ -225,7 +223,21 @@ class SBCategoricalSet(Model):
         self.optim_cls = optim_cls
         self.optim_args = optim_args
         self.epochs = epochs
-        self.stickbreaking.register_callback(self._update_root_sb)        
+        self.stickbreaking.register_callback(self._transform_stats, 
+                                             notify_before_update=True)
+        self.stickbreaking.register_callback(self._update_root_sb)    
+
+    def _transform_stats(self):
+        stats = self.stickbreaking.stats
+        self.root_sb_categorical.ordering = stats.sum(dim=0).sort(descending=True)[1]
+        stats = stats[:, self.ordering]
+        s2 = torch.zeros_like(stats)
+        s2[:, :-1] = stats[:,  1:]
+        s2 = torch.flip(torch.flip(s2, dims=(1,)).cumsum(dim=1), dims=(1,))
+        new_stats = torch.cat([stats[:, :, None], s2[:, :, None]],  dim=-1)
+        new_stats[:, :, -1] += new_stats[:, :, :-1].sum(dim=-1)
+        self.stickbreaking.stats = \
+                new_stats[:, self.reverse_ordering].reshape(-1, 2)
 
     def _update_root_sb(self):
         # Update the variational posterior
@@ -292,13 +304,4 @@ class SBCategoricalSet(Model):
         raise NotImplementedError 
 
     def accumulate_from_jointresps(self, stats):
-        stats = stats[:, :, self.ordering]
-        s2 = torch.zeros_like(stats)
-        s2[:, :, :-1] = stats[:, :,  1:]
-        s2 = torch.flip(torch.flip(s2, dims=(2,)).cumsum(dim=2), dims=(2,))
-        new_stats = torch.cat([stats[:, :, :, None], s2[:, :, :, None]],
-                               dim=-1).sum(dim=0)
-        new_stats = new_stats.reshape(self.n_components, -1,  2)
-        new_stats[:, :, -1] += new_stats[:, :, :-1].sum(dim=-1)
-        new_stats = new_stats[:, self.reverse_ordering]
-        return {self.stickbreaking: new_stats.reshape(-1, 2)}
+        return {self.stickbreaking: stats.sum(dim=0)}
