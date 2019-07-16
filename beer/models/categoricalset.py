@@ -189,8 +189,8 @@ class SBCategoricalSet(Model):
 
     @classmethod
     def create(cls, n_components, root_sb_categorical, prior_strength=1.,
-               optim_cls=torch.optim.SGD, optim_args=None, 
-               epochs=10_000):
+               optim_cls=torch.optim.Adam, optim_args=None, 
+               epochs=15_000):
         '''Create a set of Categorical model.
         Args:
             n_components (int): Number of components in the set.
