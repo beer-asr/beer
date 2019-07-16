@@ -173,14 +173,13 @@ class BigramPhoneLoop(HMM):
         # If the phone loop is trained with forced alignments, we don't
         # train the transitions.
         if 'trans_resps' in self.cache:
-            trans_resps = self.cache['trans_resps'].sum(dim=0)
+            trans_resps = self.cache['trans_resps']#.sum(dim=0)
             start_idxs = [value for value in self.start_pdf.values()]
             end_idxs = [value for value in self.end_pdf.values()]
-            phone_resps = trans_resps[:, start_idxs]
-            phone_resps = phone_resps[end_idxs, :]
-            resps_stats = self.categoricalset.sufficient_statistics(
-                            phone_resps)
-            retval.update(self.categoricalset.accumulate_from_jointresps(resps_stats[None]))
+            phone_resps = trans_resps[:, :, start_idxs]
+            phone_resps = phone_resps[:, end_idxs, :]
+            resps_stats = self.categoricalset.sufficient_statistics(phone_resps)
+            retval.update(self.categoricalset.accumulate_from_jointresps(resps_stats))
         else:
             fake_stats = torch.zeros_like(self.categoricalset.mean, 
                                           requires_grad=False)

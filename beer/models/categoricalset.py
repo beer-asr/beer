@@ -97,12 +97,12 @@ def _lower_bound(sb_set, root_sbc, concentration):
     prob1 = root_sbc.mean[root_sbc.ordering]
     log_prob1, _ = root_sbc._log_prob()
     log_v2, log_1_v2 = sb_set._log_v()
-    r_cumsum = torch.flip(torch.flip(log_prob1[1:], 
-                                        dims=(0,)).cumsum(dim=0), dims=(0,))
+    r_cumsum = torch.flip(torch.flip(log_prob1[1:],
+                          dims=(0,)).cumsum(dim=0), dims=(0,))
     
     # Objective function: 
     #   L < E[ ln p(V^2 | V^1) ] - D( q(V^1) || p(V^1) )
-    llh = log_v2.shape[0] * log_prob1.sum() + log_v2.shape[0] * r_cumsum.sum() \
+    llh = 0 * log_v2.shape[0] * log_prob1.sum() + 0 * log_v2.shape[0] * r_cumsum.sum() \
             + (log_v2 @ (concentration * prob1)).sum() \
             + (log_1_v2 @ (concentration * (1 - prob1.cumsum(dim=0)))).sum() 
 
@@ -225,11 +225,10 @@ class SBCategoricalSet(Model):
         self.epochs = epochs
         self.stickbreaking.register_callback(self._transform_stats, 
                                              notify_before_update=True)
-        self.stickbreaking.register_callback(self._update_root_sb)    
+        #self.stickbreaking.register_callback(self._update_root_sb)    
 
     def _transform_stats(self):
         stats = self.stickbreaking.stats
-        self.root_sb_categorical.ordering = stats.sum(dim=0).sort(descending=True)[1]
         stats = stats[:, self.ordering]
         s2 = torch.zeros_like(stats)
         s2[:, :-1] = stats[:,  1:]
@@ -237,7 +236,7 @@ class SBCategoricalSet(Model):
         new_stats = torch.cat([stats[:, :, None], s2[:, :, None]],  dim=-1)
         new_stats[:, :, -1] += new_stats[:, :, :-1].sum(dim=-1)
         self.stickbreaking.stats = \
-                new_stats[:, self.reverse_ordering].reshape(-1, 2)
+                new_stats[:, self.reverse_ordering, :].reshape(-1, 2)
 
     def _update_root_sb(self):
         # Update the variational posterior
