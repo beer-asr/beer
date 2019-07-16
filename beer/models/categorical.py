@@ -112,22 +112,6 @@ class SBCategorical(Model):
         new_stats = torch.cat([stats[:, None], s2[:, None]], dim=-1)
         new_stats[:, -1] += new_stats[:, :-1].sum(dim=-1)
         self.stickbreaking.stats = new_stats[self.reverse_ordering, :]
-        return
-
-        shape = new_stats.shape
-        new_stats = new_stats.reshape(-1, 2)
-        new_stats[:, -1] += new_stats[:, :-1].sum(dim=-1)
-        new_stats = new_stats.reshape(*shape).sum(dim=0)
-        return {self.stickbreaking: new_stats[self.reverse_ordering, :]}
-
-
-        # Find the optimal order of the stick-breaking process.
-        # Note that we iterate sorting as the weights (i.e. the mean)
-        # depends on the order itself. Therefore, sorting only once does
-        # not guarantee optimal ordering.
-        for i in range(50):
-            mean = self.mean
-            self.ordering = mean.sort(descending=True)[1]
 
     def _log_v(self):
         c = self.stickbreaking.posterior.params.concentrations[self.ordering]
@@ -172,23 +156,7 @@ class SBCategorical(Model):
         return stats @ log_prob[self.reverse_ordering]
 
     def accumulate(self, stats):
-        # This is the place to re-order the stick-breaking. 
-        # Unfortunately, the ordering will not be persitent in the 
-        # commnand line tools.
-        #self.ordering = stats.sum(dim=0).sort(descending=True)[1]
         return {self.stickbreaking: stats.sum(dim=0)}
-
-        stats = stats[:, self.ordering]
-        s2 = torch.zeros_like(stats)
-        s2[:, :-1] = stats[:, 1:]
-        s2 = torch.flip(torch.flip(s2, dims=(1,)).cumsum(dim=1), dims=(1,))
-        new_stats = torch.cat([stats[:, :, None], s2[:, :, None]],
-                              dim=-1)
-        shape = new_stats.shape
-        new_stats = new_stats.reshape(-1, 2)
-        new_stats[:, -1] += new_stats[:, :-1].sum(dim=-1)
-        new_stats = new_stats.reshape(*shape).sum(dim=0)
-        return {self.stickbreaking: new_stats[self.reverse_ordering, :]}
 
 
 class SBCategoricalHyperPrior(SBCategorical):
