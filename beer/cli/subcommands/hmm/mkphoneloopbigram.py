@@ -9,24 +9,18 @@ import torch
 import beer
 
 
-def build_categorical(size, unigram):
+def build_categorical_2g(size, unigram):
     mean = torch.ones(size, size) / size
     return beer.CategoricalSet.create(mean, prior_strength=1)
 
 
-def build_sb(size, unigram):
-    return beer.SBCategoricalSet.create(size, unigram, prior_strength=size / 2)
-
-def build_sbhp(size, unigram):
-    return beer.SBCategoricalHyperPrior.create(truncation=size,
-                                               prior_strength=size / 2,
-                                               hyper_prior_strength=1.)
+def build_hsb(size, unigram):
+    return beer.SBCategoricalSet.create(size, unigram, prior_strength=1)
 
 
 priors = {
-    'dirichlet': build_categorical,
-    'dirichlet_process': build_sb,
-    'gamma_dirichlet_process': build_sbhp
+    'dirichlet2': build_categorical_2g,
+    'hierarchical_dirichlet_process': build_hsb,
 }
 
 

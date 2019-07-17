@@ -9,7 +9,7 @@ set -e
 ## DIRECTORY STRUCTURE
 datadir=data
 feadir=/mnt/scratch04/tmp/iondel/features
-expdir=exp_ch1_bugfix
+expdir=exp_dp
 
 ## DATA
 db=timit
@@ -20,10 +20,20 @@ test=test
 feaname=mfcc
 
 ## AUD MODEL
-prior=dirichlet # Type of prior over the weights.
+
+# Type of prior over the weights.
+# Possible choices are:
+#   - dirichlet
+#   - dirichlet2
+#   - dirichlet_process
+#   - hierarchical_dirichlet_process
+#   - gamma_dirichlet_process
+prior=dirichlet
+bigram_prior=hierarchical_dirichlet_process
+
 ngauss=4        # number of Gaussian per state.
 nunits=100      # maximum number of discovered units
-epochs=30       # number of training epochs
+epochs=20       # number of training epochs
 
 ## SCORING
 # This option is mostly for TIMIT.
@@ -87,60 +97,54 @@ steps/aud.sh \
     $epochs $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}
 
 
-for x in $train $test; do
-    outdir=$expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$x
+outdir=$expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$train
 
-    echo "--> Decoding $db/$x dataset"
-    steps/decode.sh \
-        --per-frame \
-        --parallel-opts "-l mem_free=1G,ram_free=1G" \
-        --parallel-njobs 30 \
-        $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
-        data/$db/$subset/$x \
-        $expdir/$db/$subset/datasets/$feaname/${x}.pkl \
-        $outdir
+echo "--> Decoding $db/$train dataset"
+steps/decode.sh \
+    --per-frame \
+    --parallel-opts "-l mem_free=1G,ram_free=1G" \
+    --parallel-njobs 30 \
+    $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
+    data/$db/$subset/$train \
+    $expdir/$db/$subset/datasets/$feaname/${train}.pkl \
+    $outdir
 
-    if [ ! $x == "$train" ]; then
-        au_mapping="--au-mapping $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$train/score/au_phone"
-    fi
 
-    echo "--> Scoring $db/$x dataset"
-    steps/score_aud.sh \
-        $au_mapping \
-        $mapping \
-        data/$db/$subset/$x/ali \
-        $outdir/trans \
-        $outdir/score
-done
+echo "--> Scoring $db/$train dataset"
+steps/score_aud.sh \
+    data/$db/$subset/$train/ali \
+    $outdir/trans \
+    $outdir/score
 
+exit 0
 
 echo "--> Train the bigram AUD system"
 steps/aud_bigram.sh \
-    --prior $prior \
+    --prior $bigram_prior \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
     $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
     data/$db/$train \
     $expdir/$db/datasets/$feaname/${train}.pkl \
-    $epochs $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${prior}
+    $epochs $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}
 
 
 au_mapping=
 for x in $train $test; do
-    outdir=$expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${prior}/decode_perframe/$x
+    outdir=$expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}/decode_perframe/$x
 
     echo "--> Decoding $db/$x dataset"
     steps/decode.sh \
         --per-frame \
         --parallel-opts "-l mem_free=1G,ram_free=1G" \
         --parallel-njobs 30 \
-        $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${prior}/final.mdl \
+        $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}/final.mdl \
         data/$db/$subset/$x \
         $expdir/$db/$subset/datasets/$feaname/${x}.pkl \
         $outdir
 
     if [ ! $x == "$train" ]; then
-        au_mapping="--au-mapping $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${prior}/decode_perframe/$train/score/au_phone"
+        au_mapping="--au-mapping $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}/decode_perframe/$train/score/au_phone"
     fi
 
     echo "--> Scoring $db/$x dataset"
@@ -151,5 +155,3 @@ for x in $train $test; do
         $outdir/trans \
         $outdir/score
 done
-
-
