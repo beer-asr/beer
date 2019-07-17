@@ -95,21 +95,22 @@ class DirichletLogParams(torch.nn.Module):
 def _lower_bound(sb_set, root_sbc, concentration):
     # Extract needed quantity to compute the obj. function.
     prob1 = root_sbc.mean[root_sbc.ordering]
-    log_prob1, _ = root_sbc._log_prob()
+    mean_prob = root_sbc.stickbreaking.value()[root_sbc.ordering, 0]
+    log_prob1, log_1_v1 = root_sbc._log_prob()
     log_v2, log_1_v2 = sb_set._log_v()
-    r_cumsum = torch.flip(torch.flip(log_prob1[1:],
-                          dims=(0,)).cumsum(dim=0), dims=(0,))
+    #r_cumsum = torch.flip(torch.flip(log_prob1[1:],
+    #                      dims=(0,)).cumsum(dim=0), dims=(0,))
+    r_cumsum = log_1_v1.cumsum(dim=0)
     
     # Objective function: 
     #   L < E[ ln p(V^2 | V^1) ] - D( q(V^1) || p(V^1) )
     llh = 0 * log_v2.shape[0] * log_prob1.sum() + 0 * log_v2.shape[0] * r_cumsum.sum() \
             + (log_v2 @ (concentration * prob1)).sum() \
-            + (log_1_v2 @ (concentration * (1 - prob1.cumsum(dim=0)))).sum() 
-
+            + (log_1_v2 @ (concentration * (1 - mean_prob).cumprod(dim=0))).sum() 
+    lbound = (llh - root_sbc.stickbreaking.kl_div_posterior_prior().sum())
+    
     # Normalize the log-likelihood to scale down the gradient.
-    llh /= (log_v2.shape[0] * log_v2.shape[1])  
-
-    return llh - root_sbc.stickbreaking.kl_div_posterior_prior().sum()
+    return lbound #/ (log_v2.shape[0] * log_v2.shape[1])  
 
 
 def _optimize_root_sb(sb_set, concentration, epochs, optim_cls, optim_args):
@@ -240,8 +241,8 @@ class SBCategoricalSet(Model):
 
     def _update_root_sb(self):
         # Update the variational posterior
-        _optimize_root_sb(self, self.concentration, self.epochs, self.optim_cls,
-                          self.optim_args)
+        #_optimize_root_sb(self, self.concentration, self.epochs, self.optim_cls,
+        #                  self.optim_args)
 
         # Update the prior of the bottom level stick-breaking process.
         mean = self.root_sb_categorical.mean
