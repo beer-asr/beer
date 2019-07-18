@@ -121,9 +121,8 @@ class Dirichlet(ExponentialFamily):
             concentrations = concentrations.view(1, -1)
         retval = torch.zeros_like(concentrations)
         psi = torch.digamma(concentrations[:, -1])
-        retval[:, :-1] = torch.digamma(concentrations[:, :-1]) - psi
-        retval[:, -1] = psi - torch.digamma(concentrations.sum(dim=-1, 
-                                                               keepdim=True))
+        retval[:, :-1] = torch.digamma(concentrations[:, :-1]) - psi[:, None]
+        retval[:, -1] = psi - torch.digamma(concentrations.sum(dim=-1))
         if size == 1:
             return retval.view(-1)
         return retval
