@@ -68,8 +68,12 @@ class Categorical(Model):
         return [[self.weights]]
 
     def expected_log_likelihood(self, stats):
-        nparams = self.weights.natural_form()
-        return self.weights.likelihood_fn(nparams, stats)
+        log_odds = self.weights.natural_form()
+
+        # From the Dirichlet distributions we have:
+        # log_odds = (ln x_1 - ln(1 - x_sum), ..., ln(1 - x_sum) )
+        #log_odds[:-1] += log_odds[-1]
+        return self.weights.likelihood_fn(log_odds, stats)
 
     def accumulate(self, stats):
         return {self.weights: stats.sum(dim=0)}
