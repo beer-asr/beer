@@ -119,7 +119,7 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
     # definition.
 
     # The forward method is defined in the ``torch.nn.Module`` class.
-    # If definied, it should compute the log-likelihood of the inputs
+    # If defined, it should compute the log-likelihood of the inputs
     # (X) given the parameters.
     #def forward(self, X):
     #    pass
