@@ -42,7 +42,7 @@ while [[ $# -gt $nargs ]]; do
 done
 
 if [ $# -ne $nargs ]; then
-    echo "usage: $0 [OPTS] <model> <datadir> <dataset> <out-dir>"
+    echo "usage: $0 [OPTS] <model> <uttids> <dataset> <out-dir>"
     echo ""
     echo "Phone decoder"
     echo ""
@@ -57,7 +57,7 @@ if [ $# -ne $nargs ]; then
 fi
 
 model=$1
-datadir=$2
+uttids=$2
 dataset=$3
 outdir=$4
 mkdir -p $outdir
@@ -72,7 +72,7 @@ if [ ! -f $outdir/trans ]; then
         "hmm-decode" \
         "$parallel_opts" \
         "$parallel_njobs" \
-        "$datadir/uttids" \
+        "$uttids" \
         "$cmd" \
         $outdir || exit 1
 

@@ -13,11 +13,10 @@ expdir=exp_dp
 
 ## DATA
 db=timit
-train=train
-test=test
+train=full
 
 ## FEATURES
-feaname=mfcc
+feaname=mbn
 
 ## AUD MODEL
 
@@ -28,8 +27,9 @@ feaname=mfcc
 #   - dirichlet_process
 #   - hierarchical_dirichlet_process
 #   - gamma_dirichlet_process
-prior=dirichlet
+prior=dirichlet_process
 bigram_prior=hierarchical_dirichlet_process
+ac_scale=1.0
 
 ngauss=4        # number of Gaussian per state.
 nunits=100      # maximum number of discovered units
@@ -67,19 +67,17 @@ python utils/prepare_lang_aud.py \
     $nunits > data/$db/lang_aud/units
 
 
-for x in $train $test; do
-    echo "--> Extracting features for the $db/$x database"
-    steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$x \
-         $feadir/$db/$x
+echo "--> Extracting features for the $db/$train database"
+steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$train \
+     $feadir/$db/$train
 
-    # Create a "dataset". This "dataset" is just an object
-    # associating the features with their utterance id and some
-    # other meta-data (e.g. global mean, variance, ...).
-    echo "--> Creating dataset(s) for $db database"
-    steps/create_dataset.sh $datadir/$db/$x \
-        $feadir/$db/$x/${feaname}.npz \
-        $expdir/$db/datasets/$feaname/${x}.pkl
-done
+# Create a "dataset". This "dataset" is just an object
+# associating the features with their utterance id and some
+# other meta-data (e.g. global mean, variance, ...).
+echo "--> Creating dataset(s) for $db database"
+steps/create_dataset.sh $datadir/$db/$train \
+    $feadir/$db/$train/${feaname}.npz \
+    $expdir/$db/datasets/$feaname/${train}.pkl
 
 
 # AUD system training. You need to have a Sun Grid Engine like cluster
@@ -116,42 +114,36 @@ steps/score_aud.sh \
     $outdir/trans \
     $outdir/score
 
-exit 0
 
 echo "--> Train the bigram AUD system"
 steps/aud_bigram.sh \
+    --acoustic-scale $ac_scale \
     --prior $bigram_prior \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
     $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
     data/$db/$train \
     $expdir/$db/datasets/$feaname/${train}.pkl \
-    $epochs $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}
+    $epochs $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}_ac${ac_scale}
 
 
-au_mapping=
-for x in $train $test; do
-    outdir=$expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}/decode_perframe/$x
+outdir=$expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}_ac${ac_scale}/decode_perframe/$train
 
-    echo "--> Decoding $db/$x dataset"
-    steps/decode.sh \
-        --per-frame \
-        --parallel-opts "-l mem_free=1G,ram_free=1G" \
-        --parallel-njobs 30 \
-        $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}/final.mdl \
-        data/$db/$subset/$x \
-        $expdir/$db/$subset/datasets/$feaname/${x}.pkl \
-        $outdir
+echo "--> Decoding $db/$train dataset"
+steps/decode.sh \
+    --acoustic-scale $ac_scale \
+    --per-frame \
+    --parallel-opts "-l mem_free=1G,ram_free=1G" \
+    --parallel-njobs 30 \
+    $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}_ac${ac_scale}/final.mdl \
+    data/$db/$subset/$train \
+    $expdir/$db/$subset/datasets/$feaname/${train}.pkl \
+    $outdir
 
-    if [ ! $x == "$train" ]; then
-        au_mapping="--au-mapping $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}/decode_perframe/$train/score/au_phone"
-    fi
 
-    echo "--> Scoring $db/$x dataset"
-    steps/score_aud.sh \
-        $au_mapping \
-        $mapping \
-        data/$db/$subset/$x/ali \
-        $outdir/trans \
-        $outdir/score
-done
+echo "--> Scoring $db/$train dataset"
+steps/score_aud.sh \
+    data/$db/$subset/$train/ali \
+    $outdir/trans \
+    $outdir/score
+

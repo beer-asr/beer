@@ -97,6 +97,9 @@ def main():
         ref_bounds_count += len(ref_bounds)
         hyp_bounds_count += len(hyp_bounds)
 
+        if len(ref_bounds) != len(hyp_bounds):
+            print(utt)
+
     if ref_bounds_count > 0:
         recall = hits / ref_bounds_count
     else:

@@ -15,7 +15,7 @@ def build_categorical_2g(size, unigram):
 
 
 def build_hsb(size, unigram):
-    return beer.SBCategoricalSet.create(size, unigram, prior_strength=1)
+    return beer.SBCategoricalSet.create(size, unigram, prior_strength=size/2)
 
 
 priors = {

@@ -7,6 +7,8 @@ import numpy as np
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--old', action='store_true',
+                        help='old normalized version')
     parser.add_argument('counts', help='YAML file containing the counts')
     args = parser.parse_args()
 
@@ -41,8 +43,12 @@ def main():
     H_Y_given_X = - np.sum(p_X_Y * np.log2(p_Y_given_X))
     H_X_given_Y = - np.sum(p_X_Y * np.log2(p_X_given_Y))
 
+    print(f'# units: {len(p_X)}')
     print('NMI (%)')
-    print(f'{100 * (H_Y - H_Y_given_X) / H_Y:.2f}')
+    if args.old:
+        print(f'{100 * (H_Y - H_Y_given_X) / H_Y:.2f}')
+    else:
+        print(f'{200 * (H_Y - H_Y_given_X) / (H_Y + H_X):.2f}')
 
 
 if __name__ == '__main__':

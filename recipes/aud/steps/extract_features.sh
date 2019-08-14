@@ -29,7 +29,7 @@ while [[ $# -gt $nargs ]]; do
 done
 
 if [ $# -ne $nargs ]; then
-    echo "usage: $0 [OPTS] <fea-conf> <data-dir> <out-fea-dir>"
+    echo "usage: $0 [OPTS] <fea-conf> <scp> <out-feadir>"
     echo ""
     echo "Extract features"
     echo ""
@@ -47,7 +47,7 @@ if [ $# -ne 3 ]; then
 fi
 
 conf=$1
-datadir=$2
+scp=$2
 feadir=$3
 feaname=$(basename $conf)
 feaname="${feaname%.*}"
@@ -67,7 +67,7 @@ if [ ! -f $feadir/${feaname}.npz ]; then
         "extract-features" \
         "$parallel_opts" \
         "$parallel_njobs" \
-        "$datadir/wav.scp" \
+        "$scp" \
         "$cmd" \
         $feadir || exit 1
 

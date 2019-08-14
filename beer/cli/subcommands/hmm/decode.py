@@ -64,7 +64,11 @@ def main(args, logger):
 
     count = 0
     for uttname in utts:
-        utt = dataset[uttname]
+        try:
+            utt = dataset[uttname]
+        except KeyError:
+            logger.warning(f'no utterance {utt} in {args.dataset}')
+            continue
 
         aligraph = None
         if alis:

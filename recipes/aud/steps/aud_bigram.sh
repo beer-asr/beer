@@ -2,6 +2,7 @@
 
 . path.sh
 
+acoustic_scale=1.
 prior=gamma_dirichlet_process
 parallel_env=sge
 parallel_opts=""
@@ -10,6 +11,11 @@ nargs=5
 
 while [[ $# -gt $nargs ]]; do
     case $1 in
+      --acoustic-scale)
+      acoustic_scale=$2
+      shift
+      shift
+      ;;
       --prior)
       prior=$2
       shift
@@ -42,6 +48,7 @@ if [ $# -ne $nargs ]; then
     echo "Train a 2-gram HMM based Acoustic Unit Discovery (AUD) system."
     echo ""
     echo "Options:"
+    echo "  --acoustic-scale    acoustic model scaling factor (default: 1)"
     echo "  --prior             type of prior [gamma_dirichlet_process|"
     echo "                      dirichlet_process|dirichlet] for the"
     echo "                      units weights (default:gamma_dirichlet_process)"
@@ -85,7 +92,8 @@ if [ ! -f $outdir/final.mdl ] || [ ! -f $outdir/${epochs}.mdl ]; then
         echo "epoch: $epoch"
 
         # Accumulate the statistics in parallel.
-        cmd="beer hmm accumulate $outdir/$mdl $dataset \
+        cmd="beer hmm accumulate -s $acoustic_scale \
+             $outdir/$mdl $dataset \
              $outdir/epoch${epoch}/elbo_JOBID.pkl"
         utils/parallel/submit_parallel.sh \
             "$parallel_env" \

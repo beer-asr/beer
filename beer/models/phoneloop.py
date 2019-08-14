@@ -59,7 +59,10 @@ class PhoneLoop(HMM):
         log_weights = self.categorical.expected_log_likelihood(stats)
         start_idxs = [value for value in self.start_pdf.values()]
         for end_idx in self.end_pdf.values():
-            self.graph.trans_log_probs[end_idx, start_idxs] = log_weights
+            loop_prob = self.graph.trans_log_probs[end_idx, end_idx].exp()
+            residual_log_prob = (1 - loop_prob).log()
+            self.graph.trans_log_probs[end_idx, start_idxs] = \
+                    residual_log_prob + log_weights
 
     ####################################################################
     # Model interface.
@@ -75,7 +78,6 @@ class PhoneLoop(HMM):
         return [u + v for u, v in zip(l1, l2)]
 
     def expected_log_likelihood(self, *args, **kwargs):
-        #self._on_weights_update()
         return super().expected_log_likelihood(*args, **kwargs)
 
     def accumulate(self, stats, parent_msg=None):
@@ -125,7 +127,7 @@ class BigramPhoneLoop(HMM):
         dtype, device = tensor.dtype, tensor.device
 
         if categoricalset is None:
-            weights = torch.ones(len(start_pdf), len(start_pdf), dtype=dtype, 
+            weights = torch.ones(len(start_pdf), len(start_pdf), dtype=dtype,
                                  device=device)
             weights /= len(start_pdf)
             categoricalset = CategoricalSet.create(weights, prior_strength)
@@ -136,6 +138,9 @@ class BigramPhoneLoop(HMM):
         self.start_pdf = start_pdf
         self.end_pdf = end_pdf
         self.categoricalset = categoricalset
+        param = self.categoricalset.mean_field_factorization()[0][0]
+        param.register_callback(self._on_weights_update)
+        self._on_weights_update()
 
     def _on_weights_update(self):
         mean = self.categoricalset.mean
@@ -165,7 +170,6 @@ class BigramPhoneLoop(HMM):
         return [u + v for u, v in zip(l1, l2)]
 
     def expected_log_likelihood(self, *args, **kwargs):
-        self._on_weights_update()
         return super().expected_log_likelihood(*args, **kwargs)
 
     def accumulate(self, stats, parent_msg=None):
@@ -181,7 +185,7 @@ class BigramPhoneLoop(HMM):
             resps_stats = self.categoricalset.sufficient_statistics(phone_resps)
             retval.update(self.categoricalset.accumulate_from_jointresps(resps_stats))
         else:
-            fake_stats = torch.zeros_like(self.categoricalset.mean, 
+            fake_stats = torch.zeros_like(self.categoricalset.mean,
                                           requires_grad=False)
             retval.update(self.categoricalset.accumulate(fake_stats[None, :]))
         return retval

@@ -16,9 +16,9 @@ class CategoricalLikelihood(ConjugateLikelihood):
         return self.dim - 1 + zero_stats_dim
 
     def sufficient_statistics(self, data):
-        retval = data.clone()
+        retval = data.clone().reshape(-1, data.shape[-1])
         retval[:, -1] = retval.sum(dim=-1)
-        return retval
+        return retval.reshape(*data.shape)
 
     @staticmethod
     def log_norm(nparams):
