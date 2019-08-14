@@ -310,8 +310,12 @@ class CompiledGraph(torch.nn.Module):
             log_xi = log_alphas[:-1, :, None] + log_A[None] + \
                      (llhs + log_betas)[1:, None, :]
             log_xi = log_xi.view(-1, len(log_A) * len(log_A))
-            lnorm = torch.logsumexp(log_xi[0], dim=0)
-            trans_posts = (log_xi - lnorm).exp()
+
+            #lnorm = torch.logsumexp(log_xi[0], dim=0)
+            #trans_posts = (log_xi - lnorm).exp()
+            lnorm = torch.logsumexp(log_xi, dim=1)
+            trans_posts = (log_xi - lnorm[:, None]).exp()
+
             trans_posts = torch.where(trans_posts != trans_posts,
                                      torch.zeros_like(trans_posts),
                                      trans_posts)

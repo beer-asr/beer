@@ -47,17 +47,22 @@ class BayesianParameter(torch.nn.Module):
             return hash(self) == hash(other)
         raise NotImplementedError
 
-    def dispatch(self):
+    def dispatch(self, before_update=False):
         'Notify the observers the parameter has changed.'
-        for callback in self._callbacks:
-            callback()
+        for callback, notify_before_update in self._callbacks:
+            if notify_before_update == before_update:
+                callback()
 
-    def register_callback(self, callback):
+    def register_callback(self, callback, notify_before_update=False):
         '''Register a callback function that will be called every time
         the parameters if updated. The function takes no argument.
 
+        Args:
+            notify_before_update (boolean): If True, the observer will
+                be notified before the update.
+
         '''
-        self._callbacks.add(callback)
+        self._callbacks.add((callback, notify_before_update))
 
     ####################################################################
     # Interface to be implemented by other subclasses.
@@ -127,10 +132,11 @@ class ConjugateBayesianParameter(BayesianParameter):
         return self.posterior.expected_sufficient_statistics()
 
     def natural_grad_update(self, lrate):
+        self.dispatch(before_update=True)
         prior_nparams = self.prior.natural_parameters()
         posterior_nparams = self.posterior.natural_parameters()
         natural_grad = prior_nparams + self.stats - posterior_nparams
         new_nparams = posterior_nparams + lrate * natural_grad
         self.posterior.update_from_natural_parameters(new_nparams)
-        self.dispatch()
+        self.dispatch(before_update=False)
 

@@ -3,12 +3,11 @@
 . path.sh
 
 acoustic_scale=1.
-seed=1
 prior=gamma_dirichlet_process
 parallel_env=sge
 parallel_opts=""
 parallel_njobs=20
-nargs=6
+nargs=5
 
 while [[ $# -gt $nargs ]]; do
     case $1 in
@@ -44,9 +43,9 @@ while [[ $# -gt $nargs ]]; do
 done
 
 if [ $# -ne $nargs ]; then
-    echo "usage: $0 [OPTS] <hmm-conf> <langdir> <datadir> <dataset> <epochs> <out-dir>"
+    echo "usage: $0 [OPTS] <ploop-init> <datadir> <dataset> <epochs> <out-dir>"
     echo ""
-    echo "Train a HMM based Acoustic Unit Discovery (AUD) system."
+    echo "Train a 2-gram HMM based Acoustic Unit Discovery (AUD) system."
     echo ""
     echo "Options:"
     echo "  --acoustic-scale    acoustic model scaling factor (default: 1)"
@@ -60,34 +59,20 @@ if [ $# -ne $nargs ]; then
     exit 1
 fi
 
-modelconf=$1
-langdir=$2
-datadir=$3
-dataset=$4
-epochs=$5
-outdir=$6
+ploopinit=$1
+datadir=$2
+dataset=$3
+epochs=$4
+outdir=$5
 mkdir -p $outdir
 
 
-# Create the units' HMM.
-if [ ! -f $outdir/hmms.mdl ]; then
-    beer -s $seed hmm mkphones -d $dataset $modelconf $langdir/units \
-        $outdir/hmms.mdl || exit 1
-else
-    echo "units' HMM already created. Skipping."
-fi
-
-
-# Create the phone-loop model.
+# Create the 2-gram phone-loop model.
 if [ ! -f $outdir/0.mdl ]; then
-    beer -s $seed hmm mkphoneloopgraph --start-end-group "non-speech-unit" \
-        $langdir/units $outdir/ploop_graph.pkl || exit 1
-    beer -s $seed hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
-        $outdir/decode_graph.pkl || exit 1
-    beer -s $seed hmm mkphoneloop --weights-prior $prior $outdir/decode_graph.pkl \
-        $outdir/hmms.mdl $outdir/0.mdl || exit 1
+    beer hmm mkphoneloopbigram --weights-prior $prior $ploopinit \
+        $outdir/0.mdl || exit 1
 else
-    echo "Phone Loop model already created. Skipping."
+    echo "2-gram phone-loop model already created"
 fi
 
 # Training.
@@ -107,7 +92,7 @@ if [ ! -f $outdir/final.mdl ] || [ ! -f $outdir/${epochs}.mdl ]; then
         echo "epoch: $epoch"
 
         # Accumulate the statistics in parallel.
-        cmd="beer -s $seed  hmm accumulate -s $acoustic_scale \
+        cmd="beer hmm accumulate -s $acoustic_scale \
              $outdir/$mdl $dataset \
              $outdir/epoch${epoch}/elbo_JOBID.pkl"
         utils/parallel/submit_parallel.sh \
@@ -121,7 +106,7 @@ if [ ! -f $outdir/final.mdl ] || [ ! -f $outdir/${epochs}.mdl ]; then
 
         # Update the model' parameters.
         find $outdir/epoch${epoch} -name '*pkl' | \
-            beer -s $seed hmm update -o $outdir/optim_state.pth $outdir/$mdl \
+            beer hmm update -o $outdir/optim_state.pth $outdir/$mdl \
                 $outdir/${epoch}.mdl 2>&1 | \
                 tee -a $outdir/training.log || exit 1
 

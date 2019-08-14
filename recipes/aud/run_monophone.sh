@@ -20,8 +20,8 @@ fi
 
 ## DIRECTORY STRUCTURE
 datadir=data        # where will stored the corpus specific data (transcription, dictionary, ...)
-feadir=features     # where will be stored the features
-expdir=exp          # experiment directory where will be stored the models and the results
+feadir=/mnt/scratch04/tmp/iondel/features     # where will be stored the features
+expdir=exp_new          # experiment directory where will be stored the models and the results
 
 ## DATA
 db=$1               # name of the corpus (timit, mboshi, globalphone)
@@ -30,13 +30,13 @@ train=train         # name of the train set (usually "train")
 test=test           # name of the test set (usuall "test")
 
 ## FEATURES
-feaname=mfcc
+feaname=mfcc_8k
 
 ## MONOPHONE MODEL
 prior=gamma_dirichlet_process # Type of prior over the weights.
 ngauss=4            # number of Gaussian per state.
-latent_dim=40       # latent dimension of the subspace model
-epochs=40           # number of training epochs
+latent_dim=100      # latent dimension of the subspace model
+epochs=30           # number of training epochs
 
 ## SCORING
 # This option is mostly for TIMIT.

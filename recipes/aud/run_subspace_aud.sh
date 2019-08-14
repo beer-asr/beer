@@ -34,7 +34,7 @@ feaname=mfcc
 
 ## AUD MODEL
 prior=gamma_dirichlet_process # Type of prior over the weights.
-ngauss=4            # number of Gaussian per state.
+ngauss=8            # number of Gaussian per state.
 nunits=100          # maximum number of discovered units
 epochs=40           # number of training epochs
 gsm_init=$2         # GSM for initialization

@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import math
 import torch
 from .basedist import ExponentialFamily
 from .basedist import ConjugateLikelihood
@@ -17,9 +16,9 @@ class CategoricalLikelihood(ConjugateLikelihood):
         return self.dim - 1 + zero_stats_dim
 
     def sufficient_statistics(self, data):
-        retval = data.clone()
+        retval = data.clone().reshape(-1, data.shape[-1])
         retval[:, -1] = retval.sum(dim=-1)
-        return retval
+        return retval.reshape(*data.shape)
 
     @staticmethod
     def log_norm(nparams):
@@ -120,10 +119,10 @@ class Dirichlet(ExponentialFamily):
         size = len(concentrations.shape) if len(concentrations.shape) > 0 else 1
         if size == 1:
             concentrations = concentrations.view(1, -1)
-        psis = torch.digamma(concentrations)
-        psi_sum = torch.digamma(concentrations.sum(dim=-1))
-        retval = psis - psis[:, -1].view(-1, 1)
-        retval[:, -1] = psis[:, -1] - psi_sum
+        retval = torch.zeros_like(concentrations)
+        psi = torch.digamma(concentrations[:, -1])
+        retval[:, :-1] = torch.digamma(concentrations[:, :-1]) - psi[:, None]
+        retval[:, -1] = psi - torch.digamma(concentrations.sum(dim=-1))
         if size == 1:
             return retval.view(-1)
         return retval

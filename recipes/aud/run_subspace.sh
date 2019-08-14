@@ -12,7 +12,7 @@ feadir=/mnt/scratch04/tmp/iondel/features
 expdir=exp_dp
 
 ## DATA
-db=timit
+db=mboshi
 train=full
 
 ## FEATURES
@@ -27,13 +27,18 @@ feaname=mbn
 #   - dirichlet_process
 #   - hierarchical_dirichlet_process
 #   - gamma_dirichlet_process
-prior=dirichlet_process
+prior=gamma_dirichlet_process
 bigram_prior=hierarchical_dirichlet_process
-ac_scale=1.0
+ac_scale=1.
 
 ngauss=4        # number of Gaussian per state.
 nunits=100      # maximum number of discovered units
 epochs=20       # number of training epochs
+gsm_init=exp_new/globalphone/FR_PO_GE_SP/subspace_monophone_mbn_4g_gamma_dirichlet_process_ldim40
+
+# Extract the latent dimension (assuming something like "...ldim10_..."
+tmp=${gsm_init##*ldim}
+ldim=${tmp%%_*}
 
 ## SCORING
 # This option is mostly for TIMIT.
@@ -84,29 +89,30 @@ steps/create_dataset.sh $datadir/$db/$train \
 # (i.e. qsub command) to run it. If you have a different
 # enviroment please see utils/parallel/sge/* to see how to adapt
 # this recipe to you system.
-steps/aud.sh \
+echo "--> Training the subspace Bayesian AUD system"
+steps/subspace_aud.sh \
     --prior $prior \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
     conf/hmm_${ngauss}g.yml \
+    $gsm_init \
     data/$db/lang_aud \
     data/$db/$train \
     $expdir/$db/datasets/$feaname/${train}.pkl \
-    $epochs $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}
+    $epochs $expdir/$db/$subset/aud_subspace_${feaname}_${ngauss}g_${prior}_ldim${ldim}
 
 
-outdir=$expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$train
+outdir=$expdir/$db/$subset/aud_subspace_${feaname}_${ngauss}g_${prior}_ldim${ldim}/decode_perframe/$train
 
 echo "--> Decoding $db/$train dataset"
 steps/decode.sh \
     --per-frame \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
-    $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
-    data/$db/$subset/$train \
+    $expdir/$db/$subset/aud_subspace_${feaname}_${ngauss}g_${prior}_ldim${ldim}/final.mdl \
+    data/$db/$subset/$train/uttids \
     $expdir/$db/$subset/datasets/$feaname/${train}.pkl \
     $outdir
-
 
 echo "--> Scoring $db/$train dataset"
 steps/score_aud.sh \
@@ -114,6 +120,7 @@ steps/score_aud.sh \
     $outdir/trans \
     $outdir/score
 
+exit 0
 
 echo "--> Train the bigram AUD system"
 steps/aud_bigram.sh \
@@ -146,4 +153,5 @@ steps/score_aud.sh \
     data/$db/$subset/$train/ali \
     $outdir/trans \
     $outdir/score
+exp/globalphone/FR_PO_GE_SP/subspace_monophone_mfcc_4g_gamma_dirichlet_process_ldim40
 

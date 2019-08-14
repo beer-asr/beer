@@ -6,7 +6,7 @@ import torch
 
 
 __all__ = ['ConjugateLikelihood', 'ExponentialFamily',
-           'ParametersView', 'kl_div']
+           'ParametersView', 'kl_div', 'entropy']
 
 
 # Error raised when the user is providing parameters with missing
@@ -119,7 +119,7 @@ class ExponentialFamily(torch.nn.Module, metaclass=abc.ABCMeta):
     # definition.
 
     # The forward method is defined in the ``torch.nn.Module`` class.
-    # If definied, it should compute the log-likelihood of the inputs
+    # If defined, it should compute the log-likelihood of the inputs
     # (X) given the parameters.
     #def forward(self, X):
     #    pass
@@ -261,4 +261,12 @@ def kl_div(pdf1, pdf2):
     lnorm1 = pdf1.log_norm()
     lnorm2 = pdf2.log_norm()
     return lnorm2 - lnorm1 - torch.sum(exp_stats * (nparams2 - nparams1), dim=-1)
+
+
+def entropy(pdf):
+    'Entropy of a member of the exponential family.'
+    nparams = pdf.natural_parameters()
+    exp_stats = pdf.expected_sufficient_statistics()
+    lnorm = pdf.log_norm()
+    return torch.sum(exp_stats * nparams1, dim=-1) - lnorm
 

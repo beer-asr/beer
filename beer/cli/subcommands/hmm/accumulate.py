@@ -32,14 +32,18 @@ def main(args, logger):
     alis = None
     if args.alis:
         logger.debug('loading alignment graphs')
-        alis = np.load(args.alis)
+        alis = np.load(args.alis, allow_pickle=True)
 
     elbo = beer.evidence_lower_bound(datasize=dataset.size)
     count = 0
     for line in sys.stdin:
         uttid = line.strip().split()[0]
-        utt = dataset[uttid]
 
+        try:
+            utt = dataset[uttid]
+        except KeyError:
+            logger.warning(f'no utterance {utt} in {args.dataset}')
+            continue
         aligraph = None
         if alis:
             try:

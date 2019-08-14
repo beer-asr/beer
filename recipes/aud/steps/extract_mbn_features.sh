@@ -3,7 +3,7 @@
 parallel_env=sge
 parallel_opts=""
 parallel_njobs=4
-nargs=3
+nargs=2
 
 while [[ $# -gt $nargs ]]; do
     case $1 in
@@ -29,7 +29,7 @@ while [[ $# -gt $nargs ]]; do
 done
 
 if [ $# -ne $nargs ]; then
-    echo "usage: $0 [OPTS] <fea-conf> <scp> <out-feadir>"
+    echo "usage: $0 [OPTS] <scp> <out-fea-dir>"
     echo ""
     echo "Extract features"
     echo ""
@@ -41,16 +41,10 @@ if [ $# -ne $nargs ]; then
     exit 1
 fi
 
-if [ $# -ne 3 ]; then
-    echo "usage: <fea-conf> <data-dir> <out-fea-dir>"
-    exit 1
-fi
 
-conf=$1
-scp=$2
-feadir=$3
-feaname=$(basename $conf)
-feaname="${feaname%.*}"
+scp=$1
+feadir=$2
+feaname=mbn
 
 mkdir -p $feadir
 
@@ -61,10 +55,10 @@ if [ ! -f $feadir/${feaname}.npz ]; then
     mkdir -p $feadir/${feaname}_tmp
 
     # Extract the features.
-    cmd="beer features extract $conf - $feadir/${feaname}_tmp"
+    cmd="audio2bottleneck --outdir $feadir/${feaname}_tmp -"
     utils/parallel/submit_parallel.sh \
         "$parallel_env" \
-        "extract-features" \
+        "extract-mbn-features" \
         "$parallel_opts" \
         "$parallel_njobs" \
         "$scp" \

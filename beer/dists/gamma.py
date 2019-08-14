@@ -141,3 +141,4 @@ class Gamma(ExponentialFamily):
 
     def update_from_natural_parameters(self, natural_params):
         self.params = self.params.from_natural_parameters(natural_params)
+

@@ -8,21 +8,20 @@ set -e
 ## DIRECTORY STRUCTURE
 datadir=data
 feadir=features
-expdir=exp
+expdir=exp_dp
 
 ## DATA
-db=timit
-train_dataset=train
-eval_dataset=test
+db=mboshi
+train=full
 
 ## FEATURES
 feaname=mfcc
 
 ## AUD
-prior=dirichlet_process # Type of prior over the weights.
+prior=gamma_dirichlet_process # Type of prior over the weights.
 ngauss=4        # Number of Gaussian per state.
 nunits=100      # maximum number of discovered units
-epochs=40       # number of training epochs
+epochs=20       # number of training epochs
 
 ## SCORING
 # This option is mostly for TIMIT.
@@ -36,35 +35,24 @@ mapping="--mapping data/timit/lang/phones_61_to_39.txt"
 modeldir=$1
 
 
-for epoch in $(seq 0 1 40); do
-    for x in $train_dataset $eval_dataset; do
-        #modeldir=$expdir/$db/aud_${feaname}_${ngauss}g_${prior}
-        outdir=$modeldir/decode_perframe_e${epoch}/$x
+for epoch in $(seq 0 1 20); do
+    outdir=$modeldir/decode_perframe_e${epoch}/$train
 
-        echo "--> Decoding $db/$x dataset"
-        steps/decode.sh \
-            --per-frame \
-            --parallel-opts "-l mem_free=1G,ram_free=1G" \
-            --parallel-njobs 30 \
-            $modeldir/${epoch}.mdl \
-            data/$db/$x \
-            $expdir/$db/datasets/$feaname/${x}.pkl \
-            $outdir
+    echo "--> Decoding $db/$train dataset"
+    steps/decode.sh \
+        --per-frame \
+        --parallel-opts "-l mem_free=1G,ram_free=1G" \
+        --parallel-njobs 30 \
+        $modeldir/${epoch}.mdl \
+        data/$db/$train \
+        $expdir/$db/datasets/$feaname/${train}.pkl \
+        $outdir
 
-        if [ ! $x == "$train_dataset" ]; then
-            au_mapping="--au-mapping $modeldir/decode_perframe_e${epoch}/$train_dataset/score/au_phone"
-        else
-            au_mapping=""
-        fi
-
-        echo "--> Scoring $db/$x dataset"
-        steps/score_aud.sh \
-            $au_mapping \
-            $mapping \
-            data/$db/$x/ali \
-            $outdir/trans \
-            $outdir/score
-    done
+    echo "--> Scoring $db/$train dataset"
+    steps/score_aud.sh \
+        data/$db/$train/ali \
+        $outdir/trans \
+        $outdir/score
 done
 
 
