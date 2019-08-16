@@ -25,7 +25,8 @@ class CategoricalLikelihood(ConjugateLikelihood):
         # Stable implementation of the log-normalizer of a categorical
         # equivalent of the naive implementation:
         #   lognorm = torch.log(1 + rvectors.exp())
-        return torch.nn.functional.softplus(torch.logsumexp(nparams, dim=-1))
+        tmp = torch.logsumexp(nparams, dim=-1)
+        return torch.nn.functional.softplus(tmp)
 
     def parameters_from_pdfvector(self, pdfvec):
         size = pdfvec.shape

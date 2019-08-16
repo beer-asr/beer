@@ -378,6 +378,7 @@ def _xentropy(s_h, model, **kwargs):
     stats = model.sufficient_statistics(s_h)
     stats = stats.reshape(shape[0], shape[1], -1).mean(dim=1)
     llh = model.expected_log_likelihood(stats, **kwargs)
+    #llh = llh.reshape(shape[0], -1).mean(dim=-1)
     return -llh.reshape(-1), stats.detach()
 
 # Approximate entropy given samples and a (set of) distributions.
