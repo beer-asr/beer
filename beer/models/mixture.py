@@ -108,8 +108,11 @@ class Mixture(DiscreteLatentModel):
 
     def posteriors(self, data):
         stats = self.modelset.sufficient_statistics(data)
-        log_weights = self.weights.expected_natural_parameters().view(1, -1)
+        
+        # Per-components weighted log-likelihood.
+        tensorconf = {'dtype': stats.dtype, 'device': stats.device}
+        log_weights = self._log_weights(tensorconf)[None]
         per_component_exp_llh = self.modelset.expected_log_likelihood(stats)
-        per_component_exp_llh += log_weights
+        
         lognorm = torch.logsumexp(per_component_exp_llh, dim=1).view(-1)
         return torch.exp(per_component_exp_llh - lognorm.view(-1, 1))
