@@ -11,7 +11,7 @@ if [ $# -ne 1 ]; then
 fi
 
 datadir=$1
-
+cwd=$(dirname $0)
 
 # Download the data.
 if [ ! -d $datadir/local/mboshi ]; then
@@ -41,15 +41,16 @@ for x in train dev; do
             -exec $datadir/local/mboshi/script/fix_wav.sh {} \
             $datadir/local/mboshi/full_corpus_newsplit/${x}.fixed \;
 
-
         echo "Creating wav.scp/uttids files for the $x data set..."
         mkdir -p $datadir/$x
         find $datadir/local/mboshi/full_corpus_newsplit/${x}.fixed -name '*wav' \
             -exec bash -c 'scp_line "$0"' {} {} \; \
             | sort | uniq > $datadir/$x/wav.scp
         cat $datadir/$x/wav.scp | awk '{print $1}' >$datadir/$x/uttids
+
+        cat $cwd/mboshi.ali | grep -w -f $datadir/$x/uttids \
+            > $datadir/$x/ali
     else
         echo "Dataset \"${x}\" already prepared. Skipping."
     fi
 done
-
