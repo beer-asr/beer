@@ -84,10 +84,12 @@ class HMM(DiscreteLatentModel):
             self.cache['resps'], self.cache['trans_resps'] = all_resps
         else:
             self.cache['resps'] = all_resps
-        #exp_llh = (pc_llhs * self.cache['resps']).sum(dim=-1)
+        exp_llh = (pc_llhs * self.cache['resps']).sum(dim=-1)
         self.cache['scale'] = scale
 
-        return llh
+        # 'exp_llh' is an approximation but allows to compute the
+        # gradient of the likelihood w.r.t. the input
+        return exp_llh #llh
 
     def accumulate(self, stats, parent_msg=None):
         scaled_resps = self.cache['scale'] * self.cache['resps']
