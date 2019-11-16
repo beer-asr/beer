@@ -77,17 +77,19 @@ class HMM(DiscreteLatentModel):
         if inference_graph is None:
             inference_graph = self.graph
         pc_llhs = scale * self._pc_llhs(stats, inference_graph)
-        all_resps, llh = self._inference(pc_llhs, inference_graph, viterbi=viterbi,
+        all_resps, llh = self._inference(pc_llhs.detach(), inference_graph, viterbi=viterbi,
                                          state_path=state_path,
                                          trans_posteriors=trans_posts)
         if trans_posts:
             self.cache['resps'], self.cache['trans_resps'] = all_resps
         else:
             self.cache['resps'] = all_resps
-        #exp_llh = (pc_llhs * self.cache['resps']).sum(dim=-1)
+        exp_llh = (pc_llhs * self.cache['resps']).sum(dim=-1)
         self.cache['scale'] = scale
 
-        return llh
+        # 'exp_llh' is an approximation but allows to compute the
+        # gradient of the likelihood w.r.t. the input
+        return exp_llh #llh
 
     def accumulate(self, stats, parent_msg=None):
         scaled_resps = self.cache['scale'] * self.cache['resps']
