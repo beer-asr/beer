@@ -255,6 +255,13 @@ class HierarchicalAffineTransform(AffineTransform):
         #   - 3rd dimension: dimension of the latent space.
         return res.permute(1, 0, 2)
 
+    def mean_field_factorization(self):
+        # Returning empty list to ensure the GSMs do not compute KLD
+        # The HGSM has access to self.root_transform which returns [[self.weights, self.bias]].
+        # Ensures that the KLD is computed only once for the intensive parameters
+        return []
+        
+
 
 class LinearTransform(Model):
     'Bayesian Linear Transformation: y = W^T x.'
@@ -797,10 +804,10 @@ class HierarchicalGSM(Model):
         super().__init__()
         self.shared_transform = shared_transform
         self.latent_prior = latent_prior
-        self._bayesian_parameters = set()
+
     def sufficient_statistics(self, models_and_submodels):
         return models_and_submodels
-    
+
     def expected_log_likelihood(self, stats, latent_posts, univ_latent_nsamples=1,
                                 **kwargs):
         # Compute and sum each model's ELBO (which already includes the extensive KLD)
@@ -820,8 +827,7 @@ class HierarchicalGSM(Model):
 
     def accumulate(self, stats):
         return self.latent_prior.accumulate(self.cache['lp_stats'])
-    
+
     def mean_field_factorization(self):
         return [*self.latent_prior.mean_field_factorization(),
                 *self.shared_transform.mean_field_factorization()]
-
