@@ -25,6 +25,7 @@ setup(
         'beer.cli.subcommands.features',
         'beer.cli.subcommands.hmm',
         'beer.cli.subcommands.shmm',
+        'beer.cli.subcommands.hshmm'
     ],
     scripts=['beer/cli/beer']
 )

@@ -14,7 +14,7 @@ from ..dists import NormalFullCovariance
 from .normal import UnknownCovarianceType
 from ..inference.objectives import evidence_lower_bound
 
-__all__ = ['GSM', 'GSMSet', 'SubspaceBayesianParameter']
+__all__ = ['GSM', 'GSMSet', 'SubspaceBayesianParameter', 'HierarchicalAffineTransform', 'HierarchicalGSM', 'AffineTransform']
 
 
 ########################################################################
@@ -611,7 +611,16 @@ class GSM(Model):
         # Local KL divergence posterior/prior
         # D(q || p) = H[q, p] - H[q]
         # where H[q, p] is the cross-entropy and H[q] is the entropy.
-        xent, self.cache['lp_stats'] = _xentropy(s_h, self.latent_prior,
+        xent, self.cache['lp_stats'] = 
+        
+        
+        
+        
+        
+        
+        
+        
+        py(s_h, self.latent_prior,
                                                  **kwargs)
         ent = _entropy(s_h, latent_posts)
         local_kl_div = xent - ent
