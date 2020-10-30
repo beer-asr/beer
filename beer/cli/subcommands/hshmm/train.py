@@ -34,6 +34,9 @@ def setup(parser):
     parser.add_argument('-u', '--unit-latent-nsamples', type=int, default=1,
                         help='number of samples for the unit latent posteriors ' \
                         '(default: 1)')
+    parser.add_argument('--clip-grad', type=float, default=-1,
+                        help='if set to a positive value, gradients will be clipped '
+                        'to have a norm equal to this value')
     parser.add_argument('-o', '--optim-state', help='optimizer state')
     parser.add_argument('-p', '--skip-root-subspace', action='store_true',
                         help='freeze the parameters of the root subspace')
@@ -41,8 +44,10 @@ def setup(parser):
                         help='freeze the parameters of the language latent posteriors')
     parser.add_argument('-b', '--skip-unit-posterior', action='store_true',
                         help='freeze the parameters of the unit latent posteriors')
-    parser.add_argument('-r', '--logging_rate', type=int, default=1000,
-                        help='logging rate of the ELBO (default: 1000)')
+    parser.add_argument('-r', '--logging_rate', type=int, default=100,
+                        help='logging rate of the ELBO (default: 100)')
+    parser.add_argument('--use-sgd', '--sgd', action='store_true',
+                        help='use SGD for optimization instead of Adam')
     parser.add_argument('-s', '--learning-rate-std', default=1e-1, type=float,
                         help='learning rate for the standard parameters '\
                              '(default: 1e-1)')
@@ -91,9 +96,10 @@ def main(args, logger):
 
     logger.debug('loading the units')
     units_emissions_dict = {}
-    #units_dict = {}
     for lang, sploop in phoneloops_dict.items():
         units_emissions_dict[lang] = sploop.modelset.original_modelset.modelsets[groupidx]
+        if len(units_emissions_dict[lang])//nstates < 2:
+            units_emissions_dict[lang] = sploop.modelset.original_modelset.modelsets[1 - groupidx]
         units_dict[lang] = [unit for unit in iterate_units(units_emissions_dict[lang], len(units_dict[lang]), nstates)]
 
     logger.debug('building the optimizer')
@@ -102,18 +108,23 @@ def main(args, logger):
     else:
         params = sum([list(_gsm.conjugate_bayesian_parameters(keepgroups=True)) for _gsm in gsms_dict.values()], [])
     cjg_optim = beer.VBConjugateOptimizer(params, lrate=args.learning_rate_cjg)
+    
+
     params = []
-    if not args.skip_root_subspace:
-        params = list(root_gsm.parameters())
-    if not args.skip_language_posterior:
-        for lang, _gsm in gsms_dict.items():
-            params += list(_gsm.transform.latent_posterior.parameters())
+    params = list(root_gsm.parameters())
+
+    for lang, _gsm in gsms_dict.items():
+        params += list(_gsm.transform.latent_posterior.parameters())
     all_latent_posts = []
-    if not args.skip_unit_posterior:
-        for lang, latent_posts in posts_dict.items():
-            all_latent_posts.append(latent_posts)
-            params += list(latent_posts.parameters())
-    std_optim = torch.optim.Adam(params, lr=args.learning_rate_std)
+
+    for lang, latent_posts in posts_dict.items():
+        all_latent_posts.append(latent_posts)
+        params += list(latent_posts.parameters())
+    if not args.use_sgd:
+        std_optim = torch.optim.Adam(params, lr=args.learning_rate_std)
+    else:
+        std_optim = torch.optim.SGD(params, lr=args.learning_rate_std)
+    
     optim = beer.VBOptimizer(cjg_optim, std_optim)
     if args.optim_state and os.path.isfile(args.optim_state):
         logger.debug(f'loading optimizer state from: {args.optim_state}')
@@ -124,7 +135,7 @@ def main(args, logger):
         state = torch.load(args.optim_state, maplocation)
         optim.load_state_dict(state)
 
-    # Listify all the dictionaries for training
+    # listify all the dictionaries for training
     models_and_submodels = []
     for lang, _gsm in gsms_dict.items():
         lang_units = [unit for i, unit in enumerate(units_dict[lang])]
@@ -141,10 +152,24 @@ def main(args, logger):
         optim.init_step()
         elbo = beer.evidence_lower_bound(root_gsm, models_and_submodels, **kwargs)
         elbo.backward()
+        if args.skip_root_subspace:
+            root_gsm.zero_grad()
+        if args.skip_language_posterior:
+            for lang, _gsm in gsms_dict.items():
+                _gsm.transform.latent_posterior.zero_grad()
+        if args.skip_unit_posterior:
+            for lang, latent_posts in posts_dict.items():
+                latent_posts.zero_grad()
+        if args.clip_grad > 0:
+            for grp in optim.std_optim.param_groups:
+                norm = torch.nn.utils.clip_grad_norm_(grp['params'], args.clip_grad)
+        else:
+            norm = 0
         optim.step()
 
         if args.logging_rate > 0 and epoch % args.logging_rate == 0:
             logger.info(f'epoch={epoch:<20} elbo={float(elbo):<20}')
+            logger.debug(f'epoch={epoch:<20} norm={float(norm):<20}')
 
     logger.info(f'finished training at epoch={epoch} with elbo={float(elbo)}')
 
@@ -165,7 +190,6 @@ def main(args, logger):
     logger.debug('saving the units posterior')
     with open(args.out_posts, 'wb') as f:
         pickle.dump((posts_dict, units_dict, nstates, groupidx), f)
-        # pickle.dump((posts_dict, unit_id_to_lang, nunits, nstates, groupidx), f)
 
     logger.debug('saving the subspace phoneloop')
     sploop = phoneloops_dict
@@ -174,7 +198,6 @@ def main(args, logger):
     for lang, sploop in phoneloops_dict.items():
         with open(args.out_sploop + '_' + lang, 'wb') as f:
             pickle.dump(sploop, f)
-
 
     if args.optim_state:
         logger.debug(f'saving the optimizer state to: {args.optim_state}')

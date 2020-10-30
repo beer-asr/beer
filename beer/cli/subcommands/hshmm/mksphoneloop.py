@@ -63,8 +63,6 @@ def setup(parser):
                         '(default:2)')
     parser.add_argument('-d', '--dlatent-dim', default=2, type=int,
                         help='dimension of the discriminant latent space (default:2)')
-    # parser.add_argument('unit_to_lang',
-    #                     help='a space separated file containing mappings from units to languages')
     parser.add_argument('conf', help='configuration file use to create '
                                      'the phone-loop')
     parser.add_argument('phoneloop_to_lang',
@@ -108,6 +106,8 @@ def main(args, logger):
         with open(_phoneloop, 'rb') as f:
             phoneloops_dict[lang] = pickle.load(f)
         units_emissions_dict[lang] = phoneloops_dict[lang].modelset.original_modelset.modelsets[groupidx]
+        if len(units_emissions_dict[lang])// nstates < 2:
+            units_emissions_dict[lang] = phoneloops_dict[lang].modelset.original_modelset.modelsets[1 - groupidx]
         nunits_dict[lang] = len(units_emissions_dict[lang]) // nstates
 
     ## logger.debug('loading the units models')
@@ -115,7 +115,7 @@ def main(args, logger):
     nunits = ','.join([f'{lang}: {n}' for lang, n in nunits_dict.items()])
     logger.debug(f'number of units to include in the subspace: {nunits}')
 
-    # This steps is needed as in the training of the standard HMM
+    # These steps are needed as in the training of the standard HMM
     # there is no guarantee that the statistics will be retained by
     # the parameters.
     logger.debug('initializing the parameters\' sufficient statistics')
@@ -128,18 +128,6 @@ def main(args, logger):
 
 
     logger.debug('create the latent normal prior')
-    # unit_to_lang = {line.strip().split()[0]: line.strip().split()[1]
-    #                 for line in open(args.unit_to_lang)}
-    # lang_to_unit = {}
-    # unit_id_to_lang = {}
-    # num_langs = 0
-    # for i, (unit_, lang_) in enumerate(unit_to_lang.items()):
-    #     unit_id_to_lang[i] = lang_
-    #     if lang_ not in lang_to_unit.keys():
-    #         lang_to_unit[lang_] = []
-    #         num_langs += 1
-    #     lang_to_unit[lang_].append(unit_)
-
     latent_prior = beer.Normal.create(torch.zeros(args.latent_dim),
                                       torch.ones(args.latent_dim),
                                       cov_type = 'full')
@@ -164,10 +152,8 @@ def main(args, logger):
             means_precisions.stats = init_means_precisions_stats(means_precisions,
                                                                  weights)
 
-        # logger.debug('creating the units model')
         units_dict[lang] = [unit for unit in iterate_units(units_emissions, nunits, nstates)]
 
-    # assert lang_to_phoneloop.keys() == lang_to_unit.keys()
     all_langs = [lang for lang in lang_to_phoneloop.keys()]
 
     # Dictionaries mapping each language to its GSM and unit posteriors
@@ -177,7 +163,7 @@ def main(args, logger):
     logger.debug('creating the GSMs')
     tpl = copy.deepcopy(units_dict[all_langs[0]][0])
 
-    # Create root GSM
+    # Create root GSM (hyper-subspace)
     _gsm = beer.GSM.create(tpl, args.unit_latent_dim, unit_prior)
     _transform = _gsm.transform
     univ_affine_transform = beer.AffineTransform.create(args.latent_dim,
