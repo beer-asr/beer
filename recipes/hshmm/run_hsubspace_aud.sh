@@ -12,25 +12,26 @@ parallel_njobs=1000
 
 decode_all=false
 decode_freq=10
-hsubspace_opts=""
-nosil=true
+hsubspace_opts="--gsm-std-lrate 5e-3 --opts-conf grad_large.conf"
+nosil=false
 ## DIRECTORY STRUCTURE
 datadir=data        # where will stored the corpus specific data (transcription, dictionary, ...)
 feadir=/mnt/scratch04/tmp/xyusuf00/features     # where will be stored the features
-expdir=exp          # experiment directory where will be stored the models and the results
+expdir=exp_aud          # experiment directory where will be stored the models and the results
 
 ## DATA
-train=train         # name of the train set (usually "train")
-test=test           # name of the test set (usuall "test")
+train=full         # name of the train set (usually "train")
+test=full           # name of the test set (usually "test")
 
 ## FEATURES
 feaname=mfcc
 
 ## AUD MODEL
 prior=gamma_dirichlet_process # Type of prior over the weights.
-ngauss=8            # number of Gaussian per state.
+ngauss=4            # number of Gaussian per state.
 nunits=100          # maximum number of discovered units
-epochs=60           # number of training epochs
+epochs=100           # number of training epochs
+concentration=1     # concentration parameter of the DP
 
 ## SCORING
 # This option is mostly for TIMIT.
@@ -65,6 +66,12 @@ mkdir -p $datadir $expdir $feadir
 
 echo "--> Preparing data for the $db database"
 local/$db/prepare_data.sh $datadir/$db $subset
+for f in ali trans uttids wav.scp; do
+    [ ! -d $datadir/$db/$subset/full/ ] && mkdir -p $datadir/$db/$subset/full/
+    if [ ! -f $datadir/$db/$subset/full/$f ]; then
+	cat $datadir/$db/$subset/*/$f | sort -u > $datadir/$db/$subset/full/$f
+    fi
+done
 
 
 echo "--> Preparing pseudo-phones \"language\" information"
@@ -109,6 +116,7 @@ language=$db
 echo "--> Training the subspace Bayesian AUD system"
 steps/hsubspace_aud.sh \
     $hsubspace_opts \
+    --concentration $concentration \
     --parallel-opts "-l mem_free=1G,ram_free=1G -q all.q@@stable" \
     --parallel-njobs $parallel_njobs \
     --nosil $nosil \
