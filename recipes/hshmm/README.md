@@ -1,4 +1,4 @@
-# H-SHMM #
+# H-SHMM for AUD #
 Original model described in the paper: *"A Hierarchical Subspace Model for Language-Attuned Acoustic Unit Discovery"*
 
 To get the results in the paper,
@@ -18,12 +18,14 @@ The *TIMIT* and *Globalphone* corpora are not freely available. If you don't hav
 To use other corpora, create your own `local/${own_corpus_name}/prepare_data.sh`
 and edit `data.conf` to have the correct corpus names.
 This script should create a directory with:
-- `uttids`: list of utterances
-- `wav.scp`: map of each utterance to the wav file or a piped command e.g. `utt1 sox /path/to/utt1.wav -r 16k -b 16 -t wav -  |`
+- *uttids*: list of utterances, e.g.:  
+`utt1`  
+`utt2`
+- *wav.scp*: map of each utterance to the wav file or a piped command e.g. `utt1 sox /path/to/utt1.wav -r 16k -b 16 -t wav -  |`  
 `utt2 /path/to/utt2.wav`
-- `trans`: phone-level transcription file. Only required for source languages e.g:
-`utt1 phone1 phone2 phone3`
-`utt2 phone14 phone12 phone7`
-- `ali`: optional time-aligned transcriptions used as reference for scoring AUD output, e.g.
-`utt1 sil sil sil phone1 phone1 phone1 phone2 phone2 phone3 phone3 phone 3 sil sil sil`
-`utt2 sil sil sil phone14 phone14 phone12 phone12 phone7 phone7 phone7 phone7 sil sil`
+- *trans*: phone-level transcription file. Required for source languages e.g.:  
+`utt1 phone1 phone2 phone3`  
+`utt2 phone14 phone12 phone32 phone7`
+- *ali*: optional time-aligned transcriptions used for scoring AUD output, e.g.:  
+`utt1 sil sil sil phone1 phone1 phone1 phone2 phone2 phone3 phone3 phone 3 sil sil sil`  
+`utt2 sil sil sil phone14 phone 14 phone12 phone12 phone32 phone7 phone7 phone7 sil sil`
