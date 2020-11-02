@@ -14,7 +14,7 @@ from ..dists import NormalFullCovariance
 from .normal import UnknownCovarianceType
 from ..inference.objectives import evidence_lower_bound
 
-__all__ = ['GSM', 'GSMSet', 'SubspaceBayesianParameter']
+__all__ = ['GSM', 'GSMSet', 'SubspaceBayesianParameter', 'HierarchicalAffineTransform', 'HierarchicalGSM', 'AffineTransform']
 
 
 ########################################################################

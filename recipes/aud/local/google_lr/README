@@ -1,0 +1,9 @@
+Download and extract Yoruba data from https://openslr.org/86/
+Convert to 16k e.g. with:
+    (for file in dir1/male/*.wav; do sox -G $file -t wav - rate 16k > dir2/male/`basename $file`; done)
+    (for file in dir1/female/*.wav; do sox -G $file -t wav - rate 16k > dir2/female/`basename $file`; done)
+    cp dir1/male/*.tsv dir2/male
+    cp dir1/female/*.tsv dir2/female
+
+Then run
+local/google_lr/prepare_data.sh data/google_lr yoruba
