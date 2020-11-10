@@ -122,6 +122,14 @@ for x in train dev test; do
     cp $dir/${x}.text $outdir/$x/trans
 done
 
+mkdir -p $outdir/full
+for x in train dev test; do
+    cat $outdir/${x}/ali >> $outdir/full/ali
+    cat $outdir/${x}/uttids >> $outdir/full/uttids
+    cat $outdir/${x}/wav.scp >> $outdir/full/wav.scp
+    cat $outdir/${x}/trans >> $outdir/full/trans
+done
+
 
 mkdir -p $outdir/lang
 python $conf/timit_lang_prep.py $outdir/lang "$conf/phones.60-48-39.map"
@@ -131,5 +139,3 @@ cat local/timit/phones.60-48-39.map | awk '{print $1" "$3}' \
 
 date > $outdir/.done
 echo "Data preparation succeeded"
-
-

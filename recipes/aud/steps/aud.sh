@@ -82,7 +82,7 @@ fi
 if [ ! -f $outdir/0.mdl ]; then
     beer -s $seed hmm mkphoneloopgraph --start-end-group "non-speech-unit" \
         $langdir/units $outdir/ploop_graph.pkl || exit 1
-    beer -s $seed hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
+    beer -d -s $seed hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
         $outdir/decode_graph.pkl || exit 1
     beer -s $seed hmm mkphoneloop --weights-prior $prior $outdir/decode_graph.pkl \
         $outdir/hmms.mdl $outdir/0.mdl || exit 1
@@ -110,6 +110,7 @@ if [ ! -f $outdir/final.mdl ] || [ ! -f $outdir/${epochs}.mdl ]; then
         cmd="beer -s $seed  hmm accumulate -s $acoustic_scale \
              $outdir/$mdl $dataset \
              $outdir/epoch${epoch}/elbo_JOBID.pkl"
+
         utils/parallel/submit_parallel.sh \
             "$parallel_env" \
             "hmm-acc" \

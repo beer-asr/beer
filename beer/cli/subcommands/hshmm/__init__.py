@@ -2,7 +2,7 @@
 
 from . import init
 from . import mksphoneloop
-from . import setprior
+#from . import setprior
 from . import train
 from . import mkphoneloopgraph
 

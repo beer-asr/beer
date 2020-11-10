@@ -17,7 +17,7 @@ expdir=exp_hsubspace          # experiment directory where will be stored the mo
 
 ## DATA
 train=train         # name of the train set (usually "train")
-test="dev test"     # name of the test set (usuall "test")
+test="dev test"     # name of the test set (usually "test")
 
 ## FEATURES
 feaname=mfcc
@@ -25,7 +25,7 @@ feaname=mfcc
 ## MONOPHONE MODEL
 prior=gamma_dirichlet_process # Type of prior over the weights.
 ngauss=4            # number of Gaussian per state.
-unit_latent_dim=100      # unit latent dimension                                                                                          
+unit_latent_dim=100      # unit latent dimension
 lang_latent_dim=6      # language latent subspace model
 epochs=100           # number of training epochs
 epochs_hmm=20        # number of training epoch for forced alignment model
@@ -87,7 +87,7 @@ for line in `cat $db_subs_file`; do
 	    utils/add_corpus.sh --max-utts 1500 $datadir/$db/$lang $datadir/$db/${lang}_subs/
 	    touch $datadir/$db/${lang}_subs/.done
 	fi
-	
+
 	for x in $train $test; do
 	    echo "--> Extracting features for the $db/$lang/$x database"
 	    steps/extract_features.sh \
@@ -95,7 +95,7 @@ for line in `cat $db_subs_file`; do
 		conf/${feaname}.yml \
 		$datadir/$db/${lang}_subs/$x/wav.scp \
 		$feadir/$db/${lang}/$x
-	    
+
 	    # Create a "dataset". This "dataset" is just an object
 	    # associating the features with their utterance id and some
 	    # other meta-data (e.g. global mean, variance, ...).

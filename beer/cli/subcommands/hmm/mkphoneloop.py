@@ -21,11 +21,11 @@ def build_sb(size):
     return beer.SBCategorical.create(truncation=size, prior_strength=size / 2)
 
 def build_hsb(size):
-    root_sb = beer.SBCategorical.create(truncation=size, 
+    root_sb = beer.SBCategorical.create(truncation=size,
                                         prior_strength=size / 2)
-    return beer.SBCategoricalSet.create(size, root_sb, 
+    return beer.SBCategoricalSet.create(size, root_sb,
                                         prior_strength=size / 2)
-    
+
 
 def build_sbhp(size):
     return beer.SBCategoricalHyperPrior.create(truncation=size,
@@ -66,7 +66,7 @@ def main(args, logger):
     cgraph = graph.compile()
 
     categorical = priors[args.weights_prior](len(start_pdf))
-    logger.debug('create the phone-loop model...')
+    logger.info(f'create the phone-loop model with concentration {len(start_pdf)}...')
 
     model_cls = beer.BigramPhoneLoop if args.weights_prior in bigram_prior else beer.PhoneLoop
     ploop = model_cls.create(cgraph, start_pdf, end_pdf, emissions, categorical)

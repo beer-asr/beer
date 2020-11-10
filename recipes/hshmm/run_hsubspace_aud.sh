@@ -21,7 +21,7 @@ expdir=exp_aud          # experiment directory where will be stored the models a
 
 ## DATA
 train=full         # name of the train set (usually "train")
-test=full           # name of the test set (usually "test")
+test=full          # name of the test set (usually "test")
 
 ## FEATURES
 feaname=mfcc
@@ -30,7 +30,7 @@ feaname=mfcc
 prior=gamma_dirichlet_process # Type of prior over the weights.
 ngauss=4            # number of Gaussian per state.
 nunits=100          # maximum number of discovered units
-epochs=100           # number of training epochs
+epochs=100          # number of training epochs
 concentration=1     # concentration parameter of the DP
 
 ## SCORING
@@ -62,7 +62,6 @@ outdir=$expdir/$db/$subset/hsubspace_aud_${feaname}_${ngauss}g_${prior}
 
 # Create the directory structure.
 mkdir -p $datadir $expdir $feadir
-
 
 echo "--> Preparing data for the $db database"
 local/$db/prepare_data.sh $datadir/$db $subset
@@ -160,7 +159,7 @@ if $decode_all; then
 	[ ! -f $outdir/${ep}.mdl_$language ] && continue
 	for x in $train $test; do
 	    score_outdir=$outdir/decode_perframe_epoch$ep/$x
-	    
+
 	    echo "--> Decoding $db/$x dataset"
 	    steps/decode.sh \
 		--per-frame \

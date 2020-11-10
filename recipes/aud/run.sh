@@ -9,50 +9,38 @@ set -e
 ## DIRECTORY STRUCTURE
 datadir=data
 feadir=/mnt/scratch04/tmp/iondel/features
-expdir=exp_dp
+expdir=exp
 
 ## DATA
 db=timit
 train=full
+test=full
 
 ## FEATURES
-feaname=mbn
+feaname=mfcc
 
 ## AUD MODEL
 
 # Type of prior over the weights.
 # Possible choices are:
-#   - dirichlet
-#   - dirichlet2
-#   - dirichlet_process
-#   - hierarchical_dirichlet_process
-#   - gamma_dirichlet_process
-prior=dirichlet_process
-bigram_prior=hierarchical_dirichlet_process
-ac_scale=1.0
+#   - dirichlet                        -> Dirichlet distribution
+#   - dirichlet_process                -> Dirichlet process
+#   - gamma_dirichlet_process          -> Dirichlet process with Gamma prior
+prior=gamma_dirichlet_process
 
-ngauss=4        # number of Gaussian per state.
 nunits=100      # maximum number of discovered units
-epochs=20       # number of training epochs
-
-## SCORING
-# This option is mostly for TIMIT.
-mapping="--mapping data/timit/lang/phones_61_to_39.txt"
+epochs=30       # number of training epochs
 
 ########################################################################
-
 
 # Load the BEER anaconda environment.
 . path.sh
 
-
 # Create the directory structure.
 mkdir -p $datadir $expdir $feadir
 
-
 echo "--> Preparing data for the $db database"
 local/$db/prepare_data.sh $datadir/$db
-
 
 echo "--> Preparing pseudo-phones \"language\" information"
 mkdir -p data/$db/lang_aud
@@ -68,8 +56,10 @@ python utils/prepare_lang_aud.py \
 
 
 echo "--> Extracting features for the $db/$train database"
-steps/extract_features.sh conf/${feaname}.yml $datadir/$db/$train \
-     $feadir/$db/$train
+steps/extract_features.sh \
+    conf/${feaname}.yml \
+    $datadir/$db/$train/wav.scp \
+    $feadir/$db/$train
 
 # Create a "dataset". This "dataset" is just an object
 # associating the features with their utterance id and some
@@ -83,63 +73,28 @@ steps/create_dataset.sh $datadir/$db/$train \
 # AUD system training. You need to have a Sun Grid Engine like cluster
 # (i.e. qsub command) to run it. If you have a different
 # enviroment please see utils/parallel/sge/* to see how to adapt
-# this recipe to you system.
+# this recipe to your system.
 steps/aud.sh \
     --prior $prior \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
-    conf/hmm_${ngauss}g.yml \
+    conf/hmm.yml \
     data/$db/lang_aud \
     data/$db/$train \
     $expdir/$db/datasets/$feaname/${train}.pkl \
-    $epochs $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}
+    $epochs $expdir/$db/$subset/aud_${feaname}_${prior}
 
-
-outdir=$expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/decode_perframe/$train
+outdir=$expdir/$db/$subset/aud_${feaname}_${prior}/decode_perframe/$train
 
 echo "--> Decoding $db/$train dataset"
 steps/decode.sh \
     --per-frame \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
-    $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
-    data/$db/$subset/$train \
+    $expdir/$db/$subset/aud_${feaname}_${prior}/final.mdl \
+    data/$db/$subset/$train/uttids \
     $expdir/$db/$subset/datasets/$feaname/${train}.pkl \
     $outdir
-
-
-echo "--> Scoring $db/$train dataset"
-steps/score_aud.sh \
-    data/$db/$subset/$train/ali \
-    $outdir/trans \
-    $outdir/score
-
-
-echo "--> Train the bigram AUD system"
-steps/aud_bigram.sh \
-    --acoustic-scale $ac_scale \
-    --prior $bigram_prior \
-    --parallel-opts "-l mem_free=1G,ram_free=1G" \
-    --parallel-njobs 30 \
-    $expdir/$db/$subset/aud_${feaname}_${ngauss}g_${prior}/final.mdl \
-    data/$db/$train \
-    $expdir/$db/datasets/$feaname/${train}.pkl \
-    $epochs $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}_ac${ac_scale}
-
-
-outdir=$expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}_ac${ac_scale}/decode_perframe/$train
-
-echo "--> Decoding $db/$train dataset"
-steps/decode.sh \
-    --acoustic-scale $ac_scale \
-    --per-frame \
-    --parallel-opts "-l mem_free=1G,ram_free=1G" \
-    --parallel-njobs 30 \
-    $expdir/$db/$subset/aud_bigram_${feaname}_${ngauss}g_${bigram_prior}_ac${ac_scale}/final.mdl \
-    data/$db/$subset/$train \
-    $expdir/$db/$subset/datasets/$feaname/${train}.pkl \
-    $outdir
-
 
 echo "--> Scoring $db/$train dataset"
 steps/score_aud.sh \
