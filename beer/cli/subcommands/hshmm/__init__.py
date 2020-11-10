@@ -1,12 +1,11 @@
-'Subspace Hidden Markov Model (SHMM)'
+'Hierarchical Subspace Hidden Markov Model (H-SHMM)'
 
 from . import init
 from . import mksphoneloop
-from . import setprior
 from . import train
 from . import mkphoneloopgraph
 
-cmds = [init, mksphoneloop, mkphoneloopgraph, setprior, train]
+cmds = [init, mksphoneloop, mkphoneloopgraph, train]
 
 def setup(parser):
     subparsers = parser.add_subparsers(title='possible commands', metavar='<cmd>')
