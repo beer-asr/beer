@@ -2,9 +2,14 @@
 
 set -e
 
+echo "$0 $@"
 . path.sh
 
+cleanup=true
+unit_latent_dim=
+sgd=false
 gsm_unit_latent_dim=10
+lang_latent_dim=
 gsm_lang_latent_dim=2
 gsm_init_epochs=15000
 gsm_epochs=1000
@@ -14,11 +19,13 @@ gsm_unit_latent_nsamples=10
 gsm_lang_latent_nsamples=5
 gsm_params_nsamples=5
 gsm_classes=""
+opts_conf=""
 
 parallel_env=sge
 parallel_opts=""
 parallel_njobs=20
 nargs=6
+
 
 while [[ $# -gt $nargs ]]; do
     case $1 in
@@ -53,11 +60,15 @@ while [[ $# -gt $nargs ]]; do
       shift
       ;;
       *)
-      echo "unknown option: $1"
-      exit 1
+      break
+      ;;
     esac
 done
 
+[ -f ./kutils/parse_options.sh ] && . ./kutils/parse_options.sh
+
+[ ! -z $unit_latent_dim ] && gsm_unit_latent_dim=$unit_latent_dim
+[ ! -z $lang_latent_dim ] && gsm_lang_latent_dim=$lang_latent_dim
 if [ $# -ne $nargs ]; then
     echo "usage: $0 [OPTS] <hmm-conf> <hmmdir> <datadir> <dataset> <epochs> <out-dir>"
     echo ""
@@ -77,14 +88,21 @@ if [ $# -ne $nargs ]; then
     exit 1
 fi
 
+[[ ! -z $opts_conf && -f $opts_conf ]] && . $opts_conf
+
 modelconf=$1
-hmmdir=$2 # Space separated list too
+hmmdir=$2 # Space separated list of language-specifi hmm directories
 datadir=$3 # Space separated list of language-specific datadirs: lang1,dir1 lang2,dir2 ... langN,dirN
 dataset=$4 # Similarly space separated list of dataset objects
 epochs=$5
 outdir=$6
 mkdir -p $outdir
 
+optim_opts=""
+if $sgd; then
+    optim_opts="--use-sgd"
+fi
+[ -f $outdir/optim_opts ] && optim_opts=`cat $outdir/optim_opts`
 
 langs=""
 declare -A datasets_arr
@@ -114,43 +132,48 @@ for lang in $langs; do
     [ -z ${datadirs_arr[$lang]} ] && echo "datadir no set for $lang" && exit 1
     [ -z ${hmmdirs_arr[$lang]} ] && echo "hmmdir no set for $lang" && exit 1
 done
-# Create the subspace phone-loop model.
+
+# Create the hierarchical subspace phone-loop model.
 if [ ! -f $outdir/0.mdl ]; then
     for lang in ${!hmmdirs_arr[@]}; do
 	echo "${hmmdirs_arr[$lang]}/final.mdl $lang"
     done > $outdir/init_phoneloop_to_lang.txt
-    #$hmmdir/$lang/final.mdl
+
     beer hshmm mksphoneloop \
          -g "speech-unit" \
 	 -l $gsm_lang_latent_dim -t $gsm_unit_latent_dim \
          $modelconf \
 	 $outdir/init_phoneloop_to_lang.txt\
-         $outdir/gsm_init.mdl $outdir/units_posts_init.pkl $outdir/init.mdl
+         $outdir/hgsm_init.mdl $outdir/units_posts_init.pkl $outdir/init.mdl
+
     for lang in ${!hmmdirs_arr[@]}; do
 	echo "$outdir/init.mdl_$lang $lang"
     done > $outdir/init_sphoneloop_to_lang.txt
-    # Train the GSM and the posteriors.
+
+    # Initialize the HGSM and posteriors as a "UBM".
     cmd="beer -d hshmm train \
         --gpu \
-        -o $outdir/gsm_optim_state.pth \
+        $optim_opts \
+        -o $outdir/hgsm_optim_state.pth \
         --learning-rate-std $gsm_std_lrate \
         --epochs $gsm_init_epochs \
         --unit-latent-nsamples $gsm_unit_latent_nsamples \
 	--lang-latent-nsamples $gsm_lang_latent_nsamples \
         --params-nsamples $gsm_params_nsamples \
-        $outdir/gsm_init.mdl $outdir/units_posts_init.pkl \
-        $outdir/init_sphoneloop_to_lang.txt $outdir/gsm_0.mdl $outdir/units_posts_0.pkl \
+        $outdir/hgsm_init.mdl $outdir/units_posts_init.pkl \
+        $outdir/init_sphoneloop_to_lang.txt $outdir/hgsm_0.mdl $outdir/units_posts_0.pkl \
         $outdir/0.mdl"
+    echo $optim_opts > $outdir/optim_opts
 
     utils/parallel/submit_single.sh \
         "$parallel_env" \
-        "gsm-pretraining" \
-        "-l gpu=1,gpu_ram=2G" \
+        "hgsm-pretraining" \
+        "-l mem_free=20G,ram_free=20G,gpu=1,gpu_ram=8G -q long.q" \
         "$cmd" \
         $outdir/pretraining || exit 1
 
 else
-    echo "subspace phone Loop model already created"
+    echo "hierarchical subspace phone loop model already created"
 fi
 
 
@@ -170,7 +193,7 @@ if [ ! -f $outdir/final.mdl ]; then
               sort -t '.' -k 1 -g | tail -1)
     echo "mdl: $mdl"
     epoch="${mdl%.*}"
-    gsm=gsm_${epoch}.mdl
+    hgsm=hgsm_${epoch}.mdl
     posts=units_posts_${epoch}.pkl
 
     if [ $epoch -ge 1 ]; then
@@ -201,58 +224,64 @@ if [ ! -f $outdir/final.mdl ]; then
 		    "$parallel_njobs" \
 		    "${datadirs_arr[$lang]}/uttids" \
 		    "$cmd" \
-		    $outdir/epoch${epoch}/$lang || exit 1
-		touch $outdir/epoch${epoch}/$lang/.done.acc
+		    $outdir/epoch${epoch}/$lang && touch $outdir/epoch${epoch}/$lang/.done.acc || exit 1 &
 	    fi
+	done
+	wait
 	
-
+	for lang in $langs; do
             # Update the model' parameters.
             find $outdir/epoch${epoch}/$lang -name '*pkl' | \
 		beer hmm update -o $outdir/optim_state.pth $outdir/${mdl}_${lang} \
-                     $outdir/${lang}_tmp.mdl 2>&1 | tee -a $outdir/training_${lang}.log || exit 1
-	    echo "$outdir/${lang}_tmp.mdl $lang" >> $outdir/${epoch}_sphoneloop_to_lang.txt
-
+                     $outdir/${lang}_tmp.mdl 2>&1 | tee -a $outdir/training_${lang}.log && \
+		echo "$outdir/${lang}_tmp.mdl $lang" >> $outdir/${epoch}_sphoneloop_to_lang.txt || exit 1 &
 	done
-	#> $outdir/${epoch}_sphoneloop_to_lang.txt
+	wait
+
         if [ $epoch -eq $epochs ]; then
             train_epochs=$gsm_smoothing_epochs
         else
             train_epochs=$gsm_epochs
         fi
 
-        # Train the GSM and the posteriors.
+        # Train the HGSM and the posteriors.
         cmd="beer -d hshmm train \
             --gpu \
-            -o $outdir/gsm_optim_state.pth \
+            $optim_opts \
+            -o $outdir/hgsm_optim_state.pth \
             --epochs $train_epochs \
             --learning-rate-std $gsm_std_lrate \
             --unit-latent-nsamples $gsm_unit_latent_nsamples \
 	    --lang-latent-nsamples $gsm_lang_latent_nsamples \
             --params-nsamples $gsm_params_nsamples \
-            $outdir/$gsm $outdir/$posts $outdir/${epoch}_sphoneloop_to_lang.txt \
-            $outdir/gsm_${epoch}.mdl $outdir/units_posts_${epoch}.pkl \
+            $outdir/$hgsm $outdir/$posts $outdir/${epoch}_sphoneloop_to_lang.txt \
+            $outdir/hgsm_${epoch}.mdl $outdir/units_posts_${epoch}.pkl \
             $outdir/${epoch}.mdl"
 
         utils/parallel/submit_single.sh \
             "$parallel_env" \
-            "gsm-training" \
+            "hgsm-training" \
             "-l gpu=1,gpu_ram=2G" \
             "$cmd" \
             $outdir/epoch${epoch} || exit 1
 
 
         mdl=${epoch}.mdl
-        gsm=gsm_${epoch}.mdl
+        hgsm=hgsm_${epoch}.mdl
         posts=units_posts_${epoch}.pkl
+	if $cleanup; then
+            for lang in $langs; do
+	        find $outdir/epoch${epoch}/$lang -name '*pkl' -delete
+            done
+	fi
     done
 
     cp $outdir/$mdl $outdir/final.mdl
-    cp $outdir/$gsm $outdir/gsm_final.mdl
+    cp $outdir/$hgsm $outdir/hgsm_final.mdl
     cp $outdir/$posts $outdir/units_posts_final.pkl
     for lang in $langs; do
 	cp $outdir/${mdl}_${lang} $outdir/final_${lang}.mdl
     done
 else
-    echo "subspace phone-loop already trained"
+    echo "hierarchical subspace phone-loop already trained"
 fi
-

@@ -106,8 +106,9 @@ def main(args, logger):
         with open(_phoneloop, 'rb') as f:
             phoneloops_dict[lang] = pickle.load(f)
         units_emissions_dict[lang] = phoneloops_dict[lang].modelset.original_modelset.modelsets[groupidx]
-        if len(units_emissions_dict[lang])// nstates < 2:
-            units_emissions_dict[lang] = phoneloops_dict[lang].modelset.original_modelset.modelsets[1 - groupidx]
+        for group in phoneloops_dict[lang].modelset.original_modelset.modelsets:
+            if len(group) > len(units_emissions_dict[lang]):
+                units_emissions_dict[lang] = group
         nunits_dict[lang] = len(units_emissions_dict[lang]) // nstates
 
     ## logger.debug('loading the units models')
