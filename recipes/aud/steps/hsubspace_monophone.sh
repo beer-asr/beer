@@ -114,6 +114,7 @@ for lang in $langs; do
     [ -z ${datadirs_arr[$lang]} ] && echo "datadir no set for $lang" && exit 1
     [ -z ${hmmdirs_arr[$lang]} ] && echo "hmmdir no set for $lang" && exit 1
 done
+
 # Create the subspace phone-loop model.
 if [ ! -f $outdir/0.mdl ]; then
     for lang in ${!hmmdirs_arr[@]}; do
@@ -204,7 +205,7 @@ if [ ! -f $outdir/final.mdl ]; then
 		    $outdir/epoch${epoch}/$lang || exit 1
 		touch $outdir/epoch${epoch}/$lang/.done.acc
 	    fi
-	
+
 
             # Update the model' parameters.
             find $outdir/epoch${epoch}/$lang -name '*pkl' | \

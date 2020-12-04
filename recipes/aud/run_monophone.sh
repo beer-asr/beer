@@ -3,38 +3,25 @@
 # Exit if one command fails.
 set -e
 
-if [ $# -lt 1 ] || [ $# -gt 2 ]; then
-    echo "usage: $0 <corpus> [<subset>]"
-    echo ""
-    echo "Build a monophone HMM based phone-recognizer"
-    echo ""
-    echo "Examples:"
-    echo "  $ $0 timit"
-    echo "  $ $0 globalphone FR"
-    echo ""
-    exit 1
-fi
-
 ########################################################################
 ## SETUP
 
 ## DIRECTORY STRUCTURE
 datadir=data        # where will stored the corpus specific data (transcription, dictionary, ...)
 feadir=/mnt/scratch04/tmp/iondel/features     # where will be stored the features
-expdir=exp_new          # experiment directory where will be stored the models and the results
+expdir=exp          # experiment directory where will be stored the models and the results
 
 ## DATA
-db=$1               # name of the corpus (timit, mboshi, globalphone)
-subset=$2           # subset of the corpus (mostly used for globalphone: FR, GE, ...)
+db=timit            # name of the corpus (timit, mboshi, globalphone)
+#subset=             # subset of the corpus (mostly used for globalphone: FR, GE, ...)
 train=train         # name of the train set (usually "train")
 test=test           # name of the test set (usuall "test")
 
 ## FEATURES
-feaname=mfcc_8k
+feaname=mfcc
 
 ## MONOPHONE MODEL
 prior=gamma_dirichlet_process # Type of prior over the weights.
-ngauss=4            # number of Gaussian per state.
 latent_dim=100      # latent dimension of the subspace model
 epochs=30           # number of training epochs
 
@@ -61,7 +48,7 @@ for x in $train $test; do
     echo "--> Extracting features for the $db/$x database"
     steps/extract_features.sh \
         conf/${feaname}.yml \
-        $datadir/$db/$subset/$x \
+        $datadir/$db/$subset/$x/wav.scp \
         $feadir/$db/$subset/$x
 
     # Create a "dataset". This "dataset" is just an object
@@ -79,12 +66,12 @@ steps/monophone.sh \
     --prior $prior \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
-    conf/hmm_${ngauss}g.yml \
+    conf/hmm.yml \
     data/$db/$subset/lang \
-    data/$db/$subset/$train \
+    data/$db/$subset/$train/ \
     $expdir/$db/$subset/datasets/$feaname/${train}.pkl \
     $epochs \
-    $expdir/$db/$subset/monophone_${feaname}_${ngauss}g_${prior}
+    $expdir/$db/$subset/monophone_${feaname}_${prior}
 
 
 # Subspace HMM monophone training.
@@ -92,26 +79,24 @@ steps/subspace_monophone.sh \
     --parallel-opts "-l mem_free=1G,ram_free=1G" \
     --parallel-njobs 30 \
     --latent-dim $latent_dim \
-    conf/hmm_${ngauss}g.yml \
-    $expdir/$db/$subset/monophone_${feaname}_${ngauss}g_${prior} \
-    data/$db/$subset/$train \
+    conf/hmm.yml \
+    $expdir/$db/$subset/monophone_${feaname}_${prior} \
+    data/$db/$subset/$train/ \
     $expdir/$db/$subset/datasets/$feaname/${train}.pkl \
     $epochs \
-    $expdir/$db/$subset/subspace_monophone_${feaname}_${ngauss}g_${prior}_ldim${latent_dim}
+    $expdir/$db/$subset/subspace_monophone_${feaname}_${prior}_ldim${latent_dim}
 
-
-exit 0
 
 for x in $test; do
-    outdir=$expdir/$db/$subset/subspace_monophone_${feaname}_${ngauss}g_${prior}/decode_perframe/$x
+    outdir=$expdir/$db/$subset/subspace_monophone_${feaname}_${prior}_ldim${latent_dim}/decode_perframe/$x
 
     echo "--> Decoding $db/$x dataset"
     steps/decode.sh \
         --per-frame \
         --parallel-opts "-l mem_free=1G,ram_free=1G" \
         --parallel-njobs 30 \
-        $expdir/$db/$subset/subspace_monophone_${feaname}_${ngauss}g_${prior}/final.mdl \
-        data/$db/$subset/$x \
+        $expdir/$db/$subset/subspace_monophone_${feaname}_${prior}_ldim${latent_dim}/final.mdl \
+        data/$db/$subset/$x/uttids \
         $expdir/$db/$subset/datasets/$feaname/${x}.pkl \
         $outdir
 

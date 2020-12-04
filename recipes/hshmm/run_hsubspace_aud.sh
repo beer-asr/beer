@@ -14,10 +14,11 @@ decode_all=false
 decode_freq=10
 hsubspace_opts="--gsm-std-lrate 5e-3 --opts-conf grad_large.conf"
 nosil=false
+
 ## DIRECTORY STRUCTURE
 datadir=data        # where will stored the corpus specific data (transcription, dictionary, ...)
-feadir=/mnt/scratch04/tmp/xyusuf00/features     # where will be stored the features
-expdir=exp_aud          # experiment directory where will be stored the models and the results
+feadir=/mnt/scratch04/tmp/iondel/features     # where will be stored the features
+expdir=exp          # experiment directory where will be stored the models and the results
 
 ## DATA
 train=full         # name of the train set (usually "train")

@@ -22,20 +22,24 @@ for language in $languages; do
 
     for subset in train test; do
 	[ -f $outdir/$language/$subset/uttids ] && continue
-       	mkdir -p $outdir/$language/$subset
+       	mkdir -p $outdir/$language/$subset/tmp
 	find $datadir/data/$subset/ -name "*.wav" | \
 	    awk -F . '{split($1, a, "/"); print a[length(a)], $0}' \
-		> $datadir/data/$subset/all_wavs.txt
+		> $outdir/$language/$subset/tmp/all_wavs.txt
+
 	python3 $cmddir/prepare_transcripts.py \
 		--lang $language \
 		$datadir/data/$subset/text \
 		$lexicon \
 		$outdir/$language/$subset
 	awk 'NR==FNR {a[$1] = $0}; NR!=FNR{print a[$1]}' \
-	    $datadir/data/$subset/all_wavs.txt \
+	    $outdir/$language/$subset/tmp/all_wavs.txt \
 	    $outdir/$language/$subset/trans \
 	    > $outdir/$language/$subset/wav.scp
 	cut -d ' ' -f1 $outdir/$language/$subset/trans > $outdir/$language/$subset/uttids
+
+    rm -fr $outdir/$language/$subset/tmp
+
     done
     echo "sil non-speech-unit" > $outdir/$language/lang/units
     cut -d' ' -f2- $outdir/$language/train/trans | \

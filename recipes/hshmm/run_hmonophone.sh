@@ -12,12 +12,16 @@ hsubspace_opts="--gsm-std-lrate 5e-3"
 
 ## DIRECTORY STRUCTURE
 datadir=data        # where will stored the corpus specific data (transcription, dictionary, ...)
-feadir=/mnt/scratch04/tmp/xyusuf00/features     # where will be stored the features
-expdir=exp_hsubspace          # experiment directory where will be stored the models and the results
+
+#feadir=/mnt/scratch04/tmp/iondel/features     # where will be stored the features
+feadir=/mnt/scratch04/tmp/iondel/features2
+
+#expdir=exp # experiment directory where will be stored the models and the results
+expdir=exp2
 
 ## DATA
 train=train         # name of the train set (usually "train")
-test="dev test"     # name of the test set (usually "test")
+test=test           # name of the test set (usually "test")
 
 ## FEATURES
 feaname=mfcc
@@ -25,7 +29,7 @@ feaname=mfcc
 ## MONOPHONE MODEL
 prior=gamma_dirichlet_process # Type of prior over the weights.
 ngauss=4            # number of Gaussian per state.
-unit_latent_dim=100      # unit latent dimension
+unit_latent_dim=100    # unit latent dimension
 lang_latent_dim=6      # language latent subspace model
 epochs=100           # number of training epochs
 epochs_hmm=20        # number of training epoch for forced alignment model
@@ -51,9 +55,9 @@ if [ $# -ne 1 ]; then
 fi
 
 db_subs_file=$1  # file of tuples corpus subset1, subset2, ... tuples
+
 # Load the BEER anaconda environment.
 . path.sh
-
 
 # Create the directory structure.
 mkdir -p $datadir $expdir $feadir
@@ -61,10 +65,11 @@ mkdir -p $datadir $expdir $feadir
 conf=$1
 all_langs=""
 for line in `cat $db_subs_file`; do
-    echo "--> Preparing data for the $db database"
     db=${line%:*}
     subs=${line#*:}
     subset=`echo ${subs} | tr , ' '`
+
+    echo "--> Preparing data for the $db database"
     local/$db/prepare_data.sh $datadir/$db "$subset"
     all_langs="$all_langs $subset"
 done
@@ -136,8 +141,10 @@ wait
 [ -z $odir ] && odir=$all_langs
 mkdir -p $expdir/$db/$odir
 [ ! -f $expdir/$db/$odir/langs ] && echo $all_langs > $expdir/$db/$odir/langs
+
+    #$hsubspace_opts \
+
 steps/hsubspace_monophone.sh \
-    $hsubspace_opts \
     --lang-latent-dim $lang_latent_dim \
     --unit-latent-dim $unit_latent_dim \
     --parallel-opts "-l mem_free=1G,ram_free=1G -q all.q@@stable" \
@@ -148,3 +155,4 @@ steps/hsubspace_monophone.sh \
     "$train_datasets" \
     $epochs \
     $expdir/$db/$odir/hsubspace_monophone_${feaname}_${ngauss}g_${prior}_ldim${lang_latent_dim}_udim${unit_latent_dim}
+
