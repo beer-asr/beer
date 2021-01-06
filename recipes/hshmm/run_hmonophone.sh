@@ -17,7 +17,7 @@ expdir=exp_hsubspace          # experiment directory where will be stored the mo
 
 ## DATA
 train=train         # name of the train set (usually "train")
-test="dev test"     # name of the test set (usuall "test")
+test="test"     # name of the test set (usually "test")
 
 ## FEATURES
 feaname=mfcc
@@ -61,8 +61,8 @@ mkdir -p $datadir $expdir $feadir
 conf=$1
 all_langs=""
 for line in `cat $db_subs_file`; do
-    echo "--> Preparing data for the $db database"
     db=${line%:*}
+    echo "--> Preparing data for the $db database"
     subs=${line#*:}
     subset=`echo ${subs} | tr , ' '`
     local/$db/prepare_data.sh $datadir/$db "$subset"
@@ -83,7 +83,7 @@ for line in `cat $db_subs_file`; do
 	if [ ! -f $datadir/$db/${lang}_subs/.done ]; then
 	    # This part ensures that the model is trained with 1500 utterances
 	    # To use the full set without changing the rest of the code, change the next command to:
-	    # ln -s $datadir/$db/$lang $datadir/$db/${lang}_subs/
+	    # ln -s $lang $datadir/$db/${lang}_subs/
 	    utils/add_corpus.sh --max-utts 1500 $datadir/$db/$lang $datadir/$db/${lang}_subs/
 	    touch $datadir/$db/${lang}_subs/.done
 	fi

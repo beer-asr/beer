@@ -3,9 +3,8 @@
 from . import init
 from . import mksphoneloop
 from . import train
-from . import mkphoneloopgraph
 
-cmds = [init, mksphoneloop, mkphoneloopgraph, train]
+cmds = [init, mksphoneloop, train]
 
 def setup(parser):
     subparsers = parser.add_subparsers(title='possible commands', metavar='<cmd>')

@@ -96,10 +96,12 @@ def main(args, logger):
 
     logger.debug('loading the units')
     units_emissions_dict = {}
+
     for lang, sploop in phoneloops_dict.items():
         units_emissions_dict[lang] = sploop.modelset.original_modelset.modelsets[groupidx]
-        if len(units_emissions_dict[lang])//nstates < 2:
-            units_emissions_dict[lang] = sploop.modelset.original_modelset.modelsets[1 - groupidx]
+        for group in sploop.modelset.original_modelset.modelsets:
+            if len(group) > len(units_emissions_dict[lang]):
+                units_emissions_dict[lang] = group
         units_dict[lang] = [unit for unit in iterate_units(units_emissions_dict[lang], len(units_dict[lang]), nstates)]
 
     logger.debug('building the optimizer')
