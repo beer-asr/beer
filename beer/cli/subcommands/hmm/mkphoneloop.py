@@ -46,7 +46,7 @@ priors = {
 
 
 def setup(parser):
-    parser.add_argument('-c', '--concentration', default=-1, type=float,
+    parser.add_argument('-c', '--concentration', type=float,
                         help='concentration of the Dirichlet Process')
     parser.add_argument('--weights-prior', default='gamma_dirichlet_process',
                         choices=[key for key in priors],
@@ -68,7 +68,10 @@ def main(args, logger):
     logger.debug('compiling the graph...')
     cgraph = graph.compile()
 
-    categorical = priors[args.weights_prior](len(start_pdf), len(start_pdf)/2)
+    concentration = len(start_pdf)/2
+    if args.concentration
+        concentration = args.concentration
+    categorical = priors[args.weights_prior](len(start_pdf), concentration)
     logger.debug('create the phone-loop model...')
 
     model_cls = beer.BigramPhoneLoop if args.weights_prior in bigram_prior else beer.PhoneLoop
