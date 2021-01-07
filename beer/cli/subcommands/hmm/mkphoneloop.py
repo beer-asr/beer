@@ -9,27 +9,28 @@ import torch
 import beer
 
 
-def build_categorical(size):
+def build_categorical(size, concentration = 1):
     mean = torch.ones(size) / size
-    return beer.Categorical.create(mean, prior_strength=1)
+    return beer.Categorical.create(mean, prior_strength=concentration)
 
-def build_categorical_2g(size):
+def build_categorical_2g(size, concentration = 1):
     mean = torch.ones(size, size) / size
-    return beer.CategoricalSet.create(mean, prior_strength=1)
+    return beer.CategoricalSet.create(mean, prior_strength=concentration)
 
-def build_sb(size):
-    return beer.SBCategorical.create(truncation=size, prior_strength=size / 2)
+def build_sb(size, concentration=1):
+    return beer.SBCategorical.create(truncation=size,
+                                     prior_strength=concentration)
 
-def build_hsb(size):
-    root_sb = beer.SBCategorical.create(truncation=size, 
-                                        prior_strength=size / 2)
-    return beer.SBCategoricalSet.create(size, root_sb, 
-                                        prior_strength=size / 2)
-    
+def build_hsb(size, concentration=1):
+    root_sb = beer.SBCategorical.create(truncation=size,
+                                        prior_strength=concentration)
+    return beer.SBCategoricalSet.create(size, root_sb,
+                                        prior_strength=concentration)
 
-def build_sbhp(size):
+
+def build_sbhp(size, concentration=1):
     return beer.SBCategoricalHyperPrior.create(truncation=size,
-                                               prior_strength=size / 2,
+                                               prior_strength=concentration,
                                                hyper_prior_strength=1.)
 
 
@@ -45,6 +46,8 @@ priors = {
 
 
 def setup(parser):
+    parser.add_argument('-c', '--concentration', default=-1, type=float,
+                        help='concentration of the Dirichlet Process')
     parser.add_argument('--weights-prior', default='gamma_dirichlet_process',
                         choices=[key for key in priors],
                         help='type of prior over the phone weights')
@@ -65,7 +68,7 @@ def main(args, logger):
     logger.debug('compiling the graph...')
     cgraph = graph.compile()
 
-    categorical = priors[args.weights_prior](len(start_pdf))
+    categorical = priors[args.weights_prior](len(start_pdf), len(start_pdf)/2)
     logger.debug('create the phone-loop model...')
 
     model_cls = beer.BigramPhoneLoop if args.weights_prior in bigram_prior else beer.PhoneLoop

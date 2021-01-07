@@ -5,6 +5,7 @@
 acoustic_scale=1.
 seed=1
 prior=gamma_dirichlet_process
+concentration=50
 parallel_env=sge
 parallel_opts=""
 parallel_njobs=20
@@ -84,7 +85,8 @@ if [ ! -f $outdir/0.mdl ]; then
         $langdir/units $outdir/ploop_graph.pkl || exit 1
     beer -s $seed hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
         $outdir/decode_graph.pkl || exit 1
-    beer -s $seed hmm mkphoneloop --weights-prior $prior $outdir/decode_graph.pkl \
+    beer -s $seed hmm mkphoneloop --concentration $concentration \
+        --weights-prior $prior $outdir/decode_graph.pkl \
         $outdir/hmms.mdl $outdir/0.mdl || exit 1
 else
     echo "Phone Loop model already created. Skipping."
