@@ -5,6 +5,7 @@ set -e
 . path.sh
 
 prior=gamma_dirichlet_process
+concentration=50
 
 gsm_init_epochs=1000
 gsm_epochs=1000
@@ -103,7 +104,8 @@ if [ ! -f $outdir/0.mdl ]; then
         $langdir/units $outdir/ploop_graph.pkl || exit 1
     beer hmm mkdecodegraph $outdir/ploop_graph.pkl $outdir/hmms.mdl \
         $outdir/decode_graph.pkl || exit 1
-    beer hmm mkphoneloop --weights-prior $prior $outdir/decode_graph.pkl \
+    beer hmm mkphoneloop --concentration $concentration \
+        --weights-prior $prior $outdir/decode_graph.pkl \
         $outdir/hmms.mdl $outdir/hmm_init.mdl || exit 1
 else
     echo "Phone Loop model already created. Skipping."
