@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
+. path.sh
 set -e
 
 echo "$0 $@"
-. path.sh
 
 cleanup=true
 unit_latent_dim=

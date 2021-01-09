@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # Exit if one command fails.
+. path.sh
 set -e
 
 

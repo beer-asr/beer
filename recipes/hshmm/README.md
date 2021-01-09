@@ -6,9 +6,9 @@ To get the results in the paper,
 `./run_hmonophone.sh data.conf`
 
 #### Then run AUD for each target language ####
-`./run_hsubspace_aud.sh timit space/exp_mix/globalphone/globalphone/sw_am_wo_FR_GE_SP_PO/hsubspace_monophone_mfcc_4g_gamma_dirichlet_process_ldim6_100/`
-`./run_hsubspace_aud.sh mboshi space/exp_mix/globalphone/globalphone/sw_am_wo_FR_GE_SP_PO/hsubspace_monophone_mfcc_4g_gamma_dirichlet_process_ldim6_100/`
-`./run_hsubspace_aud.sh google_lr space/exp_mix/globalphone/globalphone/sw_am_wo_FR_GE_SP_PO/hsubspace_monophone_mfcc_4g_gamma_dirichlet_process_ldim6_100/ yoruba`
+`./run_hsubspace_aud.sh timit exp_hsubspace/globalphone/sw_am_wo_FR_GE_SP_PO/hsubspace_monophone_mfcc_4g_gamma_dirichlet_process_ldim6_udim100/`
+`./run_hsubspace_aud.sh mboshi exp_hsubspace/globalphone/sw_am_wo_FR_GE_SP_PO/hsubspace_monophone_mfcc_4g_gamma_dirichlet_process_ldim6_udim100/`
+`./run_hsubspace_aud.sh google_lr exp_hsubspace/globalphone/sw_am_wo_FR_GE_SP_PO/hsubspace_monophone_mfcc_4g_gamma_dirichlet_process_ldim6_udim100/ yoruba`
 
 #### Data preparation ###
 Make sure that each corpus is downloaded and that the paths are correct in `local/${corpus}/prepare_data.sh`
