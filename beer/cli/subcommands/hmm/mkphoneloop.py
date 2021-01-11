@@ -69,7 +69,7 @@ def main(args, logger):
     cgraph = graph.compile()
 
     concentration = len(start_pdf)/2
-    if args.concentration
+    if args.concentration:
         concentration = args.concentration
     categorical = priors[args.weights_prior](len(start_pdf), concentration)
     logger.debug('create the phone-loop model...')

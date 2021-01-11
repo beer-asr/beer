@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
+. path.sh
 set -e
 
 echo "$0 $@"
-. path.sh
 
 prior=gamma_dirichlet_process
 
