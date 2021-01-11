@@ -43,7 +43,7 @@ mapping=""
 
 
 [ -f ./kutils/parse_options.sh ] && . ./kutils/parse_options.sh
-if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
     echo "usage: $0 <corpus> <gsm-init-dir> [<subset>] "
     echo ""
     echo "Build a hierarchical subspace AUD system"
